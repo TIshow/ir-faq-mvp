@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleAuth } from 'google-auth-library';
 import { config } from '../../../config/env';
-import path from 'path';
-
-const keyFilename = path.join(process.cwd(), 'service-account-key.json');
 
 export const dynamic = 'force-dynamic';
 
@@ -23,9 +20,8 @@ export async function POST(request: NextRequest) {
       location
     });
 
-    // Initialize Google Auth
+    // Initialize Google Auth with environment variables
     const auth = new GoogleAuth({
-      keyFilename: keyFilename,
       scopes: ['https://www.googleapis.com/auth/cloud-platform']
     });
 

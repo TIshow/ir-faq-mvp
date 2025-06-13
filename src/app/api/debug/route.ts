@@ -1,16 +1,11 @@
 import { DataStoreServiceClient } from '@google-cloud/discoveryengine';
 import { NextResponse } from 'next/server';
-import path from 'path';
-
-const keyFilename = path.join(process.cwd(), 'service-account-key.json');
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const dataStoreClient = new DataStoreServiceClient({
-      keyFilename: keyFilename,
-    });
+    const dataStoreClient = new DataStoreServiceClient();
 
     // Try to list data stores to verify connection using service account project
     const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'hallowed-trail-462613-v1';
