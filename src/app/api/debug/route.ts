@@ -1,4 +1,4 @@
-import { SearchServiceClient } from '@google-cloud/discoveryengine';
+import { DataStoreServiceClient } from '@google-cloud/discoveryengine';
 import { NextResponse } from 'next/server';
 import path from 'path';
 
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const searchClient = new SearchServiceClient({
+    const dataStoreClient = new DataStoreServiceClient({
       keyFilename: keyFilename,
     });
 
@@ -21,7 +21,7 @@ export async function GET() {
     };
 
     console.log('Attempting to list data stores with project:', projectId);
-    const [dataStores] = await searchClient.listDataStores(request);
+    const [dataStores] = await dataStoreClient.listDataStores(request);
     
     return NextResponse.json({
       success: true,
@@ -33,13 +33,13 @@ export async function GET() {
       }))
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Debug error:', error);
     return NextResponse.json({
       success: false,
-      error: error.message,
-      code: error.code,
-      details: error.details || 'No additional details'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      code: error && typeof error === 'object' && 'code' in error ? error.code : undefined,
+      details: error && typeof error === 'object' && 'details' in error ? error.details : 'No additional details'
     }, { status: 500 });
   }
 }
