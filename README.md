@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# IR FAQ MVP
 
-## Getting Started
+企業IR情報検索ボット - Google Vertex AI Search を活用したMVPアプリケーション
 
-First, run the development server:
+## 概要
 
+このアプリケーションは、Google Vertex AI Search を使用して企業のIR（投資家向け広報）情報を検索・提供するWebアプリケーションです。
+
+## 技術スタック
+
+- **フロントエンド**: Next.js 15.3.3 + TypeScript + Tailwind CSS
+- **バックエンド**: Next.js API Routes
+- **検索エンジン**: Google Vertex AI Search (Discovery Engine)
+- **デプロイ**: Firebase Hosting
+- **認証**: 公開アクセス（β版）
+
+## 設定情報
+
+- **Project ID**: `ir-faq-mvp_1749712204113`
+- **Search Engine ID**: `ir-faq-mvp`
+- **Location**: `global`
+- **Config ID**: `28e5ce10-d7d8-43ff-81f9-9316d32ac163`
+
+## セットアップ
+
+1. 依存関係のインストール:
+```bash
+npm install
+```
+
+2. 環境変数の設定:
+`.env.local` ファイルが自動的に作成されています。
+
+3. 開発サーバーの開始:
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 使用方法
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. アプリケーションにアクセス
+2. 中央の検索バーにIR関連の質問を入力
+3. Enterキーまたは検索ボタンをクリック
+4. 検索結果がモーダルで表示される
 
-## Learn More
+## デプロイ
 
-To learn more about Next.js, take a look at the following resources:
+Firebase Hostingへのデプロイ:
+```bash
+npm run deploy
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 機能
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- 🔍 Vertex AI Search による高精度な検索
+- 📱 レスポンシブデザイン
+- 🌙 ダークモード対応
+- ⚡ 高速なNext.js アプリケーション
+- 🔒 公開アクセス（localhost、ir-faq-mvp.web.app制限）
 
-## Deploy on Vercel
+## ディレクトリ構造
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/
+├── app/
+│   ├── api/search/          # Vertex AI Search API
+│   ├── globals.css          # グローバルスタイル
+│   ├── layout.tsx           # レイアウト
+│   └── page.tsx             # メインページ
+└── components/
+    └── SearchModal.tsx      # 検索結果モーダル
+```
