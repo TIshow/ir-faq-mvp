@@ -20,9 +20,10 @@ export async function POST(request: NextRequest) {
       location
     });
 
-    // Initialize Google Auth with environment variables
+    // Initialize Google Auth with OIDC for Vercel
     const auth = new GoogleAuth({
-      scopes: ['https://www.googleapis.com/auth/cloud-platform']
+      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+      projectId: projectId
     });
 
     const authClient = await auth.getClient();
