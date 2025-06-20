@@ -1,0 +1,169 @@
+import { SearchServiceClient } from '@google-cloud/discoveryengine';
+import { config } from '../config/env';
+import { getGoogleAuth } from './gcp-auth';
+
+let searchClient: SearchServiceClient | null = null;
+
+export function getDiscoveryEngineClient(): SearchServiceClient {
+  if (!searchClient) {
+    const auth = getGoogleAuth();
+    searchClient = new SearchServiceClient({
+      projectId: config.googleCloud.projectId,
+      auth: auth
+    });
+  }
+  return searchClient;
+}
+
+export interface SearchResult {
+  id: string;
+  document: {
+    id: string;
+    structData: {
+      question?: string;
+      answer?: string;
+      title?: string;
+      content?: string;
+      company?: string;
+      category?: string;
+      // CSV fields might be different
+      [key: string]: any;
+    };
+    derivedStructData?: {
+      title?: string;
+      extractive_answers?: Array<{
+        content?: string;
+      }>;
+      [key: string]: any;
+    };
+  };
+  relevanceScore?: number;
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  totalSize: number;
+  summary?: string;
+}
+
+export async function searchDocuments(query: string, pageSize: number = 10): Promise<SearchResponse> {
+  const client = getDiscoveryEngineClient();
+  
+  const projectPath = client.projectPath(config.googleCloud.projectId);
+  const servingConfigPath = `${projectPath}/locations/${config.googleCloud.location}/collections/default_collection/engines/${config.googleCloud.searchEngineId}/servingConfigs/default_search`;
+
+  const request = {
+    servingConfig: servingConfigPath,
+    query: query,
+    pageSize: pageSize,
+    // queryExpansionSpec: {
+    //   condition: 'AUTO' as const
+    // },
+    spellCorrectionSpec: {
+      mode: 'AUTO' as const
+    },
+    userInfo: {
+      timeZone: 'Asia/Tokyo'
+    },
+    languageCode: 'ja'
+  };
+
+  try {
+    console.log('Discovery Engine request:', JSON.stringify(request, null, 2));
+    const [response] = await client.search(request);
+    
+    console.log('Discovery Engine raw response keys:', Object.keys(response));
+    console.log('Response.results:', response.results);
+    console.log('Response.results length:', response.results?.length || 0);
+    console.log('Full response structure:', JSON.stringify(response, null, 2));
+    
+    // Discovery Engine sometimes returns results as indexed properties instead of .results array
+    let resultsArray = response.results;
+    
+    if (!resultsArray || resultsArray.length === 0) {
+      // Try to extract results from indexed properties
+      const keys = Object.keys(response).filter(key => !isNaN(parseInt(key)));
+      console.log('Found numeric keys:', keys);
+      
+      if (keys.length > 0) {
+        resultsArray = keys.map(key => response[key]);
+        console.log('Extracted results from numeric keys:', resultsArray.length);
+      }
+    }
+    
+    if (!resultsArray || resultsArray.length === 0) {
+      console.log('No results returned from Discovery Engine');
+      return { results: [], totalSize: 0, summary: undefined };
+    }
+    
+    console.log('Processing', resultsArray.length, 'results...');
+    
+    const results: SearchResult[] = [];
+    
+    for (let i = 0; i < resultsArray.length; i++) {
+      const result = resultsArray[i];
+      console.log(`\n=== Processing result ${i + 1} ===`);
+      console.log('Result ID:', result.id);
+      console.log('Document exists:', !!result.document);
+      console.log('StructData exists:', !!result.document?.structData);
+      
+      if (!result.document) {
+        console.log('Skipping result - no document');
+        continue;
+      }
+      
+      // Extract structured data from Discovery Engine format
+      const extractStructData = (structData: any) => {
+        console.log('Extracting structData, input:', structData);
+        if (!structData || !structData.fields) {
+          console.log('No structData.fields found');
+          return {};
+        }
+        
+        const extracted: any = {};
+        for (const [key, value] of Object.entries(structData.fields)) {
+          const fieldValue = value as any;
+          console.log(`Processing field ${key}:`, fieldValue);
+          
+          if (fieldValue.stringValue) {
+            extracted[key] = fieldValue.stringValue;
+            console.log(`Extracted ${key}:`, fieldValue.stringValue);
+          } else if (fieldValue.numberValue !== undefined) {
+            extracted[key] = fieldValue.numberValue;
+          } else if (fieldValue.boolValue !== undefined) {
+            extracted[key] = fieldValue.boolValue;
+          }
+        }
+        console.log('Final extracted structData:', extracted);
+        return extracted;
+      };
+      
+      const structData = extractStructData(result.document.structData);
+      
+      const processedResult = {
+        id: result.id || '',
+        document: {
+          id: result.document.id || '',
+          structData: structData,
+          derivedStructData: result.document.derivedStructData || {}
+        },
+        relevanceScore: result.relevanceScore || 0
+      };
+      
+      console.log('Final processed result:', JSON.stringify(processedResult, null, 2));
+      results.push(processedResult);
+    }
+
+    console.log('All processed results:', JSON.stringify(results, null, 2));
+
+    return {
+      results: results,
+      totalSize: response.totalSize || 0,
+      summary: response.summary?.summaryText || undefined
+    };
+
+  } catch (error) {
+    console.error('Discovery Engine search error:', error);
+    throw new Error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}

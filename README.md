@@ -1,74 +1,124 @@
-# IR FAQ MVP
+# IR FAQ RAG System
 
-企業IR情報検索ボット - Google Vertex AI Search を活用したMVPアプリケーション
+GCPを使用したRAG（Retrieval-Augmented Generation）システムによるIR情報チャットボット
 
-## 概要
+## アーキテクチャ
 
-このアプリケーションは、Google Vertex AI Search を使用して企業のIR（投資家向け広報）情報を検索・提供するWebアプリケーションです。
-
-## 技術スタック
-
-- **フロントエンド**: Next.js 15.3.3 + TypeScript + Tailwind CSS
-- **バックエンド**: Next.js API Routes
-- **検索エンジン**: Google Vertex AI Search (Discovery Engine)
-- **デプロイ**: Firebase Hosting
-- **認証**: 公開アクセス（β版）
-
-## 設定情報
-
-- **Project ID**: `ir-faq-mvp_1749712204113`
-- **Search Engine ID**: `ir-faq-mvp`
-- **Location**: `global`
-- **Config ID**: `28e5ce10-d7d8-43ff-81f9-9316d32ac163`
+- **フロントエンド**: Next.js 15 + TypeScript + Tailwind CSS
+- **検索エンジン**: Google Cloud Discovery Engine
+- **生成AI**: Vertex AI (Gemini Pro)
+- **データベース**: Cloud Firestore
+- **デプロイ**: Cloud Run
 
 ## セットアップ
 
-1. 依存関係のインストール:
+### 1. GCPプロジェクトの準備
+
+以下のAPIを有効化してください：
+
 ```bash
-npm install
+gcloud services enable discoveryengine.googleapis.com
+gcloud services enable aiplatform.googleapis.com
+gcloud services enable firestore.googleapis.com
 ```
 
-2. 環境変数の設定:
-`.env.local` ファイルが自動的に作成されています。
+### 2. Discovery Engine の設定
 
-3. 開発サーバーの開始:
+1. GCPコンソールでDiscovery Engineに移動
+2. 新しい検索アプリを作成
+3. データストアを作成してQ&Aデータをアップロード
+4. エンジンIDを`.env.local`に設定
+
+### 3. Firestore の設定
+
+1. GCPコンソールでFirestoreに移動
+2. ネイティブモードでデータベースを作成
+3. 必要に応じてセキュリティルールを設定
+
+### 4. サービスアカウントの作成
+
 ```bash
+gcloud iam service-accounts create ir-faq-service \
+    --display-name="IR FAQ Service Account"
+
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+    --member="serviceAccount:ir-faq-service@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/discoveryengine.editor"
+
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+    --member="serviceAccount:ir-faq-service@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/aiplatform.user"
+
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+    --member="serviceAccount:ir-faq-service@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/datastore.user"
+```
+
+### 5. 環境変数の設定
+
+`.env.local`ファイルは既に設定済みです。
+
+必要に応じて値を調整してください。
+
+## ローカル開発
+
+```bash
+npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+http://localhost:3000 にアクセス
 
-## 使用方法
+## Cloud Run デプロイ
 
-1. アプリケーションにアクセス
-2. 中央の検索バーにIR関連の質問を入力
-3. Enterキーまたは検索ボタンをクリック
-4. 検索結果がモーダルで表示される
+### 1. Docker イメージをビルド
 
-## デプロイ
-
-Firebase Hostingへのデプロイ:
 ```bash
-npm run deploy
+gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/ir-faq-rag
+```
+
+### 2. Cloud Run にデプロイ
+
+```bash
+gcloud run deploy ir-faq-rag \
+    --image gcr.io/YOUR_PROJECT_ID/ir-faq-rag \
+    --platform managed \
+    --region us-central1 \
+    --allow-unauthenticated \
+    --set-env-vars="GCP_PROJECT_ID=YOUR_PROJECT_ID,GCP_SEARCH_ENGINE_ID=YOUR_ENGINE_ID"
+```
+
+## データ投入
+
+Q&Aデータは以下の形式でDiscovery Engineにアップロードしてください：
+
+```json
+{
+  "question": "質問内容",
+  "answer": "回答内容", 
+  "company": "企業名",
+  "category": "カテゴリ"
+}
 ```
 
 ## 機能
 
-- 🔍 Vertex AI Search による高精度な検索
-- 📱 レスポンシブデザイン
-- 🌙 ダークモード対応
-- ⚡ 高速なNext.js アプリケーション
-- 🔒 公開アクセス（localhost、ir-faq-mvp.web.app制限）
+- 自然言語による質問・回答
+- 検索結果に基づくRAG生成
+- チャット履歴の保存
+- ソース情報の表示
+- 信頼度スコア表示
 
-## ディレクトリ構造
+## トラブルシューティング
 
-```
-src/
-├── app/
-│   ├── api/search/          # Vertex AI Search API
-│   ├── globals.css          # グローバルスタイル
-│   ├── layout.tsx           # レイアウト
-│   └── page.tsx             # メインページ
-└── components/
-    └── SearchModal.tsx      # 検索結果モーダル
-```
+### 認証エラー
+- サービスアカウントキーが正しく設定されているか確認
+- IAMロールが適切に設定されているか確認
+
+### 検索結果が返らない
+- Discovery Engineのデータストアにデータが投入されているか確認
+- 検索エンジンIDが正しいか確認
+
+### Vertex AI エラー  
+- Vertex AI APIが有効化されているか確認
+- リージョン設定が正しいか確認

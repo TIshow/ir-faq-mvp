@@ -1,0 +1,121 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { generateRAGResponse, ConversationMessage } from '@/lib/rag-service';
+import { getFirestore, collections, Message, ChatSession } from '@/lib/firestore';
+import { v4 as uuidv4 } from 'uuid';
+
+export const dynamic = 'force-dynamic';
+
+interface ChatRequest {
+  message: string;
+  sessionId?: string;
+  conversationHistory?: ConversationMessage[];
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const { message, sessionId, conversationHistory = [] }: ChatRequest = await request.json();
+    
+    if (!message || message.trim() === '') {
+      return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+    }
+
+    console.log('Processing chat message:', { message, sessionId });
+
+    // Generate RAG response
+    const ragResponse = await generateRAGResponse({
+      query: message,
+      conversationHistory: conversationHistory,
+      maxResults: 5
+    });
+
+    // Save to Firestore if sessionId is provided
+    let currentSessionId = sessionId;
+    if (currentSessionId) {
+      const firestore = getFirestore();
+      
+      try {
+        // Create or update session
+        if (!sessionId) {
+          currentSessionId = uuidv4();
+          const sessionData: Omit<ChatSession, 'id'> = {
+            id: currentSessionId,
+            title: message.slice(0, 50) + (message.length > 50 ? '...' : ''),
+            createdAt: firestore.Timestamp.now(),
+            updatedAt: firestore.Timestamp.now(),
+            messageCount: 2 // user + assistant
+          };
+          
+          await firestore.collection(collections.chatSessions).doc(currentSessionId).set(sessionData);
+        } else {
+          // Update existing session
+          await firestore.collection(collections.chatSessions).doc(currentSessionId).update({
+            updatedAt: firestore.Timestamp.now(),
+            messageCount: firestore.FieldValue.increment(2)
+          });
+        }
+
+        // Save user message
+        const userMessage: Omit<Message, 'id'> = {
+          id: uuidv4(),
+          sessionId: currentSessionId,
+          type: 'user',
+          content: message,
+          timestamp: firestore.Timestamp.now()
+        };
+        
+        await firestore.collection(collections.messages).add(userMessage);
+
+        // Save assistant message
+        const assistantMessage: Omit<Message, 'id'> = {
+          id: uuidv4(),
+          sessionId: currentSessionId,
+          type: 'assistant',
+          content: ragResponse.answer,
+          timestamp: firestore.Timestamp.now(),
+          sources: ragResponse.sources,
+          metadata: {
+            confidence: ragResponse.confidence,
+            topics: extractTopicsFromSources(ragResponse.sources)
+          }
+        };
+        
+        await firestore.collection(collections.messages).add(assistantMessage);
+        
+        console.log('Messages saved to Firestore');
+      } catch (firestoreError) {
+        console.error('Firestore save error:', firestoreError);
+        // Continue without saving - don't fail the entire request
+      }
+    }
+
+    return NextResponse.json({
+      message: ragResponse.answer,
+      sources: ragResponse.sources,
+      confidence: ragResponse.confidence,
+      searchResultsCount: ragResponse.searchResultsCount,
+      sessionId: currentSessionId
+    });
+
+  } catch (error: unknown) {
+    console.error('Chat API error:', error);
+    return NextResponse.json(
+      { 
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+function extractTopicsFromSources(sources: any[]): string[] {
+  const topics = new Set<string>();
+  
+  sources.forEach(source => {
+    if (source.source && source.source !== '情報源不明') {
+      topics.add(source.source);
+    }
+  });
+  
+  return Array.from(topics);
+}
