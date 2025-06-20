@@ -42,30 +42,47 @@ export async function generateRAGResponse(request: RAGRequest): Promise<RAGRespo
       };
     }
 
-    // Step 1.5: Check for exact question match
+    // Step 1.5: Check for exact or similar question match
     for (const result of searchResponse.results) {
       const data = result.document.structData;
-      console.log('Checking result for exact match:', data);
+      console.log('Checking result for match:', data);
       
       if (data.question && data.answer) {
-        const questionMatch = data.question.toLowerCase().trim() === query.toLowerCase().trim();
+        const originalQuestion = data.question.toLowerCase().trim();
+        const userQuery = query.toLowerCase().trim();
+        
+        // Check exact match
+        const exactMatch = originalQuestion === userQuery;
+        
+        // Check similarity (remove punctuation and check if 80%+ words match)
+        const originalWords = originalQuestion.replace(/[？。、！]/g, '').split(/\s+/);
+        const queryWords = userQuery.replace(/[？。、！]/g, '').split(/\s+/);
+        
+        const matchingWords = originalWords.filter(word => 
+          queryWords.some(qWord => word.includes(qWord) || qWord.includes(word))
+        );
+        const similarity = matchingWords.length / Math.max(originalWords.length, queryWords.length);
+        
         console.log('Question match check:', {
           original: data.question,
           query: query,
-          isMatch: questionMatch
+          exactMatch: exactMatch,
+          similarity: similarity,
+          matchingWords: matchingWords
         });
         
-        if (questionMatch) {
-          console.log('Found exact match! Returning direct answer.');
+        // Return direct answer for exact match or high similarity
+        if (exactMatch || similarity >= 0.7) {
+          console.log(`Found ${exactMatch ? 'exact' : 'similar'} match! Returning direct answer.`);
           return {
             answer: data.answer,
             sources: [{
               id: result.document.id,
               title: data.question,
               source: data.company || '情報源不明',
-              relevanceScore: 1.0
+              relevanceScore: exactMatch ? 1.0 : similarity
             }],
-            confidence: 1.0,
+            confidence: exactMatch ? 1.0 : similarity,
             searchResultsCount: 1
           };
         }
@@ -78,16 +95,48 @@ export async function generateRAGResponse(request: RAGRequest): Promise<RAGRespo
     // Step 3: Build conversation context
     const conversationContext = buildConversationContext(conversationHistory);
     
-    // Step 4: Generate response using Vertex AI
+    // Step 4: Generate response using Vertex AI (with fallback)
     console.log('Generating response with Vertex AI...');
     const prompt = buildPrompt(query, conversationContext);
     
-    const generationResponse = await generateTextWithGemini({
-      prompt: prompt,
-      context: context,
-      maxTokens: 1024,
-      temperature: 0.2
-    });
+    let generationResponse;
+    try {
+      generationResponse = await generateTextWithGemini({
+        prompt: prompt,
+        context: context,
+        maxTokens: 1024,
+        temperature: 0.2
+      });
+    } catch (vertexError) {
+      console.error('Vertex AI generation failed, using fallback:', vertexError);
+      
+      // Fallback: Use the first relevant result directly
+      const relevantResult = searchResponse.results.find(result => 
+        result.document.structData.answer && result.document.structData.answer.length > 10
+      );
+      
+      if (relevantResult && relevantResult.document.structData.answer) {
+        return {
+          answer: `以下の関連情報をお答えします：\n\n${relevantResult.document.structData.answer}`,
+          sources: [{
+            id: relevantResult.document.id,
+            title: relevantResult.document.structData.question || 'タイトルなし',
+            source: relevantResult.document.structData.company || '情報源不明',
+            relevanceScore: 0.8
+          }],
+          confidence: 0.8,
+          searchResultsCount: searchResponse.results.length
+        };
+      }
+      
+      // If no fallback possible
+      return {
+        answer: '申し訳ございませんが、現在システムに一時的な問題が発生しております。しばらくしてから再度お試しください。',
+        sources: [],
+        confidence: 0,
+        searchResultsCount: 0
+      };
+    }
 
     // Step 5: Build document references
     const sources: DocumentReference[] = searchResponse.results.map((result: SearchResult) => {

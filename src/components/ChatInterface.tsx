@@ -126,7 +126,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       {/* Header */}
       <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
         <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-          IR FAQ Chat
+          IR太郎
         </h1>
         <button
           onClick={clearChat}

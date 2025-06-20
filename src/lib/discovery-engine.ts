@@ -69,13 +69,11 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
   };
 
   try {
-    console.log('Discovery Engine request:', JSON.stringify(request, null, 2));
+    console.log('Discovery Engine request for:', request.query);
     const [response] = await client.search(request);
     
-    console.log('Discovery Engine raw response keys:', Object.keys(response));
-    console.log('Response.results:', response.results);
+    console.log('Discovery Engine response keys:', Object.keys(response));
     console.log('Response.results length:', response.results?.length || 0);
-    console.log('Full response structure:', JSON.stringify(response, null, 2));
     
     // Discovery Engine sometimes returns results as indexed properties instead of .results array
     let resultsArray = response.results;
@@ -102,10 +100,7 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     
     for (let i = 0; i < resultsArray.length; i++) {
       const result = resultsArray[i];
-      console.log(`\n=== Processing result ${i + 1} ===`);
-      console.log('Result ID:', result.id);
-      console.log('Document exists:', !!result.document);
-      console.log('StructData exists:', !!result.document?.structData);
+      console.log(`Processing result ${i + 1}:`, result.id);
       
       if (!result.document) {
         console.log('Skipping result - no document');
@@ -114,27 +109,22 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
       
       // Extract structured data from Discovery Engine format
       const extractStructData = (structData: any) => {
-        console.log('Extracting structData, input:', structData);
         if (!structData || !structData.fields) {
-          console.log('No structData.fields found');
           return {};
         }
         
         const extracted: any = {};
         for (const [key, value] of Object.entries(structData.fields)) {
           const fieldValue = value as any;
-          console.log(`Processing field ${key}:`, fieldValue);
           
           if (fieldValue.stringValue) {
             extracted[key] = fieldValue.stringValue;
-            console.log(`Extracted ${key}:`, fieldValue.stringValue);
           } else if (fieldValue.numberValue !== undefined) {
             extracted[key] = fieldValue.numberValue;
           } else if (fieldValue.boolValue !== undefined) {
             extracted[key] = fieldValue.boolValue;
           }
         }
-        console.log('Final extracted structData:', extracted);
         return extracted;
       };
       
@@ -150,11 +140,13 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
         relevanceScore: result.relevanceScore || 0
       };
       
-      console.log('Final processed result:', JSON.stringify(processedResult, null, 2));
+      if (structData.question || structData.answer || Object.keys(structData).length > 0) {
+        console.log('Extracted data:', Object.keys(structData));
+      }
       results.push(processedResult);
     }
 
-    console.log('All processed results:', JSON.stringify(results, null, 2));
+    console.log('Total processed results:', results.length);
 
     return {
       results: results,
