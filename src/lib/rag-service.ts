@@ -242,7 +242,7 @@ function buildContextFromResults(results: SearchResult[]): string {
     
     // Use first available field if no standard fields found
     if (!question && !answer) {
-      const availableFields = Object.entries(data).filter(([_key, value]) => 
+      const availableFields = Object.entries(data).filter(([, value]) => 
         value && typeof value === 'string' && value.length > 10
       );
       if (availableFields.length > 0) {
