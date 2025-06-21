@@ -232,7 +232,7 @@ function buildContextFromResults(results: SearchResult[]): string {
     // Check derived data for extractive answers
     if (!answer && derivedData?.extractive_answers) {
       const extractiveAnswers = derivedData.extractive_answers
-        .map((ans: any) => ans.content)
+        .map((ans: { content?: string }) => ans.content)
         .filter(Boolean)
         .join(' ');
       if (extractiveAnswers) {
@@ -242,7 +242,7 @@ function buildContextFromResults(results: SearchResult[]): string {
     
     // Use first available field if no standard fields found
     if (!question && !answer) {
-      const availableFields = Object.entries(data).filter(([key, value]) => 
+      const availableFields = Object.entries(data).filter(([_key, value]) => 
         value && typeof value === 'string' && value.length > 10
       );
       if (availableFields.length > 0) {

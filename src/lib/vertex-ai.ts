@@ -85,10 +85,10 @@ export async function generateTextWithGemini(request: GenerateTextRequest): Prom
       throw new Error('No predictions returned from Vertex AI');
     }
 
-    const prediction = response.predictions[0];
+    const prediction = response.predictions[0] as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string; citationMetadata?: unknown }> };
     
     // Extract response text from Gemini response structure
-    const candidates = (prediction as any).candidates;
+    const candidates = prediction.candidates;
     if (!candidates || candidates.length === 0) {
       throw new Error('No candidates in Vertex AI response');
     }

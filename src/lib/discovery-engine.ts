@@ -27,14 +27,14 @@ export interface SearchResult {
       company?: string;
       category?: string;
       // CSV fields might be different
-      [key: string]: any;
+      [key: string]: unknown;
     };
     derivedStructData?: {
       title?: string;
       extractive_answers?: Array<{
         content?: string;
       }>;
-      [key: string]: any;
+      [key: string]: unknown;
     };
   };
   relevanceScore?: number;
@@ -113,9 +113,9 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
           return {};
         }
         
-        const extracted: any = {};
+        const extracted: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(structData.fields)) {
-          const fieldValue = value as any;
+          const fieldValue = value as { stringValue?: string; numberValue?: number; boolValue?: boolean };
           
           if (fieldValue.stringValue) {
             extracted[key] = fieldValue.stringValue;
