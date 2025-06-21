@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install all dependencies (including devDependencies for build)
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -16,8 +16,25 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Expose port (Cloud Run uses PORT env var)
-EXPOSE $PORT
+# Remove devDependencies to reduce image size
+RUN npm prune --production
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
+
+# Change ownership of .next directory
+RUN chown -R nextjs:nodejs /app/.next
+
+# Switch to non-root user
+USER nextjs
+
+# Expose port (Cloud Run uses PORT env var, default to 3000)
+EXPOSE 3000
+
+# Set environment variable for production
+ENV NODE_ENV=production
+ENV PORT=3000
 
 # Start the application
 CMD ["npm", "start"]
