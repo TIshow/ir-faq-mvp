@@ -73,10 +73,10 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     const [response] = await client.search(request);
     
     console.log('Discovery Engine response keys:', Object.keys(response));
-    console.log('Response.results length:', response.results?.length || 0);
+    console.log('Response.results length:', (response as any).results?.length || 0);
     
     // Discovery Engine sometimes returns results as indexed properties instead of .results array
-    let resultsArray = response.results;
+    let resultsArray = (response as any).results;
     
     if (!resultsArray || resultsArray.length === 0) {
       // Try to extract results from indexed properties
@@ -84,7 +84,7 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
       console.log('Found numeric keys:', keys);
       
       if (keys.length > 0) {
-        resultsArray = keys.map(key => response[key]);
+        resultsArray = keys.map(key => (response as any)[key]);
         console.log('Extracted results from numeric keys:', resultsArray.length);
       }
     }
@@ -108,7 +108,7 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
       }
       
       // Extract structured data from Discovery Engine format
-      const extractStructData = (structData: any) => {
+      const extractStructData = (structData: { fields?: Record<string, { stringValue?: string; numberValue?: number; boolValue?: boolean }> }) => {
         if (!structData || !structData.fields) {
           return {};
         }
@@ -150,8 +150,8 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
 
     return {
       results: results,
-      totalSize: response.totalSize || 0,
-      summary: response.summary?.summaryText || undefined
+      totalSize: (response as any).totalSize || 0,
+      summary: (response as any).summary?.summaryText || undefined
     };
 
   } catch (error) {

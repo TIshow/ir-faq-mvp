@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateRAGResponse, ConversationMessage } from '@/lib/rag-service';
-import { getFirestore, collections, Message, ChatSession } from '@/lib/firestore';
+import { getFirestore, collections } from '@/lib/firestore';
+import { Timestamp, FieldValue } from '@google-cloud/firestore';
 import { v4 as uuidv4 } from 'uuid';
 
 export const dynamic = 'force-dynamic';
@@ -37,11 +38,10 @@ export async function POST(request: NextRequest) {
         // Create or update session
         if (!sessionId) {
           currentSessionId = uuidv4();
-          const sessionData: Omit<ChatSession, 'id'> = {
-            id: currentSessionId,
+          const sessionData = {
             title: message.slice(0, 50) + (message.length > 50 ? '...' : ''),
-            createdAt: firestore.Timestamp.now(),
-            updatedAt: firestore.Timestamp.now(),
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
             messageCount: 2 // user + assistant
           };
           
@@ -49,29 +49,27 @@ export async function POST(request: NextRequest) {
         } else {
           // Update existing session
           await firestore.collection(collections.chatSessions).doc(currentSessionId).update({
-            updatedAt: firestore.Timestamp.now(),
-            messageCount: firestore.FieldValue.increment(2)
+            updatedAt: Timestamp.now(),
+            messageCount: FieldValue.increment(2)
           });
         }
 
         // Save user message
-        const userMessage: Omit<Message, 'id'> = {
-          id: uuidv4(),
+        const userMessage = {
           sessionId: currentSessionId,
           type: 'user',
           content: message,
-          timestamp: firestore.Timestamp.now()
+          timestamp: Timestamp.now()
         };
         
         await firestore.collection(collections.messages).add(userMessage);
 
         // Save assistant message
-        const assistantMessage: Omit<Message, 'id'> = {
-          id: uuidv4(),
+        const assistantMessage = {
           sessionId: currentSessionId,
           type: 'assistant',
           content: ragResponse.answer,
-          timestamp: firestore.Timestamp.now(),
+          timestamp: Timestamp.now(),
           sources: ragResponse.sources,
           metadata: {
             confidence: ragResponse.confidence,
@@ -108,7 +106,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function extractTopicsFromSources(sources: any[]): string[] {
+function extractTopicsFromSources(sources: { source?: string }[]): string[] {
   const topics = new Set<string>();
   
   sources.forEach(source => {
