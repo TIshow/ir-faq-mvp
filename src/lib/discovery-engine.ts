@@ -56,16 +56,18 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     servingConfig: servingConfigPath,
     query: query,
     pageSize: pageSize,
-    // queryExpansionSpec: {
-    //   condition: 'AUTO' as const
-    // },
+    queryExpansionSpec: {
+      condition: 'AUTO' as const
+    },
     spellCorrectionSpec: {
       mode: 'AUTO' as const
     },
     userInfo: {
       timeZone: 'Asia/Tokyo'
     },
-    languageCode: 'ja'
+    languageCode: 'ja',
+    // Allow both Q&A and PDF documents 
+    filter: 'doc_type="qa" OR doc_type="pdf"'
   };
 
   try {
@@ -74,6 +76,10 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     
     console.log('Discovery Engine response keys:', Object.keys(response));
     console.log('Response.results length:', (response as any).results?.length || 0);
+    console.log('Response.totalSize:', (response as any).totalSize || 0);
+    
+    // Debug: log full response structure
+    console.dir('Full Discovery Engine response:', response, { depth: 3 });
     
     // Discovery Engine sometimes returns results as indexed properties instead of .results array
     let resultsArray = (response as any).results;
@@ -101,6 +107,7 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     for (let i = 0; i < resultsArray.length; i++) {
       const result = resultsArray[i];
       console.log(`Processing result ${i + 1}:`, result.id);
+      console.dir(`Result ${i + 1} full data:`, result, { depth: 4 });
       
       if (!result.document) {
         console.log('Skipping result - no document');
@@ -140,9 +147,9 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
         relevanceScore: result.relevanceScore || 0
       };
       
-      if (structData.question || structData.answer || Object.keys(structData).length > 0) {
-        console.log('Extracted data:', Object.keys(structData));
-      }
+      // Always push results, regardless of content type
+      console.log('Extracted structData keys:', Object.keys(structData));
+      console.log('derivedStructData keys:', Object.keys(processedResult.document.derivedStructData || {}));
       results.push(processedResult);
     }
 

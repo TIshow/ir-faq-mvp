@@ -54,7 +54,7 @@ export async function generateRAGResponse(request: RAGRequest): Promise<RAGRespo
         // Check exact match
         const exactMatch = originalQuestion === userQuery;
         
-        // Check similarity (remove punctuation and check if 80%+ words match)
+        // Check similarity (remove punctuation and check if 60%+ words match - lowered threshold)
         const originalWords = originalQuestion.replace(/[？。、！]/g, '').split(/\s+/);
         const queryWords = userQuery.replace(/[？。、！]/g, '').split(/\s+/);
         
@@ -71,8 +71,8 @@ export async function generateRAGResponse(request: RAGRequest): Promise<RAGRespo
           matchingWords: matchingWords
         });
         
-        // Return direct answer for exact match or high similarity
-        if (exactMatch || similarity >= 0.7) {
+        // Return direct answer for exact match or good similarity (lowered from 0.7 to 0.5)
+        if (exactMatch || similarity >= 0.5) {
           console.log(`Found ${exactMatch ? 'exact' : 'similar'} match! Returning direct answer.`);
           return {
             answer: data.answer,
@@ -91,6 +91,19 @@ export async function generateRAGResponse(request: RAGRequest): Promise<RAGRespo
 
     // Step 2: Build context from search results
     const context = buildContextFromResults(searchResponse.results);
+    
+    console.log('Generated context for Vertex AI:', context);
+    
+    // Ensure we have some context to work with
+    if (!context || context.trim().length === 0) {
+      console.log('No valid context generated, using fallback...');
+      return {
+        answer: '申し訳ございませんが、お尋ねの内容に関する十分な情報が見つかりませんでした。より具体的な質問をしていただけますでしょうか。',
+        sources: [],
+        confidence: 0,
+        searchResultsCount: searchResponse.results.length
+      };
+    }
     
     // Step 3: Build conversation context
     const conversationContext = buildConversationContext(conversationHistory);
@@ -185,23 +198,42 @@ export async function generateRAGResponse(request: RAGRequest): Promise<RAGRespo
 }
 
 function buildContextFromResults(results: SearchResult[]): string {
+  console.log('buildContextFromResults called with', results.length, 'results');
+  
   const qaResults: SearchResult[] = [];
   const pdfResults: SearchResult[] = [];
   
   // Separate Q&A and PDF results
-  results.forEach(result => {
+  results.forEach((result, index) => {
     const data = result.document.structData;
     const derivedData = result.document.derivedStructData;
+    
+    console.log(`Result ${index + 1} analysis:`, {
+      structDataKeys: Object.keys(data),
+      derivedDataKeys: Object.keys(derivedData || {}),
+      structData: data,
+      derivedData: derivedData
+    });
     
     // Check if this is Q&A data (has question/answer fields)
     const hasQA = data.question || data.answer || data.q || data.a;
     
-    // Check if this is PDF data (has title/link fields)
-    const hasPDF = derivedData?.title || derivedData?.link;
+    // Check if this is PDF data - be more flexible with detection
+    const hasPDF = derivedData?.title || derivedData?.link || data.text || data.content || 
+                  (derivedData && Object.keys(derivedData).length > 0);
+    
+    // Also check for general text content that could be from PDF
+    const hasTextContent = data.text || data.content || data.body;
+    
+    console.log(`Result ${index + 1} classification:`, { hasQA, hasPDF, hasTextContent });
     
     if (hasQA) {
       qaResults.push(result);
-    } else if (hasPDF) {
+    } else if (hasPDF || hasTextContent) {
+      pdfResults.push(result);
+    } else {
+      // If we can't classify, treat as PDF content to avoid losing data
+      console.log(`Result ${index + 1} unclassified - treating as PDF content`);
       pdfResults.push(result);
     }
   });
@@ -243,8 +275,11 @@ function buildContextFromResults(results: SearchResult[]): string {
   
   // Process PDF results with enhanced extraction
   pdfResults.forEach((result, index) => {
+    const data = result.document.structData;
     const derivedData = result.document.derivedStructData;
     let context = `[PDF資料${index + 1}]`;
+    
+    console.log(`Processing PDF result ${index + 1}:`, { data, derivedData });
     
     // Extract PDF metadata
     if (derivedData?.title) {
@@ -254,15 +289,28 @@ function buildContextFromResults(results: SearchResult[]): string {
       context += `\nソース: ${derivedData.link}`;
     }
     
-    // Extract content from PDF (if available in derivedData)
+    // Extract content from PDF - check both structData and derivedData
     let pdfContent = '';
     
-    // Try to extract from various possible fields
-    const contentFields = ['content', 'text', 'body', 'extractedText'];
-    for (const field of contentFields) {
-      if (derivedData?.[field] && typeof derivedData[field] === 'string') {
-        pdfContent = derivedData[field];
+    // First try structData for text content
+    const structContentFields = ['text', 'content', 'body', 'extractedText', 'snippet'];
+    for (const field of structContentFields) {
+      if (data[field] && typeof data[field] === 'string') {
+        pdfContent = data[field] as string;
+        console.log(`Found content in structData.${field}:`, pdfContent.substring(0, 100) + '...');
         break;
+      }
+    }
+    
+    // Then try derivedData for text content
+    if (!pdfContent) {
+      const derivedContentFields = ['content', 'text', 'body', 'extractedText'];
+      for (const field of derivedContentFields) {
+        if (derivedData?.[field] && typeof derivedData[field] === 'string') {
+          pdfContent = derivedData[field] as string;
+          console.log(`Found content in derivedData.${field}:`, pdfContent.substring(0, 100) + '...');
+          break;
+        }
       }
     }
     
@@ -271,17 +319,22 @@ function buildContextFromResults(results: SearchResult[]): string {
       const snippets = extractSnippetsFromPDF(derivedData.snippets);
       if (snippets.length > 0) {
         pdfContent = snippets.join(' ');
+        console.log(`Found content in snippets:`, pdfContent.substring(0, 100) + '...');
       }
     }
     
-    // If we have extracted content, use it
-    if (pdfContent && pdfContent.length > 20) {
+    // Lower threshold for content inclusion
+    if (pdfContent && pdfContent.length > 10) {
       // Limit content to reasonable length for context
-      const maxLength = 500;
+      const maxLength = 800;
       const truncatedContent = pdfContent.length > maxLength 
         ? pdfContent.substring(0, maxLength) + '...'
         : pdfContent;
       context += `\n内容: ${truncatedContent}`;
+    } else {
+      console.log(`No usable content found for PDF result ${index + 1}`);
+      // Include minimal context even without content
+      context += `\n内容: [内容が取得できませんでした]`;
     }
     
     contextParts.push(context);
