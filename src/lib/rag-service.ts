@@ -23,8 +23,8 @@ export interface RAGResponse {
 export async function generateRAGResponse(request: RAGRequest): Promise<RAGResponse> {
   const { query, conversationHistory = [], maxResults = 5 } = request;
   
-  // Increase maxResults for better snippet variety, but limit to prevent timeout
-  const limitedMaxResults = Math.min(maxResults * 2, 15); // Get more results for better snippet selection
+  // Increase maxResults significantly for better snippet variety
+  const limitedMaxResults = Math.min(maxResults * 4, 25); // Increased for comprehensive snippet selection
 
   try {
     // Step 1: Search for relevant documents
@@ -619,25 +619,54 @@ function filterAndPrioritizeSnippets(snippets: string[], query: string): string[
       score += keywordCount * 10; // Heavy weight for keyword matches
     });
     
-    // Bonus for numerical data (likely concrete information)
-    const numberMatches = snippet.match(/\d{1,3}(?:,\d{3})*(?:\.\d+)?[百千万億円％%]/g) || [];
-    score += numberMatches.length * 15;
+    // Enhanced numerical data detection with higher priority
+    const numberPatterns = [
+      /\d{1,3}(?:,\d{3})*(?:\.\d+)?[百千万億円]/g,  // Currency amounts
+      /\d{1,3}(?:,\d{3})*(?:\.\d+)?％/g,           // Percentages
+      /前年(?:同期)?比\s*\d+(?:\.\d+)?％/g,        // Year-over-year comparisons
+      /\d+(?:\.\d+)?％[増減]/g,                    // Growth/decline percentages
+      /\d{4}年\d{1,2}月期/g                       // Fiscal periods
+    ];
     
-    // Bonus for specific financial terms
-    const financialTerms = ['売上高', '利益', '業績', '前年', '増減', '比較', '百万円', '予想'];
-    financialTerms.forEach(term => {
+    let numericalScore = 0;
+    numberPatterns.forEach(pattern => {
+      const matches = snippet.match(pattern) || [];
+      numericalScore += matches.length * 20; // Higher weight for numerical data
+    });
+    score += numericalScore;
+    
+    // Enhanced financial terms detection
+    const primaryFinancialTerms = ['売上高', '営業利益', '当期純利益', '経常利益'];
+    const secondaryFinancialTerms = ['利益', '業績', '前年', '増減', '比較', '百万円', '予想', '実績'];
+    
+    primaryFinancialTerms.forEach(term => {
+      if (lowerSnippet.includes(term)) {
+        score += 15; // Higher weight for primary terms
+      }
+    });
+    
+    secondaryFinancialTerms.forEach(term => {
       if (lowerSnippet.includes(term)) {
         score += 5;
       }
     });
     
-    // Penalty for negative/exclusion terms
-    const negativeTerms = ['省略', '記載を省略', '記載なし', '該当なし', '該当事項はありません', '特に記載すべき事項はありません'];
+    // Strong penalty for negative/exclusion terms
+    const negativeTerms = [
+      '省略', '記載を省略', '記載なし', '該当なし', '該当事項はありません', 
+      '特に記載すべき事項はありません', '記載すべき事項はない', '該当する事項はありません',
+      'ないため', '超えるため'
+    ];
     negativeTerms.forEach(term => {
       if (lowerSnippet.includes(term)) {
-        score -= 20; // Heavy penalty
+        score -= 30; // Stronger penalty for exclusion language
       }
     });
+    
+    // Bonus for complete financial statements format
+    if (snippet.includes('百万円') && (snippet.includes('前年') || snippet.includes('増') || snippet.includes('減'))) {
+      score += 10; // Bonus for complete financial data
+    }
     
     // Penalty for very short snippets (likely incomplete)
     if (snippet.length < 30) {
@@ -665,14 +694,29 @@ function filterAndPrioritizeSnippets(snippets: string[], query: string): string[
   
   console.log(`Filtered to ${filteredAndSorted.length} relevant snippets`);
   
-  // Return top relevant snippets (max 3 for context management)
+  // Return top relevant snippets (3-5 for richer context)
   const topSnippets = filteredAndSorted
-    .slice(0, 3)
+    .slice(0, 5) // Increased from 3 to 5 for more comprehensive context
     .map(item => item.snippet);
   
-  // If no positive-scored snippets, return the original first snippet as fallback
+  // Enhanced fallback strategy
   if (topSnippets.length === 0 && snippets.length > 0) {
-    console.log('No positively scored snippets found, using first snippet as fallback');
+    console.log('No positively scored snippets found, analyzing for fallback...');
+    
+    // Try to find snippets with at least numerical data, even if they have negative terms
+    const numericalSnippets = snippets.filter(snippet => {
+      const hasNumbers = /\d{1,3}(?:,\d{3})*(?:\.\d+)?[百千万億円％%]/.test(snippet);
+      const hasFinancialTerms = ['売上高', '利益', '業績'].some(term => snippet.toLowerCase().includes(term));
+      return hasNumbers || hasFinancialTerms;
+    });
+    
+    if (numericalSnippets.length > 0) {
+      console.log(`Using ${numericalSnippets.length} numerical snippets as fallback`);
+      return numericalSnippets.slice(0, 3);
+    }
+    
+    // Last resort: use first snippet
+    console.log('Using first snippet as last resort fallback');
     return [snippets[0]];
   }
   

@@ -52,16 +52,23 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
   const projectPath = client.projectPath(config.googleCloud.projectId);
   const servingConfigPath = `${projectPath}/locations/${config.googleCloud.location}/collections/default_collection/engines/${config.googleCloud.searchEngineId}/servingConfigs/default_search`;
 
-  // Limit pageSize to prevent timeout with large datasets
-  const limitedPageSize = Math.min(pageSize, 20);
+  // Increased pageSize for better snippet variety while preventing timeout
+  const limitedPageSize = Math.min(pageSize, 30); // Increased from 20 to 30 for more snippet options
 
   const request = {
     servingConfig: servingConfigPath,
     query: query,
     pageSize: limitedPageSize,
-    queryExpansionSpec: {
-      condition: 'AUTO' as const
-    },
+    // queryExpansionSpec disabled for multi-datastore search to avoid INVALID_ARGUMENT
+    // 
+    // NOTE: To enable queryExpansionSpec for better search quality, consider:
+    // 1. Single-datastore approach: Combine Q&A and PDF data into one datastore
+    // 2. Sequential search: Search Q&A first, then PDF if no good results
+    // 3. Separate endpoints: Create different search functions for Q&A vs PDF
+    //
+    // queryExpansionSpec: {
+    //   condition: 'AUTO' as const
+    // },
     spellCorrectionSpec: {
       mode: 'AUTO' as const
     },
