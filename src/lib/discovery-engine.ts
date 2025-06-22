@@ -159,32 +159,55 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
         return extracted;
       };
       
-      // Enhanced derivedStructData extraction
+      // Enhanced derivedStructData extraction - handle nested fields structure
       const extractDerivedData = (derivedData: any) => {
         if (!derivedData) return {};
         
         const extracted: Record<string, unknown> = {};
         
-        // Extract title and link
+        // Check if data is nested under 'fields' (common in Discovery Engine responses)
+        const dataToProcess = derivedData.fields || derivedData;
+        
+        // Apply the same extraction logic as structData for nested fields
+        if (dataToProcess.fields) {
+          // Double-nested structure: derivedData.fields.fields
+          for (const [key, value] of Object.entries(dataToProcess.fields)) {
+            if (value && typeof value === 'object') {
+              if ((value as any).stringValue) {
+                extracted[key] = (value as any).stringValue;
+              } else if ((value as any).listValue) {
+                extracted[key] = (value as any).listValue;
+              } else if ((value as any).structValue) {
+                extracted[key] = (value as any).structValue;
+              } else {
+                extracted[key] = value;
+              }
+            }
+          }
+        } else {
+          // Single-nested or direct structure
+          for (const [key, value] of Object.entries(dataToProcess)) {
+            if (value && typeof value === 'object') {
+              if ((value as any).stringValue) {
+                extracted[key] = (value as any).stringValue;
+              } else if ((value as any).listValue) {
+                extracted[key] = (value as any).listValue;
+              } else if ((value as any).structValue) {
+                extracted[key] = (value as any).structValue;
+              } else {
+                extracted[key] = value;
+              }
+            } else {
+              extracted[key] = value;
+            }
+          }
+        }
+        
+        // Legacy fallback for direct access
         if (derivedData.title) extracted.title = derivedData.title;
         if (derivedData.link) extracted.link = derivedData.link;
-        
-        // Extract extractive answers (common in PDF results)
-        if (derivedData.extractive_answers) {
-          extracted.extractive_answers = derivedData.extractive_answers;
-        }
-        
-        // Extract snippets (text chunks from PDF)
-        if (derivedData.snippets) {
-          extracted.snippets = derivedData.snippets;
-        }
-        
-        // Extract any other fields that might contain text content
-        Object.keys(derivedData).forEach(key => {
-          if (!extracted[key] && derivedData[key]) {
-            extracted[key] = derivedData[key];
-          }
-        });
+        if (derivedData.extractive_answers) extracted.extractive_answers = derivedData.extractive_answers;
+        if (derivedData.snippets) extracted.snippets = derivedData.snippets;
         
         return extracted;
       };

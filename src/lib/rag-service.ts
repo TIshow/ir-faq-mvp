@@ -221,8 +221,11 @@ function buildContextFromResults(results: SearchResult[]): string {
     // Check if this is Q&A data (has question/answer fields)
     const hasQA = data.question || data.answer || data.q || data.a;
     
-    // Check if this is PDF data - be more flexible with detection
-    const hasPDF = derivedData?.title || derivedData?.link || data.text || data.content || 
+    // Check if this is PDF data - handle nested fields structure
+    const hasPDF = derivedData?.title || derivedData?.link || 
+                  derivedData?.fields?.title || derivedData?.fields?.link || 
+                  derivedData?.snippets || derivedData?.fields?.snippets ||
+                  data.text || data.content || 
                   (derivedData && Object.keys(derivedData).length > 0);
     
     // Also check for general text content that could be from PDF
@@ -284,12 +287,17 @@ function buildContextFromResults(results: SearchResult[]): string {
     
     console.log(`Processing PDF result ${index + 1}:`, { data, derivedData });
     
-    // Extract PDF metadata
-    if (derivedData?.title) {
-      context += ` タイトル: ${derivedData.title}`;
+    // Extract PDF metadata - handle nested fields structure
+    const title = derivedData?.title || derivedData?.fields?.title;
+    const link = derivedData?.link || derivedData?.fields?.link;
+    
+    if (title) {
+      const titleText = typeof title === 'string' ? title : title?.stringValue || title;
+      context += ` タイトル: ${titleText}`;
     }
-    if (derivedData?.link) {
-      context += `\nソース: ${derivedData.link}`;
+    if (link) {
+      const linkText = typeof link === 'string' ? link : link?.stringValue || link;
+      context += `\nソース: ${linkText}`;
     }
     
     // Extract content from PDF - comprehensive approach
@@ -313,10 +321,11 @@ function buildContextFromResults(results: SearchResult[]): string {
       }
     }
     
-    // 2. Try derivedData for text content
+    // 2. Try derivedData for text content - handle nested fields
     if (!pdfContent) {
       const derivedContentFields = ['content', 'text', 'body', 'extractedText', 'textRepresentation', 'pageContent'];
       for (const field of derivedContentFields) {
+        // Try direct access first
         if (derivedData?.[field]) {
           if (typeof derivedData[field] === 'string') {
             pdfContent = derivedData[field] as string;
@@ -328,36 +337,61 @@ function buildContextFromResults(results: SearchResult[]): string {
             break;
           }
         }
+        // Try nested fields access
+        else if (derivedData?.fields?.[field]) {
+          const fieldData = derivedData.fields[field];
+          if (typeof fieldData === 'string') {
+            pdfContent = fieldData;
+            contentSource = `derivedData.fields.${field}`;
+            break;
+          } else if (fieldData?.stringValue) {
+            pdfContent = fieldData.stringValue;
+            contentSource = `derivedData.fields.${field}.stringValue`;
+            break;
+          } else if (Array.isArray(fieldData)) {
+            pdfContent = fieldData.join(' ');
+            contentSource = `derivedData.fields.${field} (array)`;
+            break;
+          }
+        }
       }
     }
     
     // 3. Extract from extractive_answers (common in Discovery Engine PDF results)
-    if (!pdfContent && derivedData?.extractive_answers) {
-      const extractiveTexts: string[] = [];
-      const answers = Array.isArray(derivedData.extractive_answers) 
-        ? derivedData.extractive_answers 
-        : [derivedData.extractive_answers];
-        
-      for (const answer of answers) {
-        if (answer?.content) {
-          extractiveTexts.push(answer.content);
-        } else if (typeof answer === 'string') {
-          extractiveTexts.push(answer);
+    if (!pdfContent) {
+      const extractiveAnswersData = derivedData?.extractive_answers || derivedData?.fields?.extractive_answers;
+      if (extractiveAnswersData) {
+        const extractiveTexts: string[] = [];
+        const answers = Array.isArray(extractiveAnswersData) 
+          ? extractiveAnswersData 
+          : [extractiveAnswersData];
+          
+        for (const answer of answers) {
+          if (answer?.content) {
+            extractiveTexts.push(answer.content);
+          } else if (typeof answer === 'string') {
+            extractiveTexts.push(answer);
+          } else if (answer?.stringValue) {
+            extractiveTexts.push(answer.stringValue);
+          }
         }
-      }
-      
-      if (extractiveTexts.length > 0) {
-        pdfContent = extractiveTexts.join(' ');
-        contentSource = 'derivedData.extractive_answers';
+        
+        if (extractiveTexts.length > 0) {
+          pdfContent = extractiveTexts.join(' ');
+          contentSource = derivedData?.extractive_answers ? 'derivedData.extractive_answers' : 'derivedData.fields.extractive_answers';
+        }
       }
     }
     
-    // 4. Extract from snippets (enhanced extraction)
-    if (!pdfContent && derivedData?.snippets) {
-      const snippets = extractSnippetsFromPDF(derivedData.snippets);
-      if (snippets.length > 0) {
-        pdfContent = snippets.join(' ');
-        contentSource = 'derivedData.snippets';
+    // 4. Extract from snippets (enhanced extraction) - handle nested fields
+    if (!pdfContent) {
+      const snippetsData = derivedData?.snippets || derivedData?.fields?.snippets;
+      if (snippetsData) {
+        const snippets = extractSnippetsFromPDF(snippetsData);
+        if (snippets.length > 0) {
+          pdfContent = snippets.join(' ');
+          contentSource = derivedData?.snippets ? 'derivedData.snippets' : 'derivedData.fields.snippets';
+        }
       }
     }
     
@@ -380,8 +414,10 @@ function buildContextFromResults(results: SearchResult[]): string {
       console.log(`No PDF content found for result ${index + 1}`, { 
         structDataKeys: Object.keys(data),
         derivedDataKeys: Object.keys(derivedData || {}),
-        hasExtractiveAnswers: !!derivedData?.extractive_answers,
-        hasSnippets: !!derivedData?.snippets
+        hasExtractiveAnswers: !!(derivedData?.extractive_answers || derivedData?.fields?.extractive_answers),
+        hasSnippets: !!(derivedData?.snippets || derivedData?.fields?.snippets),
+        fieldsKeys: derivedData?.fields ? Object.keys(derivedData.fields) : [],
+        derivedDataSample: derivedData ? JSON.stringify(derivedData, null, 2).substring(0, 500) : 'null'
       });
     }
     
