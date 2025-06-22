@@ -1,6 +1,7 @@
 export const config = {
   googleCloud: {
     projectId: process.env.GCP_PROJECT_ID || 'hallowed-trail-462613-v1',
+    projectNumber: process.env.GCP_PROJECT_NUMBER || '',
     location: process.env.GCP_LOCATION || 'global',
     
     // Discovery Engine
@@ -8,6 +9,7 @@ export const config = {
     
     // Vertex AI
     vertexAiLocation: process.env.GCP_VERTEX_AI_LOCATION || 'us-central1',
+    modelName: process.env.MODEL_NAME || 'gemini-1.5-flash',
     
     // Firestore
     firestoreDatabase: process.env.GCP_FIRESTORE_DATABASE || '(default)'

@@ -70,9 +70,11 @@ export async function generateTextWithGemini(request: GenerateTextRequest): Prom
   const instance = [instanceValue];
   const parameter = {};
 
-  const projectPath = `projects/${config.googleCloud.projectId}/locations/${config.googleCloud.vertexAiLocation}`;
+  // Use project number if available, otherwise fall back to project ID
+  const projectIdentifier = config.googleCloud.projectNumber || config.googleCloud.projectId;
+  const projectPath = `projects/${projectIdentifier}/locations/${config.googleCloud.vertexAiLocation}`;
   
-  const modelPath = `${projectPath}/publishers/google/models/gemini-1.5-pro`;
+  const modelPath = `${projectPath}/publishers/google/models/${config.googleCloud.modelName}`;
 
   try {
     const [response] = await client.predict({
