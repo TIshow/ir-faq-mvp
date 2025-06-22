@@ -59,16 +59,10 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     servingConfig: servingConfigPath,
     query: query,
     pageSize: limitedPageSize,
-    // queryExpansionSpec disabled for multi-datastore search to avoid INVALID_ARGUMENT
-    // 
-    // NOTE: To enable queryExpansionSpec for better search quality, consider:
-    // 1. Single-datastore approach: Combine Q&A and PDF data into one datastore
-    // 2. Sequential search: Search Q&A first, then PDF if no good results
-    // 3. Separate endpoints: Create different search functions for Q&A vs PDF
-    //
-    // queryExpansionSpec: {
-    //   condition: 'AUTO' as const
-    // },
+    // Now enabled for single-datastore search (improved accuracy)
+    queryExpansionSpec: {
+      condition: 'AUTO' as const
+    },
     spellCorrectionSpec: {
       mode: 'AUTO' as const
     },
@@ -76,7 +70,6 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
       timeZone: 'Asia/Tokyo'
     },
     languageCode: 'ja'
-    // No filter to search across all datastores
   };
 
   try {

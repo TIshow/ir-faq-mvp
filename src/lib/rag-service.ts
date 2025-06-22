@@ -361,24 +361,88 @@ function buildContextFromResults(results: SearchResult[], query: string): string
     if (!pdfContent) {
       const extractiveAnswersData = derivedData?.extractive_answers || derivedData?.fields?.extractive_answers;
       if (extractiveAnswersData) {
+        console.log('Processing extractive_answers:', JSON.stringify(extractiveAnswersData, null, 2));
+        
         const extractiveTexts: string[] = [];
-        const answers = Array.isArray(extractiveAnswersData) 
-          ? extractiveAnswersData 
-          : [extractiveAnswersData];
+        
+        // Handle nested structure: extractive_answers.values[].structValue.fields.content.stringValue
+        if (extractiveAnswersData.values && Array.isArray(extractiveAnswersData.values)) {
+          console.log(`Processing ${extractiveAnswersData.values.length} extractive answer values`);
           
-        for (const answer of answers) {
-          if (answer?.content) {
-            extractiveTexts.push(answer.content);
-          } else if (typeof answer === 'string') {
-            extractiveTexts.push(answer);
-          } else if (answer?.stringValue) {
-            extractiveTexts.push(answer.stringValue);
+          for (let i = 0; i < extractiveAnswersData.values.length; i++) {
+            const value = extractiveAnswersData.values[i];
+            let extractedText = '';
+            
+            console.log(`Processing extractive answer ${i + 1}:`, JSON.stringify(value, null, 2));
+            
+            // Handle the exact structure from logs: { structValue: { fields: { content: { stringValue: "...", kind: "stringValue" } } } }
+            if (value.structValue?.fields?.content?.stringValue) {
+              extractedText = value.structValue.fields.content.stringValue;
+              console.log(`Found extractive content via structValue.fields.content.stringValue: ${extractedText.substring(0, 100)}...`);
+            }
+            // Try alternative paths
+            else if (value.structValue?.fields?.answer?.stringValue) {
+              extractedText = value.structValue.fields.answer.stringValue;
+              console.log(`Found extractive content via structValue.fields.answer.stringValue: ${extractedText.substring(0, 100)}...`);
+            }
+            else if (value.stringValue) {
+              extractedText = value.stringValue;
+              console.log(`Found extractive content via stringValue: ${extractedText.substring(0, 100)}...`);
+            }
+            else if (typeof value === 'string') {
+              extractedText = value;
+              console.log(`Found extractive content via direct string: ${extractedText.substring(0, 100)}...`);
+            }
+            else {
+              console.log(`No extractable content found in extractive answer ${i + 1}`);
+            }
+            
+            // Filter out empty or placeholder content
+            if (extractedText && 
+                extractedText.length > 10 &&
+                !extractedText.includes('No content available') &&
+                !extractedText.includes('内容が取得できません')) {
+              
+              // Clean HTML tags if present
+              const cleanedText = extractedText
+                .replace(/<[^>]*>/g, '') // Remove HTML tags
+                .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+                .replace(/&amp;/g, '&')  // Replace &amp; with &
+                .replace(/&lt;/g, '<')   // Replace &lt; with <
+                .replace(/&gt;/g, '>')   // Replace &gt; with >
+                .replace(/\s+/g, ' ')    // Replace multiple spaces with single space
+                .trim();
+              
+              if (cleanedText.length > 10) {
+                extractiveTexts.push(cleanedText);
+                console.log(`Added cleaned extractive text: ${cleanedText.substring(0, 100)}...`);
+              }
+            }
           }
+        }
+        // Handle direct array format
+        else if (Array.isArray(extractiveAnswersData)) {
+          for (const answer of extractiveAnswersData) {
+            if (answer?.content) {
+              extractiveTexts.push(answer.content);
+            } else if (typeof answer === 'string') {
+              extractiveTexts.push(answer);
+            } else if (answer?.stringValue) {
+              extractiveTexts.push(answer.stringValue);
+            }
+          }
+        }
+        // Handle single object
+        else if (extractiveAnswersData.content) {
+          extractiveTexts.push(extractiveAnswersData.content);
         }
         
         if (extractiveTexts.length > 0) {
           pdfContent = extractiveTexts.join(' ');
-          contentSource = derivedData?.extractive_answers ? 'derivedData.extractive_answers' : 'derivedData.fields.extractive_answers';
+          contentSource = `extractive_answers (${extractiveTexts.length} items)`;
+          console.log(`Successfully extracted ${extractiveTexts.length} extractive answers`);
+        } else {
+          console.log('No extractive texts found after processing');
         }
       }
     }
