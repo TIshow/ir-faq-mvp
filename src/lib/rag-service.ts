@@ -292,38 +292,97 @@ function buildContextFromResults(results: SearchResult[]): string {
       context += `\nソース: ${derivedData.link}`;
     }
     
-    // Extract content from PDF - check both structData and derivedData
+    // Extract content from PDF - comprehensive approach
     let pdfContent = '';
+    let contentSource = '';
     
-    // First try structData for text content
-    const structContentFields = ['text', 'content', 'body', 'extractedText', 'snippet'];
+    // 1. Try structData for text content (all possible fields)
+    const structContentFields = ['text', 'content', 'body', 'extractedText', 'snippet', 'textRepresentation', 'pageContent'];
     for (const field of structContentFields) {
-      if (data[field] && typeof data[field] === 'string') {
-        pdfContent = data[field] as string;
-        console.log(`Found content in structData.${field}:`, pdfContent.substring(0, 100) + '...');
-        break;
-      }
-    }
-    
-    // Then try derivedData for text content
-    if (!pdfContent) {
-      const derivedContentFields = ['content', 'text', 'body', 'extractedText'];
-      for (const field of derivedContentFields) {
-        if (derivedData?.[field] && typeof derivedData[field] === 'string') {
-          pdfContent = derivedData[field] as string;
-          console.log(`Found content in derivedData.${field}:`, pdfContent.substring(0, 100) + '...');
+      if (data[field]) {
+        if (typeof data[field] === 'string') {
+          pdfContent = data[field] as string;
+          contentSource = `structData.${field}`;
+          break;
+        } else if (Array.isArray(data[field])) {
+          // Handle array of text content
+          pdfContent = (data[field] as string[]).join(' ');
+          contentSource = `structData.${field} (array)`;
           break;
         }
       }
     }
     
-    // Extract from snippets if available
+    // 2. Try derivedData for text content
+    if (!pdfContent) {
+      const derivedContentFields = ['content', 'text', 'body', 'extractedText', 'textRepresentation', 'pageContent'];
+      for (const field of derivedContentFields) {
+        if (derivedData?.[field]) {
+          if (typeof derivedData[field] === 'string') {
+            pdfContent = derivedData[field] as string;
+            contentSource = `derivedData.${field}`;
+            break;
+          } else if (Array.isArray(derivedData[field])) {
+            pdfContent = (derivedData[field] as string[]).join(' ');
+            contentSource = `derivedData.${field} (array)`;
+            break;
+          }
+        }
+      }
+    }
+    
+    // 3. Extract from extractive_answers (common in Discovery Engine PDF results)
+    if (!pdfContent && derivedData?.extractive_answers) {
+      const extractiveTexts: string[] = [];
+      const answers = Array.isArray(derivedData.extractive_answers) 
+        ? derivedData.extractive_answers 
+        : [derivedData.extractive_answers];
+        
+      for (const answer of answers) {
+        if (answer?.content) {
+          extractiveTexts.push(answer.content);
+        } else if (typeof answer === 'string') {
+          extractiveTexts.push(answer);
+        }
+      }
+      
+      if (extractiveTexts.length > 0) {
+        pdfContent = extractiveTexts.join(' ');
+        contentSource = 'derivedData.extractive_answers';
+      }
+    }
+    
+    // 4. Extract from snippets (enhanced extraction)
     if (!pdfContent && derivedData?.snippets) {
       const snippets = extractSnippetsFromPDF(derivedData.snippets);
       if (snippets.length > 0) {
         pdfContent = snippets.join(' ');
-        console.log(`Found content in snippets:`, pdfContent.substring(0, 100) + '...');
+        contentSource = 'derivedData.snippets';
       }
+    }
+    
+    // 5. Try any other field that might contain text (fallback)
+    if (!pdfContent) {
+      const allFields = { ...data, ...derivedData };
+      for (const [key, value] of Object.entries(allFields)) {
+        if (typeof value === 'string' && value.length > 50 && 
+            !key.includes('id') && !key.includes('url') && !key.includes('link')) {
+          pdfContent = value;
+          contentSource = `fallback.${key}`;
+          break;
+        }
+      }
+    }
+    
+    if (pdfContent) {
+      console.log(`Found PDF content from ${contentSource}:`, pdfContent.substring(0, 100) + '...');
+    } else {
+      console.log(`No PDF content found for result ${index + 1}`, { 
+        structDataKeys: Object.keys(data),
+        derivedDataKeys: Object.keys(derivedData || {}),
+        hasExtractiveAnswers: !!derivedData?.extractive_answers,
+        hasSnippets: !!derivedData?.snippets
+      });
     }
     
     // Lower threshold for content inclusion
@@ -347,25 +406,72 @@ function buildContextFromResults(results: SearchResult[]): string {
 }
 
 function extractSnippetsFromPDF(snippets: unknown): string[] {
-  if (!snippets || typeof snippets !== 'object') return [];
+  if (!snippets) return [];
   
   const snippetTexts: string[] = [];
   
   try {
-    const snippetData = snippets as { listValue?: { values?: Array<{ structValue?: { fields?: { snippet?: { stringValue?: string } } } }> } };
-    
-    if (snippetData.listValue?.values) {
-      for (const value of snippetData.listValue.values) {
-        const snippetText = value.structValue?.fields?.snippet?.stringValue;
-        if (snippetText && snippetText !== 'No snippet is available for this page.' && snippetText.length > 10) {
-          snippetTexts.push(snippetText);
+    // Handle different snippet formats
+    if (Array.isArray(snippets)) {
+      // Direct array of snippets
+      for (const snippet of snippets) {
+        if (typeof snippet === 'string' && snippet.length > 10) {
+          snippetTexts.push(snippet);
+        } else if (snippet?.snippet && typeof snippet.snippet === 'string') {
+          snippetTexts.push(snippet.snippet);
+        } else if (snippet?.content && typeof snippet.content === 'string') {
+          snippetTexts.push(snippet.content);
         }
+      }
+    } else if (typeof snippets === 'object') {
+      const snippetData = snippets as any;
+      
+      // Handle Google Cloud format: { listValue: { values: [...] } }
+      if (snippetData.listValue?.values) {
+        for (const value of snippetData.listValue.values) {
+          let snippetText = '';
+          
+          // Try different extraction paths
+          if (value.structValue?.fields?.snippet?.stringValue) {
+            snippetText = value.structValue.fields.snippet.stringValue;
+          } else if (value.structValue?.fields?.content?.stringValue) {
+            snippetText = value.structValue.fields.content.stringValue;
+          } else if (value.stringValue) {
+            snippetText = value.stringValue;
+          } else if (typeof value === 'string') {
+            snippetText = value;
+          }
+          
+          // Filter out empty or placeholder snippets
+          if (snippetText && 
+              snippetText !== 'No snippet is available for this page.' && 
+              snippetText.length > 10 &&
+              !snippetText.includes('snippet not available')) {
+            snippetTexts.push(snippetText);
+          }
+        }
+      }
+      
+      // Handle direct values array
+      else if (snippetData.values) {
+        for (const value of snippetData.values) {
+          if (typeof value === 'string' && value.length > 10) {
+            snippetTexts.push(value);
+          }
+        }
+      }
+      
+      // Handle object with snippet property
+      else if (snippetData.snippet && typeof snippetData.snippet === 'string') {
+        snippetTexts.push(snippetData.snippet);
       }
     }
   } catch (error) {
     console.error('Error extracting PDF snippets:', error);
+    console.log('Snippets structure:', JSON.stringify(snippets, null, 2));
   }
   
+  console.log(`Extracted ${snippetTexts.length} snippets from PDF`);
   return snippetTexts;
 }
 

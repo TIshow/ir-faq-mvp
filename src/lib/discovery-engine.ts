@@ -59,9 +59,9 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     servingConfig: servingConfigPath,
     query: query,
     pageSize: limitedPageSize,
-    queryExpansionSpec: {
-      condition: 'AUTO' as const
-    },
+    // queryExpansionSpec: {
+    //   condition: 'AUTO' as const
+    // },
     spellCorrectionSpec: {
       mode: 'AUTO' as const
     },
@@ -126,34 +126,78 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
       }
       
       // Extract structured data from Discovery Engine format
-      const extractStructData = (structData: { fields?: Record<string, { stringValue?: string; numberValue?: number; boolValue?: boolean }> }) => {
+      const extractStructData = (structData: { fields?: Record<string, any> }) => {
         if (!structData || !structData.fields) {
           return {};
         }
         
         const extracted: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(structData.fields)) {
-          const fieldValue = value as { stringValue?: string; numberValue?: number; boolValue?: boolean };
-          
-          if (fieldValue.stringValue) {
-            extracted[key] = fieldValue.stringValue;
-          } else if (fieldValue.numberValue !== undefined) {
-            extracted[key] = fieldValue.numberValue;
-          } else if (fieldValue.boolValue !== undefined) {
-            extracted[key] = fieldValue.boolValue;
+          // Handle different value types more comprehensively
+          if (value && typeof value === 'object') {
+            if (value.stringValue) {
+              extracted[key] = value.stringValue;
+            } else if (value.numberValue !== undefined) {
+              extracted[key] = value.numberValue;
+            } else if (value.boolValue !== undefined) {
+              extracted[key] = value.boolValue;
+            } else if (value.listValue) {
+              // Handle list values (array of items)
+              const listItems = value.listValue.values || [];
+              extracted[key] = listItems.map((item: any) => {
+                if (item.stringValue) return item.stringValue;
+                if (item.numberValue !== undefined) return item.numberValue;
+                if (item.boolValue !== undefined) return item.boolValue;
+                return item;
+              });
+            } else if (value.structValue) {
+              // Handle nested struct values
+              extracted[key] = value.structValue;
+            }
           }
         }
         return extracted;
       };
       
+      // Enhanced derivedStructData extraction
+      const extractDerivedData = (derivedData: any) => {
+        if (!derivedData) return {};
+        
+        const extracted: Record<string, unknown> = {};
+        
+        // Extract title and link
+        if (derivedData.title) extracted.title = derivedData.title;
+        if (derivedData.link) extracted.link = derivedData.link;
+        
+        // Extract extractive answers (common in PDF results)
+        if (derivedData.extractive_answers) {
+          extracted.extractive_answers = derivedData.extractive_answers;
+        }
+        
+        // Extract snippets (text chunks from PDF)
+        if (derivedData.snippets) {
+          extracted.snippets = derivedData.snippets;
+        }
+        
+        // Extract any other fields that might contain text content
+        Object.keys(derivedData).forEach(key => {
+          if (!extracted[key] && derivedData[key]) {
+            extracted[key] = derivedData[key];
+          }
+        });
+        
+        return extracted;
+      };
+      
       const structData = extractStructData(result.document.structData);
+      const enhancedDerivedData = extractDerivedData(result.document.derivedStructData);
       
       const processedResult = {
         id: result.id || '',
         document: {
           id: result.document.id || '',
           structData: structData,
-          derivedStructData: result.document.derivedStructData || {}
+          derivedStructData: enhancedDerivedData
         },
         relevanceScore: result.relevanceScore || 0
       };
