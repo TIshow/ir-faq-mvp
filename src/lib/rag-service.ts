@@ -185,18 +185,36 @@ export async function generateRAGResponse(request: RAGRequest): Promise<RAGRespo
 }
 
 function buildContextFromResults(results: SearchResult[]): string {
-  const contextParts = results.map((result, index) => {
+  const qaResults: SearchResult[] = [];
+  const pdfResults: SearchResult[] = [];
+  
+  // Separate Q&A and PDF results
+  results.forEach(result => {
     const data = result.document.structData;
     const derivedData = result.document.derivedStructData;
-    let context = `[文書${index + 1}]`;
     
-    // Check all possible fields in structData (CSV columns)
-    const allFields = Object.keys(data);
-    console.log(`Document ${index + 1} fields:`, allFields);
-    console.log(`Document ${index + 1} data:`, data);
-    console.log(`Document ${index + 1} derivedData:`, derivedData);
+    // Check if this is Q&A data (has question/answer fields)
+    const hasQA = data.question || data.answer || data.q || data.a;
     
-    // Try to identify question and answer from various possible field names
+    // Check if this is PDF data (has title/link fields)
+    const hasPDF = derivedData?.title || derivedData?.link;
+    
+    if (hasQA) {
+      qaResults.push(result);
+    } else if (hasPDF) {
+      pdfResults.push(result);
+    }
+  });
+  
+  console.log(`Found ${qaResults.length} Q&A results and ${pdfResults.length} PDF results`);
+  
+  const contextParts: string[] = [];
+  
+  // Process Q&A results
+  qaResults.forEach((result, index) => {
+    const data = result.document.structData;
+    let context = `[Q&A文書${index + 1}]`;
+    
     const questionFields = ['question', 'q', 'query', 'title', '質問', 'Question'];
     const answerFields = ['answer', 'a', 'response', 'content', '回答', 'Answer'];
     const companyFields = ['company', 'enterprise', 'corp', '企業', 'Company'];
@@ -205,59 +223,94 @@ function buildContextFromResults(results: SearchResult[]): string {
     let answer = '';
     let company = '';
     
-    // Find question
+    // Find question, answer, company
     for (const field of questionFields) {
-      if (data[field]) {
-        question = data[field];
-        break;
-      }
+      if (data[field]) { question = data[field]; break; }
     }
-    
-    // Find answer
     for (const field of answerFields) {
-      if (data[field]) {
-        answer = data[field];
-        break;
-      }
+      if (data[field]) { answer = data[field]; break; }
     }
-    
-    // Find company
     for (const field of companyFields) {
-      if (data[field]) {
-        company = data[field];
+      if (data[field]) { company = data[field]; break; }
+    }
+    
+    if (company) context += ` 企業: ${company}`;
+    if (question) context += `\n質問: ${question}`;
+    if (answer) context += `\n回答: ${answer}`;
+    
+    contextParts.push(context);
+  });
+  
+  // Process PDF results with enhanced extraction
+  pdfResults.forEach((result, index) => {
+    const derivedData = result.document.derivedStructData;
+    let context = `[PDF資料${index + 1}]`;
+    
+    // Extract PDF metadata
+    if (derivedData?.title) {
+      context += ` タイトル: ${derivedData.title}`;
+    }
+    if (derivedData?.link) {
+      context += `\nソース: ${derivedData.link}`;
+    }
+    
+    // Extract content from PDF (if available in derivedData)
+    let pdfContent = '';
+    
+    // Try to extract from various possible fields
+    const contentFields = ['content', 'text', 'body', 'extractedText'];
+    for (const field of contentFields) {
+      if (derivedData?.[field] && typeof derivedData[field] === 'string') {
+        pdfContent = derivedData[field];
         break;
       }
     }
     
-    // Check derived data for extractive answers
-    if (!answer && derivedData?.extractive_answers) {
-      const extractiveAnswers = derivedData.extractive_answers
-        .map((ans: { content?: string }) => ans.content)
-        .filter(Boolean)
-        .join(' ');
-      if (extractiveAnswers) {
-        answer = extractiveAnswers;
+    // Extract from snippets if available
+    if (!pdfContent && derivedData?.snippets) {
+      const snippets = extractSnippetsFromPDF(derivedData.snippets);
+      if (snippets.length > 0) {
+        pdfContent = snippets.join(' ');
       }
     }
     
-    // Use first available field if no standard fields found
-    if (!question && !answer) {
-      const availableFields = Object.entries(data).filter(([, value]) => 
-        value && typeof value === 'string' && value.length > 10
-      );
-      if (availableFields.length > 0) {
-        context += `\n内容: ${availableFields[0][1]}`;
-      }
-    } else {
-      if (company) context += ` 企業: ${company}`;
-      if (question) context += `\n質問: ${question}`;
-      if (answer) context += `\n回答: ${answer}`;
+    // If we have extracted content, use it
+    if (pdfContent && pdfContent.length > 20) {
+      // Limit content to reasonable length for context
+      const maxLength = 500;
+      const truncatedContent = pdfContent.length > maxLength 
+        ? pdfContent.substring(0, maxLength) + '...'
+        : pdfContent;
+      context += `\n内容: ${truncatedContent}`;
     }
     
-    return context;
+    contextParts.push(context);
   });
   
   return contextParts.join('\n\n');
+}
+
+function extractSnippetsFromPDF(snippets: unknown): string[] {
+  if (!snippets || typeof snippets !== 'object') return [];
+  
+  const snippetTexts: string[] = [];
+  
+  try {
+    const snippetData = snippets as { listValue?: { values?: Array<{ structValue?: { fields?: { snippet?: { stringValue?: string } } } }> } };
+    
+    if (snippetData.listValue?.values) {
+      for (const value of snippetData.listValue.values) {
+        const snippetText = value.structValue?.fields?.snippet?.stringValue;
+        if (snippetText && snippetText !== 'No snippet is available for this page.' && snippetText.length > 10) {
+          snippetTexts.push(snippetText);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error extracting PDF snippets:', error);
+  }
+  
+  return snippetTexts;
 }
 
 function buildConversationContext(history: ConversationMessage[]): string {
@@ -275,11 +328,26 @@ function buildPrompt(query: string, conversationContext: string): string {
   return `あなたは投資家向け広報（IR）の専門アシスタントです。提供されたコンテキスト情報に基づいて、正確で有用な回答を生成してください。
 
 回答の要件:
-- 提供された情報のみを使用してください
-- 不確実な情報については推測しないでください
+- Q&A文書と PDF資料の両方の情報を活用してください
+- Q&A文書に直接的な回答がある場合は、それを優先してください
+- Q&A文書だけでは不十分な場合、PDF資料から関連情報を補完してください
 - 企業名や数値は正確に記載してください
+- 情報源（Q&A文書またはPDF資料）を明記してください
+- 不確実な情報については推測しないでください
+- 決算資料からの情報の場合は「決算資料によると」等の前置きを付けてください
 - 丁寧で専門的な日本語で回答してください
-- 情報源が明確でない場合は、その旨を明記してください
+
+回答形式の例:
+1. Q&Aデータから直接回答できる場合:
+   「[回答内容]（Q&Aデータより）」
+
+2. PDF資料から補完する場合:
+   「[Q&A回答] 
+   
+   また、決算資料によると[PDF内容による補完情報]があります。」
+
+3. PDF資料のみから回答する場合:
+   「決算資料によると、[PDF内容からの回答]です。」
 
 質問: ${query}${conversationContext}
 
