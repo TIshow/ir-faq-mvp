@@ -9,7 +9,13 @@ export function getDiscoveryEngineClient(): SearchServiceClient {
     const auth = getGoogleAuth();
     searchClient = new SearchServiceClient({
       projectId: config.googleCloud.projectId,
-      auth: auth
+      auth: auth,
+      // Set gRPC timeout to 60 seconds to handle large datasets
+      grpc: {
+        'grpc.keepalive_timeout_ms': 60000,
+        'grpc.keepalive_time_ms': 30000,
+        'grpc.max_receive_message_length': 10 * 1024 * 1024 // 10MB
+      }
     });
   }
   return searchClient;
@@ -52,13 +58,16 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
   const projectPath = client.projectPath(config.googleCloud.projectId);
   const servingConfigPath = `${projectPath}/locations/${config.googleCloud.location}/collections/default_collection/engines/${config.googleCloud.searchEngineId}/servingConfigs/default_search`;
 
+  // Limit pageSize to prevent timeout with large datasets
+  const limitedPageSize = Math.min(pageSize, 20);
+
   const request = {
     servingConfig: servingConfigPath,
     query: query,
-    pageSize: pageSize,
-    queryExpansionSpec: {
-      condition: 'AUTO' as const
-    },
+    pageSize: limitedPageSize,
+    // queryExpansionSpec: {
+    //   condition: 'AUTO' as const
+    // },
     spellCorrectionSpec: {
       mode: 'AUTO' as const
     },
@@ -70,16 +79,23 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     filter: 'doc_type="qa" OR doc_type="pdf"'
   };
 
+  const searchOptions = {
+    // Disable automatic pagination to prevent timeout
+    autoPaginate: false,
+    // Set call timeout to 45 seconds
+    timeout: 45000
+  };
+
   try {
-    console.log('Discovery Engine request for:', request.query);
-    const [response] = await client.search(request);
+    console.log('Discovery Engine request for:', request.query, 'with pageSize:', limitedPageSize);
+    const [response] = await client.search(request, searchOptions);
     
     console.log('Discovery Engine response keys:', Object.keys(response));
     console.log('Response.results length:', (response as any).results?.length || 0);
     console.log('Response.totalSize:', (response as any).totalSize || 0);
     
-    // Debug: log full response structure
-    console.dir('Full Discovery Engine response:', response, { depth: 3 });
+    // Debug: log response structure (limited to avoid huge logs)
+    console.log('Discovery Engine response structure logged (depth limited for performance)');
     
     // Discovery Engine sometimes returns results as indexed properties instead of .results array
     let resultsArray = (response as any).results;
@@ -107,7 +123,8 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     for (let i = 0; i < resultsArray.length; i++) {
       const result = resultsArray[i];
       console.log(`Processing result ${i + 1}:`, result.id);
-      console.dir(`Result ${i + 1} full data:`, result, { depth: 4 });
+      // Reduced logging to prevent timeout from large log outputs
+      console.log(`Result ${i + 1} has document:`, !!result.document);
       
       if (!result.document) {
         console.log('Skipping result - no document');

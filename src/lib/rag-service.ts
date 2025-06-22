@@ -22,11 +22,14 @@ export interface RAGResponse {
 
 export async function generateRAGResponse(request: RAGRequest): Promise<RAGResponse> {
   const { query, conversationHistory = [], maxResults = 5 } = request;
+  
+  // Limit maxResults to prevent timeout with large datasets
+  const limitedMaxResults = Math.min(maxResults, 10);
 
   try {
     // Step 1: Search for relevant documents
-    console.log('Searching for relevant documents...');
-    const searchResponse = await searchDocuments(query, maxResults);
+    console.log('Searching for relevant documents with limited results:', limitedMaxResults);
+    const searchResponse = await searchDocuments(query, limitedMaxResults);
     
     console.log('Search response received:', {
       resultsCount: searchResponse.results.length,
