@@ -447,6 +447,8 @@ function extractSnippetsFromPDF(snippets: unknown): string[] {
   const snippetTexts: string[] = [];
   
   try {
+    console.log('Extracting snippets from:', JSON.stringify(snippets, null, 2));
+    
     // Handle different snippet formats
     if (Array.isArray(snippets)) {
       // Direct array of snippets
@@ -462,8 +464,67 @@ function extractSnippetsFromPDF(snippets: unknown): string[] {
     } else if (typeof snippets === 'object') {
       const snippetData = snippets as any;
       
+      // Handle the actual structure from logs: { values: [...] }
+      if (snippetData.values && Array.isArray(snippetData.values)) {
+        console.log(`Processing ${snippetData.values.length} snippet values`);
+        
+        for (let i = 0; i < snippetData.values.length; i++) {
+          const value = snippetData.values[i];
+          let snippetText = '';
+          
+          console.log(`Processing value ${i + 1}:`, JSON.stringify(value, null, 2));
+          
+          // Handle the exact structure from logs:
+          // { structValue: { fields: { snippet: { stringValue: "...", kind: "stringValue" } } } }
+          if (value.structValue?.fields?.snippet?.stringValue) {
+            snippetText = value.structValue.fields.snippet.stringValue;
+            console.log(`Found snippet via structValue.fields.snippet.stringValue: ${snippetText.substring(0, 100)}...`);
+          }
+          // Try alternative paths
+          else if (value.structValue?.fields?.content?.stringValue) {
+            snippetText = value.structValue.fields.content.stringValue;
+            console.log(`Found snippet via structValue.fields.content.stringValue: ${snippetText.substring(0, 100)}...`);
+          }
+          else if (value.stringValue) {
+            snippetText = value.stringValue;
+            console.log(`Found snippet via stringValue: ${snippetText.substring(0, 100)}...`);
+          }
+          else if (typeof value === 'string') {
+            snippetText = value;
+            console.log(`Found snippet via direct string: ${snippetText.substring(0, 100)}...`);
+          }
+          else {
+            console.log(`No extractable snippet found in value ${i + 1}`);
+          }
+          
+          // Filter out empty or placeholder snippets, and clean HTML tags
+          if (snippetText && 
+              snippetText !== 'No snippet is available for this page.' && 
+              snippetText.length > 10 &&
+              !snippetText.includes('snippet not available')) {
+            
+            // Clean HTML tags like <b>, &nbsp; etc.
+            const cleanedText = snippetText
+              .replace(/<[^>]*>/g, '') // Remove HTML tags
+              .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+              .replace(/&amp;/g, '&')  // Replace &amp; with &
+              .replace(/&lt;/g, '<')   // Replace &lt; with <
+              .replace(/&gt;/g, '>')   // Replace &gt; with >
+              .replace(/\s+/g, ' ')    // Replace multiple spaces with single space
+              .trim();
+            
+            if (cleanedText.length > 10) {
+              snippetTexts.push(cleanedText);
+              console.log(`Added cleaned snippet: ${cleanedText.substring(0, 100)}...`);
+            }
+          }
+        }
+      }
+      
       // Handle Google Cloud format: { listValue: { values: [...] } }
-      if (snippetData.listValue?.values) {
+      else if (snippetData.listValue?.values) {
+        console.log(`Processing listValue with ${snippetData.listValue.values.length} values`);
+        
         for (const value of snippetData.listValue.values) {
           let snippetText = '';
           
@@ -483,31 +544,45 @@ function extractSnippetsFromPDF(snippets: unknown): string[] {
               snippetText !== 'No snippet is available for this page.' && 
               snippetText.length > 10 &&
               !snippetText.includes('snippet not available')) {
-            snippetTexts.push(snippetText);
-          }
-        }
-      }
-      
-      // Handle direct values array
-      else if (snippetData.values) {
-        for (const value of snippetData.values) {
-          if (typeof value === 'string' && value.length > 10) {
-            snippetTexts.push(value);
+            
+            const cleanedText = snippetText
+              .replace(/<[^>]*>/g, '')
+              .replace(/&nbsp;/g, ' ')
+              .replace(/&amp;/g, '&')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/\s+/g, ' ')
+              .trim();
+            
+            if (cleanedText.length > 10) {
+              snippetTexts.push(cleanedText);
+            }
           }
         }
       }
       
       // Handle object with snippet property
       else if (snippetData.snippet && typeof snippetData.snippet === 'string') {
-        snippetTexts.push(snippetData.snippet);
+        const cleanedText = snippetData.snippet
+          .replace(/<[^>]*>/g, '')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        if (cleanedText.length > 10) {
+          snippetTexts.push(cleanedText);
+        }
       }
     }
   } catch (error) {
     console.error('Error extracting PDF snippets:', error);
-    console.log('Snippets structure:', JSON.stringify(snippets, null, 2));
+    console.log('Snippets structure that caused error:', JSON.stringify(snippets, null, 2));
   }
   
-  console.log(`Extracted ${snippetTexts.length} snippets from PDF`);
+  console.log(`Extracted ${snippetTexts.length} snippets from PDF:`, snippetTexts.map(s => s.substring(0, 50) + '...'));
   return snippetTexts;
 }
 
