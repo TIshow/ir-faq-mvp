@@ -23,8 +23,8 @@ export interface RAGResponse {
 export async function generateRAGResponse(request: RAGRequest): Promise<RAGResponse> {
   const { query, conversationHistory = [], maxResults = 5 } = request;
   
-  // Limit maxResults to prevent timeout with large datasets
-  const limitedMaxResults = Math.min(maxResults, 10);
+  // Increase maxResults for better snippet variety, but limit to prevent timeout
+  const limitedMaxResults = Math.min(maxResults * 2, 15); // Get more results for better snippet selection
 
   try {
     // Step 1: Search for relevant documents
@@ -93,7 +93,7 @@ export async function generateRAGResponse(request: RAGRequest): Promise<RAGRespo
     }
 
     // Step 2: Build context from search results
-    const context = buildContextFromResults(searchResponse.results);
+    const context = buildContextFromResults(searchResponse.results, query);
     
     console.log('Generated context for Vertex AI:', context);
     
@@ -200,8 +200,8 @@ export async function generateRAGResponse(request: RAGRequest): Promise<RAGRespo
   }
 }
 
-function buildContextFromResults(results: SearchResult[]): string {
-  console.log('buildContextFromResults called with', results.length, 'results');
+function buildContextFromResults(results: SearchResult[], query: string): string {
+  console.log('buildContextFromResults called with', results.length, 'results for query:', query);
   
   const qaResults: SearchResult[] = [];
   const pdfResults: SearchResult[] = [];
@@ -383,14 +383,22 @@ function buildContextFromResults(results: SearchResult[]): string {
       }
     }
     
-    // 4. Extract from snippets (enhanced extraction) - handle nested fields
+    // 4. Extract from snippets (enhanced extraction) - handle nested fields with quality filtering
     if (!pdfContent) {
       const snippetsData = derivedData?.snippets || derivedData?.fields?.snippets;
       if (snippetsData) {
-        const snippets = extractSnippetsFromPDF(snippetsData);
-        if (snippets.length > 0) {
-          pdfContent = snippets.join(' ');
-          contentSource = derivedData?.snippets ? 'derivedData.snippets' : 'derivedData.fields.snippets';
+        const allSnippets = extractSnippetsFromPDF(snippetsData);
+        
+        // Filter and prioritize snippets for better content quality
+        const filteredSnippets = filterAndPrioritizeSnippets(allSnippets, query);
+        
+        if (filteredSnippets.length > 0) {
+          // Use multiple relevant snippets for richer context
+          pdfContent = filteredSnippets.join(' ');
+          contentSource = `${derivedData?.snippets ? 'derivedData.snippets' : 'derivedData.fields.snippets'} (${filteredSnippets.length} filtered)`;
+          
+          console.log(`Using ${filteredSnippets.length} filtered snippets out of ${allSnippets.length} total`);
+          console.log('Filtered snippets:', filteredSnippets.map(s => s.substring(0, 80) + '...'));
         }
       }
     }
@@ -586,6 +594,91 @@ function extractSnippetsFromPDF(snippets: unknown): string[] {
   return snippetTexts;
 }
 
+function filterAndPrioritizeSnippets(snippets: string[], query: string): string[] {
+  if (!snippets || snippets.length === 0) return [];
+  
+  console.log(`Filtering ${snippets.length} snippets for query: "${query}"`);
+  
+  // Extract keywords from query for relevance scoring
+  const queryKeywords = query
+    .toLowerCase()
+    .replace(/[？?！!。、]/g, '')
+    .split(/\s+/)
+    .filter(word => word.length > 1);
+  
+  console.log('Query keywords:', queryKeywords);
+  
+  // Score and filter snippets
+  const scoredSnippets = snippets.map((snippet, index) => {
+    const lowerSnippet = snippet.toLowerCase();
+    let score = 0;
+    
+    // Positive scoring factors
+    queryKeywords.forEach(keyword => {
+      const keywordCount = (lowerSnippet.match(new RegExp(keyword, 'g')) || []).length;
+      score += keywordCount * 10; // Heavy weight for keyword matches
+    });
+    
+    // Bonus for numerical data (likely concrete information)
+    const numberMatches = snippet.match(/\d{1,3}(?:,\d{3})*(?:\.\d+)?[百千万億円％%]/g) || [];
+    score += numberMatches.length * 15;
+    
+    // Bonus for specific financial terms
+    const financialTerms = ['売上高', '利益', '業績', '前年', '増減', '比較', '百万円', '予想'];
+    financialTerms.forEach(term => {
+      if (lowerSnippet.includes(term)) {
+        score += 5;
+      }
+    });
+    
+    // Penalty for negative/exclusion terms
+    const negativeTerms = ['省略', '記載を省略', '記載なし', '該当なし', '該当事項はありません', '特に記載すべき事項はありません'];
+    negativeTerms.forEach(term => {
+      if (lowerSnippet.includes(term)) {
+        score -= 20; // Heavy penalty
+      }
+    });
+    
+    // Penalty for very short snippets (likely incomplete)
+    if (snippet.length < 30) {
+      score -= 5;
+    }
+    
+    // Bonus for medium-length snippets (likely complete sentences)
+    if (snippet.length >= 50 && snippet.length <= 300) {
+      score += 3;
+    }
+    
+    console.log(`Snippet ${index + 1} score: ${score}, content: "${snippet.substring(0, 100)}..."`);
+    
+    return {
+      snippet,
+      score,
+      index
+    };
+  });
+  
+  // Sort by score (highest first) and filter out negative scores
+  const filteredAndSorted = scoredSnippets
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+  
+  console.log(`Filtered to ${filteredAndSorted.length} relevant snippets`);
+  
+  // Return top relevant snippets (max 3 for context management)
+  const topSnippets = filteredAndSorted
+    .slice(0, 3)
+    .map(item => item.snippet);
+  
+  // If no positive-scored snippets, return the original first snippet as fallback
+  if (topSnippets.length === 0 && snippets.length > 0) {
+    console.log('No positively scored snippets found, using first snippet as fallback');
+    return [snippets[0]];
+  }
+  
+  return topSnippets;
+}
+
 function buildConversationContext(history: ConversationMessage[]): string {
   if (history.length === 0) return '';
   
@@ -603,12 +696,16 @@ function buildPrompt(query: string, conversationContext: string): string {
 回答の要件:
 - Q&A文書と PDF資料の両方の情報を活用してください
 - Q&A文書に直接的な回答がある場合は、それを優先してください
-- Q&A文書だけでは不十分な場合、PDF資料から関連情報を補完してください
-- 企業名や数値は正確に記載してください
+- PDF資料からは具体的な数値や事実データを重視してください
+- 「省略」「記載なし」等の否定的情報は回答に含めず、肯定的な具体的情報を探してください
+- 企業名や数値は正確に記載してください（百万円、％、前年比等も含む）
+- 複数の関連情報がある場合は、それらを統合して包括的な回答を作成してください
 - 情報源（Q&A文書またはPDF資料）を明記してください
 - 不確実な情報については推測しないでください
 - 決算資料からの情報の場合は「決算資料によると」等の前置きを付けてください
 - 丁寧で専門的な日本語で回答してください
+
+特に重要: PDF資料には表や図表の数値データが含まれています。「記載を省略」等の記述ではなく、具体的な数値や業績データを優先して回答に含めてください。
 
 回答形式の例:
 1. Q&Aデータから直接回答できる場合:
@@ -620,9 +717,9 @@ function buildPrompt(query: string, conversationContext: string): string {
    また、決算資料によると[PDF内容による補完情報]があります。」
 
 3. PDF資料のみから回答する場合:
-   「決算資料によると、[PDF内容からの回答]です。」
+   「決算資料によると、[具体的な数値や実績データ]です。」
 
 質問: ${query}${conversationContext}
 
-上記のコンテキスト情報に基づいて、質問に対する適切な回答を生成してください。`;
+上記のコンテキスト情報に基づいて、質問に対する適切な回答を生成してください。肯定的で具体的な情報を中心に回答を構成してください。`;
 }

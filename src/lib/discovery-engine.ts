@@ -59,9 +59,9 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     servingConfig: servingConfigPath,
     query: query,
     pageSize: limitedPageSize,
-    // queryExpansionSpec: {
-    //   condition: 'AUTO' as const
-    // },
+    queryExpansionSpec: {
+      condition: 'AUTO' as const
+    },
     spellCorrectionSpec: {
       mode: 'AUTO' as const
     },
@@ -69,8 +69,7 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
       timeZone: 'Asia/Tokyo'
     },
     languageCode: 'ja'
-    // Remove filter for now to avoid INVALID_ARGUMENT error
-    // Will search across all datastores without filtering
+    // No filter to search across all datastores
   };
 
   try {
