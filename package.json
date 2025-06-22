@@ -13,6 +13,7 @@
     "@google-cloud/aiplatform": "^4.2.0",
     "@google-cloud/discoveryengine": "^2.2.0",
     "@google-cloud/firestore": "^7.11.1",
+    "@google-cloud/vertexai": "^1.10.0",
     "google-auth-library": "^10.1.0",
     "next": "15.3.3",
     "react": "^19.0.0",

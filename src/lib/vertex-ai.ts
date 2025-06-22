@@ -1,19 +1,21 @@
-import { PredictionServiceClient } from '@google-cloud/aiplatform';
+import { VertexAI } from '@google-cloud/vertexai';
 import { config } from '../config/env';
 import { getGoogleAuth } from './gcp-auth';
 
-let vertexAiClient: PredictionServiceClient | null = null;
+let vertexAI: VertexAI | null = null;
 
-export function getVertexAIClient(): PredictionServiceClient {
-  if (!vertexAiClient) {
+export function getVertexAI(): VertexAI {
+  if (!vertexAI) {
     const auth = getGoogleAuth();
-    vertexAiClient = new PredictionServiceClient({
-      projectId: config.googleCloud.projectId,
-      apiEndpoint: `${config.googleCloud.vertexAiLocation}-aiplatform.googleapis.com`,
-      auth: auth
+    const projectIdentifier = config.googleCloud.projectNumber || config.googleCloud.projectId;
+    
+    vertexAI = new VertexAI({
+      project: projectIdentifier,
+      location: config.googleCloud.vertexAiLocation,
+      googleAuth: auth
     });
   }
-  return vertexAiClient;
+  return vertexAI;
 }
 
 export interface GenerateTextRequest {
@@ -30,24 +32,18 @@ export interface GenerateTextResponse {
 }
 
 export async function generateTextWithGemini(request: GenerateTextRequest): Promise<GenerateTextResponse> {
-  const client = getVertexAIClient();
+  const vertexAI = getVertexAI();
   
-  const instanceValue = {
-    contents: [{
-      role: 'user',
-      parts: [{
-        text: request.context 
-          ? `コンテキスト情報:\n${request.context}\n\n質問: ${request.prompt}`
-          : request.prompt
-      }]
-    }],
-    generation_config: {
-      max_output_tokens: request.maxTokens || 1024,
+  // Get the generative model
+  const model = vertexAI.getGenerativeModel({
+    model: config.googleCloud.modelName,
+    generationConfig: {
+      maxOutputTokens: request.maxTokens || 1024,
       temperature: request.temperature || 0.2,
-      top_p: 0.8,
-      top_k: 40
+      topP: 0.8,
+      topK: 40
     },
-    safety_settings: [
+    safetySettings: [
       {
         category: 'HARM_CATEGORY_HARASSMENT',
         threshold: 'BLOCK_MEDIUM_AND_ABOVE'
@@ -65,34 +61,22 @@ export async function generateTextWithGemini(request: GenerateTextRequest): Prom
         threshold: 'BLOCK_MEDIUM_AND_ABOVE'
       }
     ]
-  };
+  });
 
-  const instance = [instanceValue];
-  const parameter = {};
-
-  // Use project number if available, otherwise fall back to project ID
-  const projectIdentifier = config.googleCloud.projectNumber || config.googleCloud.projectId;
-  const projectPath = `projects/${projectIdentifier}/locations/${config.googleCloud.vertexAiLocation}`;
-  
-  const modelPath = `${projectPath}/publishers/google/models/${config.googleCloud.modelName}`;
+  const prompt = request.context 
+    ? `コンテキスト情報:\n${request.context}\n\n質問: ${request.prompt}`
+    : request.prompt;
 
   try {
-    const [response] = await client.predict({
-      endpoint: modelPath,
-      instances: instance,
-      parameters: parameter
-    });
-
-    if (!response.predictions || response.predictions.length === 0) {
-      throw new Error('No predictions returned from Vertex AI');
+    const response = await model.generateContent(prompt);
+    
+    if (!response.response) {
+      throw new Error('No response returned from Vertex AI');
     }
 
-    const prediction = response.predictions[0] as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string; citationMetadata?: unknown }> };
-    
-    // Extract response text from Gemini response structure
-    const candidates = prediction.candidates;
+    const candidates = response.response.candidates;
     if (!candidates || candidates.length === 0) {
-      throw new Error('No candidates in Vertex AI response');
+      throw new Error('No candidates returned from Vertex AI');
     }
 
     const candidate = candidates[0];
@@ -102,7 +86,7 @@ export async function generateTextWithGemini(request: GenerateTextRequest): Prom
       throw new Error('No content parts in Vertex AI response');
     }
 
-    const text = content.parts[0].text;
+    const text = content.parts[0].text || '';
     const finishReason = candidate.finishReason || 'STOP';
     
     // Calculate confidence score (simplified)
