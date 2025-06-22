@@ -9,13 +9,7 @@ export function getDiscoveryEngineClient(): SearchServiceClient {
     const auth = getGoogleAuth();
     searchClient = new SearchServiceClient({
       projectId: config.googleCloud.projectId,
-      auth: auth,
-      // Set gRPC timeout to 60 seconds to handle large datasets
-      grpc: {
-        'grpc.keepalive_timeout_ms': 60000,
-        'grpc.keepalive_time_ms': 30000,
-        'grpc.max_receive_message_length': 10 * 1024 * 1024 // 10MB
-      }
+      auth: auth
     });
   }
   return searchClient;
@@ -79,16 +73,16 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     filter: 'doc_type="qa" OR doc_type="pdf"'
   };
 
-  const searchOptions = {
-    // Disable automatic pagination to prevent timeout
-    autoPaginate: false,
-    // Set call timeout to 45 seconds
-    timeout: 45000
-  };
-
   try {
     console.log('Discovery Engine request for:', request.query, 'with pageSize:', limitedPageSize);
-    const [response] = await client.search(request, searchOptions);
+    
+    // Wrap the search call with a timeout promise
+    const searchPromise = client.search(request, { autoPaginate: false });
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Search timeout after 30 seconds')), 30000);
+    });
+    
+    const [response] = await Promise.race([searchPromise, timeoutPromise]) as any;
     
     console.log('Discovery Engine response keys:', Object.keys(response));
     console.log('Response.results length:', (response as any).results?.length || 0);
@@ -180,6 +174,82 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
 
   } catch (error) {
     console.error('Discovery Engine search error:', error);
+    
+    // If timeout or other error, try a simplified search
+    if (error instanceof Error && (error.message.includes('timeout') || error.message.includes('DEADLINE_EXCEEDED'))) {
+      console.log('Attempting simplified search due to timeout...');
+      
+      try {
+        // Try a much simpler request with smaller pageSize
+        const simpleRequest = {
+          servingConfig: servingConfigPath,
+          query: query,
+          pageSize: 5 // Much smaller page size
+        };
+        
+        const simpleSearchPromise = client.search(simpleRequest, { autoPaginate: false });
+        const simpleTimeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Simple search timeout after 15 seconds')), 15000);
+        });
+        
+        const [simpleResponse] = await Promise.race([simpleSearchPromise, simpleTimeoutPromise]) as any;
+        
+        console.log('Simple search succeeded with', (simpleResponse as any).results?.length || 0, 'results');
+        
+        // Process simple response with same logic
+        let resultsArray = (simpleResponse as any).results;
+        if (!resultsArray || resultsArray.length === 0) {
+          const keys = Object.keys(simpleResponse).filter(key => !isNaN(parseInt(key)));
+          if (keys.length > 0) {
+            resultsArray = keys.map(key => (simpleResponse as any)[key]);
+          }
+        }
+        
+        if (!resultsArray || resultsArray.length === 0) {
+          return { results: [], totalSize: 0, summary: undefined };
+        }
+        
+        const results: SearchResult[] = [];
+        for (let i = 0; i < Math.min(resultsArray.length, 5); i++) {
+          const result = resultsArray[i];
+          if (!result.document) continue;
+          
+          const extractStructData = (structData: { fields?: Record<string, { stringValue?: string; numberValue?: number; boolValue?: boolean }> }) => {
+            if (!structData || !structData.fields) return {};
+            const extracted: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(structData.fields)) {
+              const fieldValue = value as { stringValue?: string; numberValue?: number; boolValue?: boolean };
+              if (fieldValue.stringValue) extracted[key] = fieldValue.stringValue;
+              else if (fieldValue.numberValue !== undefined) extracted[key] = fieldValue.numberValue;
+              else if (fieldValue.boolValue !== undefined) extracted[key] = fieldValue.boolValue;
+            }
+            return extracted;
+          };
+          
+          const structData = extractStructData(result.document.structData);
+          results.push({
+            id: result.id || '',
+            document: {
+              id: result.document.id || '',
+              structData: structData,
+              derivedStructData: result.document.derivedStructData || {}
+            },
+            relevanceScore: result.relevanceScore || 0
+          });
+        }
+        
+        return {
+          results: results,
+          totalSize: (simpleResponse as any).totalSize || 0,
+          summary: (simpleResponse as any).summary?.summaryText || undefined
+        };
+        
+      } catch (simpleError) {
+        console.error('Simple search also failed:', simpleError);
+        return { results: [], totalSize: 0, summary: undefined };
+      }
+    }
+    
     throw new Error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
