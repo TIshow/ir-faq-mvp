@@ -59,18 +59,18 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     servingConfig: servingConfigPath,
     query: query,
     pageSize: limitedPageSize,
-    // queryExpansionSpec: {
-    //   condition: 'AUTO' as const
-    // },
+    queryExpansionSpec: {
+      condition: 'AUTO' as const
+    },
     spellCorrectionSpec: {
       mode: 'AUTO' as const
     },
     userInfo: {
       timeZone: 'Asia/Tokyo'
     },
-    languageCode: 'ja',
-    // Allow both Q&A and PDF documents 
-    filter: 'doc_type="qa" OR doc_type="pdf"'
+    languageCode: 'ja'
+    // Remove filter for now to avoid INVALID_ARGUMENT error
+    // Will search across all datastores without filtering
   };
 
   try {
