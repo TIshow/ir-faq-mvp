@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { DocumentReference } from '@/lib/firestore';
+import { useCompany } from '@/contexts/CompanyContext';
 
 interface Message {
   id: string;
@@ -24,6 +25,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(sessionId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { selectedCompany } = useCompany();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -37,6 +39,12 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     e.preventDefault();
     
     if (!inputValue.trim() || isLoading) return;
+    
+    // 企業が選択されているかチェック
+    if (!selectedCompany) {
+      alert('企業を選択してから質問してください。');
+      return;
+    }    
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -72,7 +80,8 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         body: JSON.stringify({
           message: userMessage.content,
           sessionId: currentSessionId,
-          conversationHistory: conversationHistory
+          conversationHistory: conversationHistory,
+          companyId: selectedCompany.id
         }),
       });
 
@@ -207,13 +216,13 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="IR関連のご質問をお気軽にどうぞ..."
+            placeholder={selectedCompany ? `${selectedCompany.name}についてご質問ください...` : "企業を選択してから質問してください..."}
             className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
-            disabled={isLoading}
+            disabled={isLoading || !selectedCompany}
           />
           <button
             type="submit"
-            disabled={!inputValue.trim() || isLoading}
+            disabled={!inputValue.trim() || isLoading || !selectedCompany}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             送信

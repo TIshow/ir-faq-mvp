@@ -6,6 +6,7 @@ export interface RAGRequest {
   query: string;
   conversationHistory?: ConversationMessage[];
   maxResults?: number;
+  companyId?: string;
 }
 
 export interface ConversationMessage {
@@ -21,7 +22,7 @@ export interface RAGResponse {
 }
 
 export async function generateRAGResponse(request: RAGRequest): Promise<RAGResponse> {
-  const { query, conversationHistory = [], maxResults = 5 } = request;
+  const { query, conversationHistory = [], maxResults = 5, companyId } = request;
   
   // Increase maxResults significantly for better snippet variety
   const limitedMaxResults = Math.min(maxResults * 4, 25); // Increased for comprehensive snippet selection
@@ -29,7 +30,8 @@ export async function generateRAGResponse(request: RAGRequest): Promise<RAGRespo
   try {
     // Step 1: Search for relevant documents
     console.log('Searching for relevant documents with limited results:', limitedMaxResults);
-    const searchResponse = await searchDocuments(query, limitedMaxResults);
+    console.log('Company ID:', companyId);
+    const searchResponse = await searchDocuments(query, limitedMaxResults, companyId);
     
     console.log('Search response received:', {
       resultsCount: searchResponse.results.length,
@@ -214,8 +216,8 @@ function buildContextFromResults(results: SearchResult[], query: string): string
     console.log(`Result ${index + 1} analysis:`, {
       structDataKeys: Object.keys(data),
       derivedDataKeys: Object.keys(derivedData || {}),
-      structData: data,
-      derivedData: derivedData
+      structData: JSON.stringify(data, null, 2),
+      derivedData: JSON.stringify(derivedData, null, 2)
     });
     
     // Check if this is Q&A data (has question/answer fields)
@@ -285,7 +287,12 @@ function buildContextFromResults(results: SearchResult[], query: string): string
     const derivedData = result.document.derivedStructData;
     let context = `[PDF資料${index + 1}]`;
     
-    console.log(`Processing PDF result ${index + 1}:`, { data, derivedData });
+    console.log(`Processing PDF result ${index + 1}:`, { 
+      structDataKeys: Object.keys(data),
+      derivedDataKeys: Object.keys(derivedData || {}),
+      structData: JSON.stringify(data, null, 2),
+      derivedData: JSON.stringify(derivedData, null, 2)
+    });
     
     // Extract PDF metadata - handle nested fields structure
     const title = derivedData?.title || derivedData?.fields?.title;
@@ -365,76 +372,94 @@ function buildContextFromResults(results: SearchResult[], query: string): string
         
         const extractiveTexts: string[] = [];
         
-        // Handle nested structure: extractive_answers.values[].structValue.fields.content.stringValue
-        if (extractiveAnswersData.values && Array.isArray(extractiveAnswersData.values)) {
-          console.log(`Processing ${extractiveAnswersData.values.length} extractive answer values`);
+        // Handle different extractive_answers formats
+        if (Array.isArray(extractiveAnswersData)) {
+          extractiveAnswersData.forEach((item: any) => {
+            if (typeof item === 'string') {
+              extractiveTexts.push(item);
+            } else if (item?.content) {
+              extractiveTexts.push(item.content);
+            } else if (item?.text) {
+              extractiveTexts.push(item.text);
+            } else if (item?.stringValue) {
+              extractiveTexts.push(item.stringValue);
+            }
+          });
+        } else if (typeof extractiveAnswersData === 'object') {
+          // Handle object format
+          if (extractiveAnswersData.content) {
+            extractiveTexts.push(extractiveAnswersData.content);
+          } else if (extractiveAnswersData.text) {
+            extractiveTexts.push(extractiveAnswersData.text);
+          } else if (extractiveAnswersData.stringValue) {
+            extractiveTexts.push(extractiveAnswersData.stringValue);
+          }
+        }
+        
+        if (extractiveTexts.length > 0) {
+          pdfContent = extractiveTexts.join(' ');
+          contentSource = 'extractive_answers';
+        }
+      }
+    }
+    
+    // 4. Handle nested structure: extractive_answers.values[].structValue.fields.content.stringValue
+    if (!pdfContent && derivedData?.extractive_answers?.values) {
+      const extractiveAnswersData = derivedData.extractive_answers;
+      if (extractiveAnswersData.values && Array.isArray(extractiveAnswersData.values)) {
+        console.log(`Processing ${extractiveAnswersData.values.length} extractive answer values`);
+        
+        const extractiveTexts: string[] = [];
+        
+        for (let i = 0; i < extractiveAnswersData.values.length; i++) {
+          const value = extractiveAnswersData.values[i];
+          let extractedText = '';
           
-          for (let i = 0; i < extractiveAnswersData.values.length; i++) {
-            const value = extractiveAnswersData.values[i];
-            let extractedText = '';
+          console.log(`Processing extractive answer ${i + 1}:`, JSON.stringify(value, null, 2));
+          
+          // Handle the exact structure from logs: { structValue: { fields: { content: { stringValue: "...", kind: "stringValue" } } } }
+          if (value.structValue?.fields?.content?.stringValue) {
+            extractedText = value.structValue.fields.content.stringValue;
+            console.log(`Found extractive content via structValue.fields.content.stringValue: ${extractedText.substring(0, 100)}...`);
+          }
+          // Try alternative paths
+          else if (value.structValue?.fields?.answer?.stringValue) {
+            extractedText = value.structValue.fields.answer.stringValue;
+            console.log(`Found extractive content via structValue.fields.answer.stringValue: ${extractedText.substring(0, 100)}...`);
+          }
+          else if (value.stringValue) {
+            extractedText = value.stringValue;
+            console.log(`Found extractive content via stringValue: ${extractedText.substring(0, 100)}...`);
+          }
+          else if (typeof value === 'string') {
+            extractedText = value;
+            console.log(`Found extractive content via direct string: ${extractedText.substring(0, 100)}...`);
+          }
+          else {
+            console.log(`No extractable content found in extractive answer ${i + 1}`);
+          }
+          
+          // Filter out empty or placeholder content
+          if (extractedText && 
+              extractedText.length > 10 &&
+              !extractedText.includes('No content available') &&
+              !extractedText.includes('内容が取得できません')) {
             
-            console.log(`Processing extractive answer ${i + 1}:`, JSON.stringify(value, null, 2));
+            // Clean HTML tags if present
+            const cleanedText = extractedText
+              .replace(/<[^>]*>/g, '') // Remove HTML tags
+              .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+              .replace(/&amp;/g, '&')  // Replace &amp; with &
+              .replace(/&lt;/g, '<')   // Replace &lt; with <
+              .replace(/&gt;/g, '>')   // Replace &gt; with >
+              .replace(/\s+/g, ' ')    // Replace multiple spaces with single space
+              .trim();
             
-            // Handle the exact structure from logs: { structValue: { fields: { content: { stringValue: "...", kind: "stringValue" } } } }
-            if (value.structValue?.fields?.content?.stringValue) {
-              extractedText = value.structValue.fields.content.stringValue;
-              console.log(`Found extractive content via structValue.fields.content.stringValue: ${extractedText.substring(0, 100)}...`);
-            }
-            // Try alternative paths
-            else if (value.structValue?.fields?.answer?.stringValue) {
-              extractedText = value.structValue.fields.answer.stringValue;
-              console.log(`Found extractive content via structValue.fields.answer.stringValue: ${extractedText.substring(0, 100)}...`);
-            }
-            else if (value.stringValue) {
-              extractedText = value.stringValue;
-              console.log(`Found extractive content via stringValue: ${extractedText.substring(0, 100)}...`);
-            }
-            else if (typeof value === 'string') {
-              extractedText = value;
-              console.log(`Found extractive content via direct string: ${extractedText.substring(0, 100)}...`);
-            }
-            else {
-              console.log(`No extractable content found in extractive answer ${i + 1}`);
-            }
-            
-            // Filter out empty or placeholder content
-            if (extractedText && 
-                extractedText.length > 10 &&
-                !extractedText.includes('No content available') &&
-                !extractedText.includes('内容が取得できません')) {
-              
-              // Clean HTML tags if present
-              const cleanedText = extractedText
-                .replace(/<[^>]*>/g, '') // Remove HTML tags
-                .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
-                .replace(/&amp;/g, '&')  // Replace &amp; with &
-                .replace(/&lt;/g, '<')   // Replace &lt; with <
-                .replace(/&gt;/g, '>')   // Replace &gt; with >
-                .replace(/\s+/g, ' ')    // Replace multiple spaces with single space
-                .trim();
-              
-              if (cleanedText.length > 10) {
-                extractiveTexts.push(cleanedText);
-                console.log(`Added cleaned extractive text: ${cleanedText.substring(0, 100)}...`);
-              }
+            if (cleanedText.length > 10) {
+              extractiveTexts.push(cleanedText);
+              console.log(`Added cleaned extractive text: ${cleanedText.substring(0, 100)}...`);
             }
           }
-        }
-        // Handle direct array format
-        else if (Array.isArray(extractiveAnswersData)) {
-          for (const answer of extractiveAnswersData) {
-            if (answer?.content) {
-              extractiveTexts.push(answer.content);
-            } else if (typeof answer === 'string') {
-              extractiveTexts.push(answer);
-            } else if (answer?.stringValue) {
-              extractiveTexts.push(answer.stringValue);
-            }
-          }
-        }
-        // Handle single object
-        else if (extractiveAnswersData.content) {
-          extractiveTexts.push(extractiveAnswersData.content);
         }
         
         if (extractiveTexts.length > 0) {
@@ -451,6 +476,7 @@ function buildContextFromResults(results: SearchResult[], query: string): string
     if (!pdfContent) {
       const snippetsData = derivedData?.snippets || derivedData?.fields?.snippets;
       if (snippetsData) {
+        console.log('Raw snippets data:', JSON.stringify(snippetsData, null, 2));
         const allSnippets = extractSnippetsFromPDF(snippetsData);
         
         // Filter and prioritize snippets for better content quality
@@ -463,6 +489,7 @@ function buildContextFromResults(results: SearchResult[], query: string): string
           
           console.log(`Using ${filteredSnippets.length} filtered snippets out of ${allSnippets.length} total`);
           console.log('Filtered snippets:', filteredSnippets.map(s => s.substring(0, 80) + '...'));
+          console.log('Full filtered snippets:', filteredSnippets);
         }
       }
     }
@@ -689,7 +716,12 @@ function filterAndPrioritizeSnippets(snippets: string[], query: string): string[
       /\d{1,3}(?:,\d{3})*(?:\.\d+)?％/g,           // Percentages
       /前年(?:同期)?比\s*\d+(?:\.\d+)?％/g,        // Year-over-year comparisons
       /\d+(?:\.\d+)?％[増減]/g,                    // Growth/decline percentages
-      /\d{4}年\d{1,2}月期/g                       // Fiscal periods
+      /\d{4}年\d{1,2}月期/g,                       // Fiscal periods
+      /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*億円/g,      // Billions in yen
+      /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*百万円/g,    // Millions in yen
+      /売上高\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?/g,   // Revenue figures
+      /営業利益\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?/g, // Operating profit
+      /\d+年\d+月期/g                             // Fiscal year periods
     ];
     
     let numericalScore = 0;
@@ -804,7 +836,7 @@ function buildPrompt(query: string, conversationContext: string): string {
 回答の要件:
 - Q&A文書と PDF資料の両方の情報を活用してください
 - Q&A文書に直接的な回答がある場合は、それを優先してください
-- PDF資料からは具体的な数値や事実データを重視してください
+- PDF資料からは具体的な数値や事実データを優先・重視してください
 - 「省略」「記載なし」等の否定的情報は回答に含めず、肯定的な具体的情報を探してください
 - 企業名や数値は正確に記載してください（百万円、％、前年比等も含む）
 - 複数の関連情報がある場合は、それらを統合して包括的な回答を作成してください
@@ -813,7 +845,7 @@ function buildPrompt(query: string, conversationContext: string): string {
 - 決算資料からの情報の場合は「決算資料によると」等の前置きを付けてください
 - 丁寧で専門的な日本語で回答してください
 
-特に重要: PDF資料には表や図表の数値データが含まれています。「記載を省略」等の記述ではなく、具体的な数値や業績データを優先して回答に含めてください。
+特に重要: PDF資料には表や図表の数値データが含まれています。「記載を省略」等の記述ではなく、具体的な数値や業績データを優先して回答に含めてください。売上高、営業利益、前年比などの数値がある場合は、必ず具体的な金額や割合を明記してください。
 
 回答形式の例:
 1. Q&Aデータから直接回答できる場合:

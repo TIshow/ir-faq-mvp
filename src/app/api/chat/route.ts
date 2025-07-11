@@ -10,23 +10,30 @@ interface ChatRequest {
   message: string;
   sessionId?: string;
   conversationHistory?: ConversationMessage[];
+  companyId?: string;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, sessionId, conversationHistory = [] }: ChatRequest = await request.json();
+    const { message, sessionId, conversationHistory = [], companyId }: ChatRequest = await request.json();
     
     if (!message || message.trim() === '') {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
 
-    console.log('Processing chat message:', { message, sessionId });
+    // 企業IDのバリデーション
+    if (!companyId) {
+      return NextResponse.json({ error: '企業を選択してください' }, { status: 400 });
+    }
 
-    // Generate RAG response
+    console.log('Processing chat message:', { message, sessionId, companyId });
+
+    // Generate RAG response with company context
     const ragResponse = await generateRAGResponse({
       query: message,
       conversationHistory: conversationHistory,
-      maxResults: 5
+      maxResults: 5,
+      companyId: companyId
     });
 
     // Save to Firestore if sessionId is provided
@@ -91,7 +98,8 @@ export async function POST(request: NextRequest) {
       sources: ragResponse.sources,
       confidence: ragResponse.confidence,
       searchResultsCount: ragResponse.searchResultsCount,
-      sessionId: currentSessionId
+      sessionId: currentSessionId,
+      companyId: companyId
     });
 
   } catch (error: unknown) {

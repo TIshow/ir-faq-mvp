@@ -1,6 +1,7 @@
 import { SearchServiceClient } from '@google-cloud/discoveryengine';
 import { config } from '../config/env';
 import { getGoogleAuth } from './gcp-auth';
+import { getCompanyById, buildDatastorePath } from '@/config/companies';
 
 let searchClient: SearchServiceClient | null = null;
 
@@ -46,11 +47,35 @@ export interface SearchResponse {
   summary?: string;
 }
 
-export async function searchDocuments(query: string, pageSize: number = 10): Promise<SearchResponse> {
+export async function searchDocuments(query: string, pageSize: number = 10, companyId?: string): Promise<SearchResponse> {
   const client = getDiscoveryEngineClient();
   
-  const projectPath = client.projectPath(config.googleCloud.projectId);
-  const servingConfigPath = `${projectPath}/locations/${config.googleCloud.location}/collections/default_collection/engines/${config.googleCloud.searchEngineId}/servingConfigs/default_search`;
+  // 企業IDが指定されている場合は、その企業のデータストアを使用
+  let servingConfigPath: string;
+  
+  if (companyId) {
+    const company = getCompanyById(companyId);
+    if (!company) {
+      throw new Error(`企業 ${companyId} が見つかりません`);
+    }
+    
+    if (!company.isActive) {
+      throw new Error(`企業 ${company.name} は現在利用できません。管理者にお問い合わせください。`);
+    }
+    
+    const datastorePath = buildDatastorePath(companyId, config.googleCloud.projectId);
+    if (!datastorePath) {
+      throw new Error(`企業 ${companyId} のデータストアパスを構築できません`);
+    }
+    
+    servingConfigPath = `${datastorePath}/servingConfigs/default_search`;
+    console.log('Using company-specific datastore for:', company.name, 'Path:', servingConfigPath);
+  } else {
+    // 既存の共通データストアを使用
+    const projectPath = client.projectPath(config.googleCloud.projectId);
+    servingConfigPath = `${projectPath}/locations/${config.googleCloud.location}/collections/default_collection/engines/${config.googleCloud.searchEngineId}/servingConfigs/default_search`;
+    console.log('Using default datastore. Path:', servingConfigPath);
+  }
 
   // Increased pageSize for better snippet variety while preventing timeout
   const limitedPageSize = Math.min(pageSize, 30); // Increased from 20 to 30 for more snippet options
@@ -59,7 +84,17 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     servingConfig: servingConfigPath,
     query: query,
     pageSize: limitedPageSize,
-    // Now enabled for single-datastore search (improved accuracy)
+    // Enable content search spec for snippets (chunking config doesn't support extractive answers)
+    contentSearchSpec: {
+      snippetSpec: {
+        returnSnippet: true,
+        maxSnippetCount: 5  // Max allowed value is 5
+      },
+      summarySpec: {
+        summaryResultCount: 3,
+        includeCitations: true
+      }
+    },
     queryExpansionSpec: {
       condition: 'AUTO' as const
     },
@@ -74,6 +109,7 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
 
   try {
     console.log('Discovery Engine request for:', request.query, 'with pageSize:', limitedPageSize);
+    console.log('Company ID:', companyId || 'default');
     
     // Wrap the search call with a timeout promise
     const searchPromise = client.search(request, { autoPaginate: false });
@@ -116,8 +152,8 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
     for (let i = 0; i < resultsArray.length; i++) {
       const result = resultsArray[i];
       console.log(`Processing result ${i + 1}:`, result.id);
-      // Reduced logging to prevent timeout from large log outputs
       console.log(`Result ${i + 1} has document:`, !!result.document);
+      console.log(`Result ${i + 1} RAW structure:`, JSON.stringify(result, null, 2));
       
       if (!result.document) {
         console.log('Skipping result - no document');
@@ -250,7 +286,13 @@ export async function searchDocuments(query: string, pageSize: number = 10): Pro
         const simpleRequest = {
           servingConfig: servingConfigPath,
           query: query,
-          pageSize: 5 // Much smaller page size
+          pageSize: 5, // Much smaller page size
+          contentSearchSpec: {
+            snippetSpec: {
+              returnSnippet: true,
+              maxSnippetCount: 3
+            }
+          }
         };
         
         const simpleSearchPromise = client.search(simpleRequest, { autoPaginate: false });
