@@ -86,13 +86,22 @@ export async function searchDocuments(query: string, pageSize: number = 10, comp
     pageSize: limitedPageSize,
     // Enable content search spec for snippets (chunking config doesn't support extractive answers)
     contentSearchSpec: {
+      extractiveAnswerSpec: {
+        maxExtractiveAnswerCount: 5, // ← 数値入りの回答候補を自動抽出
+        returnExtractiveSegmentScore: true, // Enable scoring for better selection
+        numPreviousSegments: 1, // Include context before the extractive answer
+        numNextSegments: 1, // Include context after the extractive answer
+        maxExtractiveSegmentLength: 500 // Allow longer segments for more complete financial data
+      },
       snippetSpec: {
         returnSnippet: true,
-        maxSnippetCount: 5  // Max allowed value is 5
+        maxSnippetCount: 5,  // Max allowed value is 5
+        returnSnippetScore: true // Enable scoring for better snippet selection
       },
       summarySpec: {
         summaryResultCount: 3,
-        includeCitations: true
+        includeCitations: true,
+        useSemanticChunks: true // Better semantic understanding for financial data
       }
     },
     queryExpansionSpec: {
@@ -101,6 +110,8 @@ export async function searchDocuments(query: string, pageSize: number = 10, comp
     spellCorrectionSpec: {
       mode: 'AUTO' as const
     },
+    // Enhanced ranking for financial data
+    rankingExpression: '(relevance_score * 1.0) + (if(document.extractedMetadata.title.contains("営業利益") || document.extractedMetadata.title.contains("売上高") || document.extractedMetadata.title.contains("純利益"), 0.3, 0.0)) + (if(document.extractedMetadata.snippet.matches("\\\\d+.*百万円"), 0.2, 0.0))',
     userInfo: {
       timeZone: 'Asia/Tokyo'
     },
@@ -109,7 +120,6 @@ export async function searchDocuments(query: string, pageSize: number = 10, comp
 
   try {
     console.log('Discovery Engine request for:', request.query, 'with pageSize:', limitedPageSize);
-    console.log('Company ID:', companyId || 'default');
     
     // Wrap the search call with a timeout promise
     const searchPromise = client.search(request, { autoPaginate: false });

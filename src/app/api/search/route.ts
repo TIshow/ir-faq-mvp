@@ -11,8 +11,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 });
     }
 
-    console.log('Search request:', { query, pageSize });
-
     const searchResponse = await searchDocuments(query, pageSize);
     
     return NextResponse.json({

@@ -29,14 +29,12 @@ export async function generateRAGResponse(request: RAGRequest): Promise<RAGRespo
 
   try {
     // Step 1: Search for relevant documents
-    console.log('Searching for relevant documents with limited results:', limitedMaxResults);
-    console.log('Company ID:', companyId);
     const searchResponse = await searchDocuments(query, limitedMaxResults, companyId);
-    
     console.log('Search response received:', {
       resultsCount: searchResponse.results.length,
       totalSize: searchResponse.totalSize
     });
+    
     
     if (searchResponse.results.length === 0) {
       return {
@@ -205,6 +203,17 @@ export async function generateRAGResponse(request: RAGRequest): Promise<RAGRespo
 function buildContextFromResults(results: SearchResult[], query: string): string {
   console.log('buildContextFromResults called with', results.length, 'results for query:', query);
   
+  const contextParts: string[] = [];
+  
+  // PRIORITY 1: Extract and prioritize extractive_answers with numerical data
+  const extractiveAnswers = extractExtractiveAnswers(results, query);
+  if (extractiveAnswers.length > 0) {
+    console.log(`Found ${extractiveAnswers.length} extractive answers`);
+    extractiveAnswers.forEach((answer, index) => {
+      contextParts.push(`[抽出回答${index + 1}] ${answer}`);
+    });
+  }
+  
   const qaResults: SearchResult[] = [];
   const pdfResults: SearchResult[] = [];
   
@@ -248,8 +257,6 @@ function buildContextFromResults(results: SearchResult[], query: string): string
   
   console.log(`Found ${qaResults.length} Q&A results and ${pdfResults.length} PDF results`);
   
-  const contextParts: string[] = [];
-  
   // Process Q&A results
   qaResults.forEach((result, index) => {
     const data = result.document.structData;
@@ -281,7 +288,7 @@ function buildContextFromResults(results: SearchResult[], query: string): string
     contextParts.push(context);
   });
   
-  // Process PDF results with enhanced extraction
+  // Process PDF results with simplified extraction (extractive_answers are already prioritized above)
   pdfResults.forEach((result, index) => {
     const data = result.document.structData;
     const derivedData = result.document.derivedStructData;
@@ -307,221 +314,62 @@ function buildContextFromResults(results: SearchResult[], query: string): string
       context += `\nソース: ${linkText}`;
     }
     
-    // Extract content from PDF - comprehensive approach
+    // SIMPLIFIED: Extract content from PDF - focus on most reliable sources
     let pdfContent = '';
     let contentSource = '';
     
-    // 1. Try structData for text content (all possible fields)
-    const structContentFields = ['text', 'content', 'body', 'extractedText', 'snippet', 'textRepresentation', 'pageContent'];
+    // 1. Try structData for text content (prioritize main content fields)
+    const structContentFields = ['text', 'content', 'body', 'extractedText'];
     for (const field of structContentFields) {
-      if (data[field]) {
-        if (typeof data[field] === 'string') {
-          pdfContent = data[field] as string;
-          contentSource = `structData.${field}`;
-          break;
-        } else if (Array.isArray(data[field])) {
-          // Handle array of text content
-          pdfContent = (data[field] as string[]).join(' ');
-          contentSource = `structData.${field} (array)`;
-          break;
-        }
+      if (data[field] && typeof data[field] === 'string') {
+        pdfContent = data[field] as string;
+        contentSource = `structData.${field}`;
+        break;
       }
     }
     
-    // 2. Try derivedData for text content - handle nested fields
+    // 2. Try derivedData for text content
     if (!pdfContent) {
-      const derivedContentFields = ['content', 'text', 'body', 'extractedText', 'textRepresentation', 'pageContent'];
+      const derivedContentFields = ['content', 'text', 'body', 'extractedText'];
       for (const field of derivedContentFields) {
-        // Try direct access first
-        if (derivedData?.[field]) {
-          if (typeof derivedData[field] === 'string') {
-            pdfContent = derivedData[field] as string;
-            contentSource = `derivedData.${field}`;
-            break;
-          } else if (Array.isArray(derivedData[field])) {
-            pdfContent = (derivedData[field] as string[]).join(' ');
-            contentSource = `derivedData.${field} (array)`;
-            break;
-          }
-        }
-        // Try nested fields access
-        else if (derivedData?.fields?.[field]) {
-          const fieldData = derivedData.fields[field];
-          if (typeof fieldData === 'string') {
-            pdfContent = fieldData;
-            contentSource = `derivedData.fields.${field}`;
-            break;
-          } else if (fieldData?.stringValue) {
-            pdfContent = fieldData.stringValue;
-            contentSource = `derivedData.fields.${field}.stringValue`;
-            break;
-          } else if (Array.isArray(fieldData)) {
-            pdfContent = fieldData.join(' ');
-            contentSource = `derivedData.fields.${field} (array)`;
-            break;
-          }
+        if (derivedData?.[field] && typeof derivedData[field] === 'string') {
+          pdfContent = derivedData[field] as string;
+          contentSource = `derivedData.${field}`;
+          break;
         }
       }
     }
     
-    // 3. Extract from extractive_answers (common in Discovery Engine PDF results)
-    if (!pdfContent) {
-      const extractiveAnswersData = derivedData?.extractive_answers || derivedData?.fields?.extractive_answers;
-      if (extractiveAnswersData) {
-        console.log('Processing extractive_answers:', JSON.stringify(extractiveAnswersData, null, 2));
-        
-        const extractiveTexts: string[] = [];
-        
-        // Handle different extractive_answers formats
-        if (Array.isArray(extractiveAnswersData)) {
-          extractiveAnswersData.forEach((item: any) => {
-            if (typeof item === 'string') {
-              extractiveTexts.push(item);
-            } else if (item?.content) {
-              extractiveTexts.push(item.content);
-            } else if (item?.text) {
-              extractiveTexts.push(item.text);
-            } else if (item?.stringValue) {
-              extractiveTexts.push(item.stringValue);
-            }
-          });
-        } else if (typeof extractiveAnswersData === 'object') {
-          // Handle object format
-          if (extractiveAnswersData.content) {
-            extractiveTexts.push(extractiveAnswersData.content);
-          } else if (extractiveAnswersData.text) {
-            extractiveTexts.push(extractiveAnswersData.text);
-          } else if (extractiveAnswersData.stringValue) {
-            extractiveTexts.push(extractiveAnswersData.stringValue);
-          }
-        }
-        
-        if (extractiveTexts.length > 0) {
-          pdfContent = extractiveTexts.join(' ');
-          contentSource = 'extractive_answers';
-        }
-      }
-    }
-    
-    // 4. Handle nested structure: extractive_answers.values[].structValue.fields.content.stringValue
-    if (!pdfContent && derivedData?.extractive_answers?.values) {
-      const extractiveAnswersData = derivedData.extractive_answers;
-      if (extractiveAnswersData.values && Array.isArray(extractiveAnswersData.values)) {
-        console.log(`Processing ${extractiveAnswersData.values.length} extractive answer values`);
-        
-        const extractiveTexts: string[] = [];
-        
-        for (let i = 0; i < extractiveAnswersData.values.length; i++) {
-          const value = extractiveAnswersData.values[i];
-          let extractedText = '';
-          
-          console.log(`Processing extractive answer ${i + 1}:`, JSON.stringify(value, null, 2));
-          
-          // Handle the exact structure from logs: { structValue: { fields: { content: { stringValue: "...", kind: "stringValue" } } } }
-          if (value.structValue?.fields?.content?.stringValue) {
-            extractedText = value.structValue.fields.content.stringValue;
-            console.log(`Found extractive content via structValue.fields.content.stringValue: ${extractedText.substring(0, 100)}...`);
-          }
-          // Try alternative paths
-          else if (value.structValue?.fields?.answer?.stringValue) {
-            extractedText = value.structValue.fields.answer.stringValue;
-            console.log(`Found extractive content via structValue.fields.answer.stringValue: ${extractedText.substring(0, 100)}...`);
-          }
-          else if (value.stringValue) {
-            extractedText = value.stringValue;
-            console.log(`Found extractive content via stringValue: ${extractedText.substring(0, 100)}...`);
-          }
-          else if (typeof value === 'string') {
-            extractedText = value;
-            console.log(`Found extractive content via direct string: ${extractedText.substring(0, 100)}...`);
-          }
-          else {
-            console.log(`No extractable content found in extractive answer ${i + 1}`);
-          }
-          
-          // Filter out empty or placeholder content
-          if (extractedText && 
-              extractedText.length > 10 &&
-              !extractedText.includes('No content available') &&
-              !extractedText.includes('内容が取得できません')) {
-            
-            // Clean HTML tags if present
-            const cleanedText = extractedText
-              .replace(/<[^>]*>/g, '') // Remove HTML tags
-              .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
-              .replace(/&amp;/g, '&')  // Replace &amp; with &
-              .replace(/&lt;/g, '<')   // Replace &lt; with <
-              .replace(/&gt;/g, '>')   // Replace &gt; with >
-              .replace(/\s+/g, ' ')    // Replace multiple spaces with single space
-              .trim();
-            
-            if (cleanedText.length > 10) {
-              extractiveTexts.push(cleanedText);
-              console.log(`Added cleaned extractive text: ${cleanedText.substring(0, 100)}...`);
-            }
-          }
-        }
-        
-        if (extractiveTexts.length > 0) {
-          pdfContent = extractiveTexts.join(' ');
-          contentSource = `extractive_answers (${extractiveTexts.length} items)`;
-          console.log(`Successfully extracted ${extractiveTexts.length} extractive answers`);
-        } else {
-          console.log('No extractive texts found after processing');
-        }
-      }
-    }
-    
-    // 4. Extract from snippets (enhanced extraction) - handle nested fields with quality filtering
+    // 3. Extract from snippets (simplified) - only if no other content found
     if (!pdfContent) {
       const snippetsData = derivedData?.snippets || derivedData?.fields?.snippets;
       if (snippetsData) {
-        console.log('Raw snippets data:', JSON.stringify(snippetsData, null, 2));
+        console.log('Processing snippets as fallback');
         const allSnippets = extractSnippetsFromPDF(snippetsData);
         
-        // Filter and prioritize snippets for better content quality
-        const filteredSnippets = filterAndPrioritizeSnippets(allSnippets, query);
-        
-        if (filteredSnippets.length > 0) {
-          // Use multiple relevant snippets for richer context
-          pdfContent = filteredSnippets.join(' ');
-          contentSource = `${derivedData?.snippets ? 'derivedData.snippets' : 'derivedData.fields.snippets'} (${filteredSnippets.length} filtered)`;
+        // Use simpler filtering for better reliability
+        const relevantSnippets = allSnippets.filter(snippet => {
+          const hasNumericalData = /\d{1,3}(?:,\d{3})*(?:\.\d+)?[\u767e\u5343\u4e07\u5104\u5186\uff05%]/.test(snippet);
+          const hasFinancialTerms = ['\u55b6\u696d\u5229\u76ca', '\u58f2\u4e0a\u9ad8', '\u5f53\u671f\u7d14\u5229\u76ca', '\u5229\u76ca'].some(term => 
+            snippet.toLowerCase().includes(term)
+          );
+          const hasStrongNegative = ['\u7701\u7565', '\u8a18\u8f09\u306a\u3057', '\u8a72\u5f53\u306a\u3057'].some(term => 
+            snippet.toLowerCase().includes(term)
+          );
           
-          console.log(`Using ${filteredSnippets.length} filtered snippets out of ${allSnippets.length} total`);
-          console.log('Filtered snippets:', filteredSnippets.map(s => s.substring(0, 80) + '...'));
-          console.log('Full filtered snippets:', filteredSnippets);
-        }
-      }
-    }
-    
-    // 5. Try any other field that might contain text (fallback)
-    if (!pdfContent) {
-      const allFields = { ...data, ...derivedData };
-      for (const [key, value] of Object.entries(allFields)) {
-        if (typeof value === 'string' && value.length > 50 && 
-            !key.includes('id') && !key.includes('url') && !key.includes('link')) {
-          pdfContent = value;
-          contentSource = `fallback.${key}`;
-          break;
+          return (hasNumericalData || hasFinancialTerms) && !hasStrongNegative;
+        });
+        
+        if (relevantSnippets.length > 0) {
+          pdfContent = relevantSnippets.slice(0, 3).join(' ');
+          contentSource = `snippets (${relevantSnippets.length} relevant)`;
         }
       }
     }
     
     if (pdfContent) {
       console.log(`Found PDF content from ${contentSource}:`, pdfContent.substring(0, 100) + '...');
-    } else {
-      console.log(`No PDF content found for result ${index + 1}`, { 
-        structDataKeys: Object.keys(data),
-        derivedDataKeys: Object.keys(derivedData || {}),
-        hasExtractiveAnswers: !!(derivedData?.extractive_answers || derivedData?.fields?.extractive_answers),
-        hasSnippets: !!(derivedData?.snippets || derivedData?.fields?.snippets),
-        fieldsKeys: derivedData?.fields ? Object.keys(derivedData.fields) : [],
-        derivedDataSample: derivedData ? JSON.stringify(derivedData, null, 2).substring(0, 500) : 'null'
-      });
-    }
-    
-    // Lower threshold for content inclusion
-    if (pdfContent && pdfContent.length > 10) {
+      
       // Limit content to reasonable length for context
       const maxLength = 800;
       const truncatedContent = pdfContent.length > maxLength 
@@ -529,7 +377,7 @@ function buildContextFromResults(results: SearchResult[], query: string): string
         : pdfContent;
       context += `\n内容: ${truncatedContent}`;
     } else {
-      console.log(`No usable content found for PDF result ${index + 1}`);
+      console.log(`No PDF content found for result ${index + 1}`);
       // Include minimal context even without content
       context += `\n内容: [内容が取得できませんでした]`;
     }
@@ -538,6 +386,149 @@ function buildContextFromResults(results: SearchResult[], query: string): string
   });
   
   return contextParts.join('\n\n');
+}
+
+function extractExtractiveAnswers(results: SearchResult[], query: string): string[] {
+  console.log('Extracting extractive answers from', results.length, 'results');
+  
+  const extractiveAnswers: string[] = [];
+  
+  results.forEach((result, index) => {
+    const derivedData = result.document.derivedStructData;
+    const extractiveAnswersData = derivedData?.extractive_answers;
+    
+    if (extractiveAnswersData?.values && Array.isArray(extractiveAnswersData.values)) {
+      console.log(`Processing ${extractiveAnswersData.values.length} extractive answers from result ${index + 1}`);
+      
+      const answersFromThisResult: { content: string, score: number }[] = [];
+      
+      for (let i = 0; i < extractiveAnswersData.values.length; i++) {
+        const value = extractiveAnswersData.values[i];
+        let extractedText = '';
+        
+        // Handle the exact structure from Discovery Engine
+        if (value.structValue?.fields?.content?.stringValue) {
+          extractedText = value.structValue.fields.content.stringValue;
+        } else if (value.structValue?.fields?.answer?.stringValue) {
+          extractedText = value.structValue.fields.answer.stringValue;
+        } else if (value.stringValue) {
+          extractedText = value.stringValue;
+        } else if (typeof value === 'string') {
+          extractedText = value;
+        }
+        
+        if (extractedText && extractedText.length > 10) {
+          // Clean HTML tags and normalize text
+          const cleanedText = extractedText
+            .replace(/<[^>]*>/g, '') // Remove HTML tags
+            .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+            .replace(/&amp;/g, '&')  // Replace &amp; with &
+            .replace(/&lt;/g, '<')   // Replace &lt; with <
+            .replace(/&gt;/g, '>')   // Replace &gt; with >
+            .replace(/\s+/g, ' ')    // Replace multiple spaces with single space
+            .trim();
+          
+          if (cleanedText.length > 10) {
+            // Score based on numerical content and financial terms
+            const score = scoreExtractiveAnswer(cleanedText, query);
+            answersFromThisResult.push({
+              content: cleanedText,
+              score: score
+            });
+          }
+        }
+      }
+      
+      // Sort by score and add to main list
+      answersFromThisResult
+        .sort((a, b) => b.score - a.score)
+        .forEach(answer => {
+          console.log(`Adding extractive answer with score ${answer.score}: ${answer.content.substring(0, 100)}...`);
+          extractiveAnswers.push(answer.content);
+        });
+    }
+  });
+  
+  // Remove duplicates and return top answers
+  const uniqueAnswers = Array.from(new Set(extractiveAnswers));
+  console.log(`Found ${uniqueAnswers.length} unique extractive answers`);
+  
+  return uniqueAnswers.slice(0, 3); // Return top 3 extractive answers
+}
+
+function scoreExtractiveAnswer(text: string, query: string): number {
+  let score = 0;
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  
+  // Extract keywords from query
+  const queryKeywords = lowerQuery
+    .replace(/[？?！!。、]/g, '')
+    .split(/\s+/)
+    .filter(word => word.length > 1);
+  
+  // Score for query keyword matches
+  queryKeywords.forEach(keyword => {
+    const keywordCount = (lowerText.match(new RegExp(keyword, 'g')) || []).length;
+    score += keywordCount * 15;
+  });
+  
+  // VERY HIGH priority for numerical data patterns
+  const numericalPatterns = [
+    // Financial amounts
+    /\d{1,3}(?:,\d{3})*(?:\.\d+)?[\u767e\u5343\u4e07\u5104\u5186]/g,
+    /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*[\u767e\u5343\u4e07\u5104]\u5186/g,
+    // Financial metrics with values
+    /\u55b6\u696d\u5229\u76ca\s*[\uff1a:]?\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?/g,
+    /\u58f2\u4e0a\u9ad8\s*[\uff1a:]?\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?/g,
+    /\u5f53\u671f\u7d14\u5229\u76ca\s*[\uff1a:]?\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?/g,
+    // Percentages
+    /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*[％%]/g,
+    /\u524d\u5e74(?:\u540c\u671f)?\u6bd4\s*\d+(?:\.\d+)?\s*[％%]/g,
+    // Growth indicators
+    /\d+(?:\.\d+)?\s*[％%][\u5897\u6e1b]/g,
+    // Fiscal periods
+    /\d{4}\u5e74\d{1,2}\u6708\u671f/g
+  ];
+  
+  numericalPatterns.forEach(pattern => {
+    const matches = text.match(pattern) || [];
+    score += matches.length * 50; // Very high score for numerical data
+  });
+  
+  // High priority for primary financial terms
+  const primaryFinancialTerms = ['\u55b6\u696d\u5229\u76ca', '\u58f2\u4e0a\u9ad8', '\u5f53\u671f\u7d14\u5229\u76ca', '\u7d4c\u5e38\u5229\u76ca'];
+  primaryFinancialTerms.forEach(term => {
+    if (lowerText.includes(term)) {
+      score += 30;
+    }
+  });
+  
+  // Medium priority for secondary financial terms
+  const secondaryFinancialTerms = ['\u5229\u76ca', '\u696d\u7e3e', '\u524d\u5e74', '\u5897\u6e1b', '\u6bd4\u8f03', '\u767e\u4e07\u5186'];
+  secondaryFinancialTerms.forEach(term => {
+    if (lowerText.includes(term)) {
+      score += 15;
+    }
+  });
+  
+  // Strong penalty for negative/exclusion terms
+  const negativeTerms = [
+    '\u7701\u7565', '\u8a18\u8f09\u306a\u3057', '\u8a72\u5f53\u306a\u3057', '\u8a72\u5f53\u4e8b\u9805\u306f\u3042\u308a\u307e\u305b\u3093',
+    '\u8a18\u8f09\u3059\u3079\u304d\u4e8b\u9805\u306f\u306a\u3044', '\u306a\u3044\u305f\u3081'
+  ];
+  negativeTerms.forEach(term => {
+    if (lowerText.includes(term)) {
+      score -= 100; // Very strong penalty
+    }
+  });
+  
+  // Bonus for specific financial reporting patterns
+  if (text.match(/\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*\u767e\u4e07\u5186.*\u524d\u5e74\u540c\u671f\u6bd4.*\d+(?:\.\d+)?\s*[％%]/)) {
+    score += 100; // Very high bonus for complete financial comparison
+  }
+  
+  return score;
 }
 
 function extractSnippetsFromPDF(snippets: unknown): string[] {
@@ -710,68 +701,109 @@ function filterAndPrioritizeSnippets(snippets: string[], query: string): string[
       score += keywordCount * 10; // Heavy weight for keyword matches
     });
     
-    // Enhanced numerical data detection with higher priority
+    // ENHANCED: More comprehensive numerical data detection with much higher priority
     const numberPatterns = [
-      /\d{1,3}(?:,\d{3})*(?:\.\d+)?[百千万億円]/g,  // Currency amounts
-      /\d{1,3}(?:,\d{3})*(?:\.\d+)?％/g,           // Percentages
-      /前年(?:同期)?比\s*\d+(?:\.\d+)?％/g,        // Year-over-year comparisons
-      /\d+(?:\.\d+)?％[増減]/g,                    // Growth/decline percentages
-      /\d{4}年\d{1,2}月期/g,                       // Fiscal periods
-      /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*億円/g,      // Billions in yen
-      /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*百万円/g,    // Millions in yen
-      /売上高\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?/g,   // Revenue figures
-      /営業利益\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?/g, // Operating profit
-      /\d+年\d+月期/g                             // Fiscal year periods
+      // Currency amounts with various formats
+      /\d{1,3}(?:,\d{3})*(?:\.\d+)?[百千万億円]/g,
+      /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*[百千万億]円/g,
+      /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*百万円/g,
+      /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*億円/g,
+      // Financial metric patterns
+      /営業利益\s*[：:]?\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?/g,
+      /売上高\s*[：:]?\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?/g,
+      /当期純利益\s*[：:]?\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?/g,
+      /経常利益\s*[：:]?\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?/g,
+      // Percentages with various formats
+      /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*％/g,
+      /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*%/g,
+      // Year-over-year comparisons
+      /前年(?:同期)?比\s*\d+(?:\.\d+)?\s*％/g,
+      /前年(?:同期)?比\s*\d+(?:\.\d+)?\s*%/g,
+      /\d+(?:\.\d+)?\s*％[増減]/g,
+      /\d+(?:\.\d+)?\s*%[増減]/g,
+      // Growth/decline with numbers
+      /増益\s*\d+(?:\.\d+)?/g,
+      /減益\s*\d+(?:\.\d+)?/g,
+      /増収\s*\d+(?:\.\d+)?/g,
+      /減収\s*\d+(?:\.\d+)?/g,
+      // Fiscal periods
+      /\d{4}年\d{1,2}月期/g,
+      /\d{4}年\d{1,2}月/g,
+      /\d+年\d+月期/g,
+      // Specific numerical patterns commonly found in financial reports
+      /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*倍/g,
+      /\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*円/g
     ];
     
     let numericalScore = 0;
     numberPatterns.forEach(pattern => {
       const matches = snippet.match(pattern) || [];
-      numericalScore += matches.length * 20; // Higher weight for numerical data
+      numericalScore += matches.length * 35; // SIGNIFICANTLY higher weight for numerical data
     });
     score += numericalScore;
     
-    // Enhanced financial terms detection
-    const primaryFinancialTerms = ['売上高', '営業利益', '当期純利益', '経常利益'];
-    const secondaryFinancialTerms = ['利益', '業績', '前年', '増減', '比較', '百万円', '予想', '実績'];
+    // ENHANCED: More comprehensive financial terms detection
+    const primaryFinancialTerms = ['売上高', '営業利益', '当期純利益', '経常利益', '売上', '利益率', '収益', '業績'];
+    const secondaryFinancialTerms = ['利益', '業績', '前年', '増減', '比較', '百万円', '予想', '実績', '決算', '四半期'];
+    const contextualTerms = ['最高', '更新', '達成', '好調', '堅調', '成長', '拡大', '向上', '改善'];
     
     primaryFinancialTerms.forEach(term => {
       if (lowerSnippet.includes(term)) {
-        score += 15; // Higher weight for primary terms
+        score += 25; // Higher weight for primary terms
       }
     });
     
     secondaryFinancialTerms.forEach(term => {
       if (lowerSnippet.includes(term)) {
-        score += 5;
+        score += 10;
       }
     });
     
-    // Strong penalty for negative/exclusion terms
+    contextualTerms.forEach(term => {
+      if (lowerSnippet.includes(term)) {
+        score += 8;
+      }
+    });
+    
+    // ENHANCED: Much stronger penalty for negative/exclusion terms
     const negativeTerms = [
       '省略', '記載を省略', '記載なし', '該当なし', '該当事項はありません', 
       '特に記載すべき事項はありません', '記載すべき事項はない', '該当する事項はありません',
-      'ないため', '超えるため'
+      'ないため', '超えるため', '記載を省略しております', '記載を省略します',
+      '該当する事項はない', '該当事項なし', '特になし', '記載事項なし'
     ];
     negativeTerms.forEach(term => {
       if (lowerSnippet.includes(term)) {
-        score -= 30; // Stronger penalty for exclusion language
+        score -= 50; // Much stronger penalty for exclusion language
       }
     });
     
-    // Bonus for complete financial statements format
+    // ENHANCED: Bonus for complete financial statements format
     if (snippet.includes('百万円') && (snippet.includes('前年') || snippet.includes('増') || snippet.includes('減'))) {
-      score += 10; // Bonus for complete financial data
+      score += 20; // Higher bonus for complete financial data
     }
+    
+    // ENHANCED: Bonus for specific financial reporting patterns
+    if (snippet.match(/\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*百万円.*前年同期比.*\d+(?:\.\d+)?\s*％/)) {
+      score += 30; // Strong bonus for complete financial comparison format
+    }
+    
+    // ENHANCED: Bonus for financial performance indicators
+    const performanceIndicators = ['過去最高', '最高益', '最高売上', '連続増益', '連続増収', '大幅増益', '大幅増収'];
+    performanceIndicators.forEach(indicator => {
+      if (lowerSnippet.includes(indicator)) {
+        score += 15;
+      }
+    });
     
     // Penalty for very short snippets (likely incomplete)
     if (snippet.length < 30) {
-      score -= 5;
+      score -= 10;
     }
     
     // Bonus for medium-length snippets (likely complete sentences)
     if (snippet.length >= 50 && snippet.length <= 300) {
-      score += 3;
+      score += 5;
     }
     
     console.log(`Snippet ${index + 1} score: ${score}, content: "${snippet.substring(0, 100)}..."`);
@@ -783,27 +815,39 @@ function filterAndPrioritizeSnippets(snippets: string[], query: string): string[
     };
   });
   
-  // Sort by score (highest first) and filter out negative scores
+  // ENHANCED: More lenient filtering - prioritize numerical data even with some negative scoring
   const filteredAndSorted = scoredSnippets
-    .filter(item => item.score > 0)
+    .filter(item => {
+      // Always include snippets with numerical data, even if they have negative scores
+      const hasNumericalData = /\d{1,3}(?:,\d{3})*(?:\.\d+)?[\u767e\u5343\u4e07\u5104\u5186\uff05%]/.test(item.snippet);
+      const hasFinancialTerms = ['\u55b6\u696d\u5229\u76ca', '\u58f2\u4e0a\u9ad8', '\u5f53\u671f\u7d14\u5229\u76ca', '\u5229\u76ca'].some(term => 
+        item.snippet.toLowerCase().includes(term)
+      );
+      
+      // Include if positive score, OR if has numerical data, OR if has financial terms
+      return item.score > 0 || hasNumericalData || hasFinancialTerms;
+    })
     .sort((a, b) => b.score - a.score);
   
-  console.log(`Filtered to ${filteredAndSorted.length} relevant snippets`);
+  console.log(`Filtered to ${filteredAndSorted.length} relevant snippets (includes numerical data even with negative scores)`);
   
   // Return top relevant snippets (3-5 for richer context)
   const topSnippets = filteredAndSorted
     .slice(0, 5) // Increased from 3 to 5 for more comprehensive context
     .map(item => item.snippet);
   
-  // Enhanced fallback strategy
+  // ENHANCED: More sophisticated fallback strategy
   if (topSnippets.length === 0 && snippets.length > 0) {
     console.log('No positively scored snippets found, analyzing for fallback...');
     
-    // Try to find snippets with at least numerical data, even if they have negative terms
+    // Try to find snippets with at least numerical data, even if they have some negative terms
     const numericalSnippets = snippets.filter(snippet => {
       const hasNumbers = /\d{1,3}(?:,\d{3})*(?:\.\d+)?[百千万億円％%]/.test(snippet);
-      const hasFinancialTerms = ['売上高', '利益', '業績'].some(term => snippet.toLowerCase().includes(term));
-      return hasNumbers || hasFinancialTerms;
+      const hasFinancialTerms = ['売上高', '営業利益', '当期純利益', '経常利益', '利益', '業績'].some(term => snippet.toLowerCase().includes(term));
+      const hasStrongNegative = ['省略', '記載なし', '該当なし'].some(term => snippet.toLowerCase().includes(term));
+      
+      // Include numerical snippets even if they have some negative terms, but exclude strongly negative ones
+      return (hasNumbers || hasFinancialTerms) && !hasStrongNegative;
     });
     
     if (numericalSnippets.length > 0) {
@@ -811,8 +855,31 @@ function filterAndPrioritizeSnippets(snippets: string[], query: string): string[
       return numericalSnippets.slice(0, 3);
     }
     
-    // Last resort: use first snippet
-    console.log('Using first snippet as last resort fallback');
+    // Try to find snippets with financial context even without explicit numbers
+    const financialContextSnippets = snippets.filter(snippet => {
+      const hasFinancialContext = ['決算', '業績', '財務', '利益', '売上', '収益'].some(term => snippet.toLowerCase().includes(term));
+      const hasStrongNegative = ['省略', '記載なし', '該当なし'].some(term => snippet.toLowerCase().includes(term));
+      return hasFinancialContext && !hasStrongNegative;
+    });
+    
+    if (financialContextSnippets.length > 0) {
+      console.log(`Using ${financialContextSnippets.length} financial context snippets as fallback`);
+      return financialContextSnippets.slice(0, 2);
+    }
+    
+    // Last resort: use first snippet that doesn't have strong negative terms
+    const nonNegativeSnippets = snippets.filter(snippet => {
+      const hasStrongNegative = ['省略', '記載なし', '該当なし'].some(term => snippet.toLowerCase().includes(term));
+      return !hasStrongNegative;
+    });
+    
+    if (nonNegativeSnippets.length > 0) {
+      console.log('Using first non-negative snippet as last resort fallback');
+      return [nonNegativeSnippets[0]];
+    }
+    
+    // Absolute last resort: use first snippet
+    console.log('Using first snippet as absolute last resort fallback');
     return [snippets[0]];
   }
   
@@ -833,11 +900,17 @@ function buildConversationContext(history: ConversationMessage[]): string {
 function buildPrompt(query: string, conversationContext: string): string {
   return `あなたは投資家向け広報（IR）の専門アシスタントです。提供されたコンテキスト情報に基づいて、正確で有用な回答を生成してください。
 
+【最重要】数値データの必須要件:
+- 営業利益、売上高、当期純利益、経常利益などの財務数値は必ず具体的な金額（百万円、億円など）を明記してください
+- 前年同期比、成長率、増減率などの比較データは必ず％や倍数を含めて明記してください
+- 例：「営業利益は1,915百万円（前年同期比125.7%増）」のような具体的な数値表記を必須とします
+- 「過去最高」「4期連続増益」などの表現がある場合は、その具体的な数値も併記してください
+
 回答の要件:
 - Q&A文書と PDF資料の両方の情報を活用してください
 - Q&A文書に直接的な回答がある場合は、それを優先してください
-- PDF資料からは具体的な数値や事実データを優先・重視してください
-- 「省略」「記載なし」等の否定的情報は回答に含めず、肯定的な具体的情報を探してください
+- PDF資料からは具体的な数値や事実データを最優先してください
+- 「省略」「記載なし」「該当なし」等の否定的情報は完全に無視して、肯定的な具体的情報のみを使用してください
 - 企業名や数値は正確に記載してください（百万円、％、前年比等も含む）
 - 複数の関連情報がある場合は、それらを統合して包括的な回答を作成してください
 - 情報源（Q&A文書またはPDF資料）を明記してください
@@ -845,9 +918,12 @@ function buildPrompt(query: string, conversationContext: string): string {
 - 決算資料からの情報の場合は「決算資料によると」等の前置きを付けてください
 - 丁寧で専門的な日本語で回答してください
 
-特に重要: PDF資料には表や図表の数値データが含まれています。「記載を省略」等の記述ではなく、具体的な数値や業績データを優先して回答に含めてください。売上高、営業利益、前年比などの数値がある場合は、必ず具体的な金額や割合を明記してください。
+【絶対に避けること】:
+- 抽象的な表現のみで数値を省略すること
+- 「過去最高」「好調」等の表現だけで具体的数値を記載しないこと
+- 否定的情報（「省略」「記載なし」等）を回答に含めること
 
-回答形式の例:
+【必須】回答形式の例:
 1. Q&Aデータから直接回答できる場合:
    「[回答内容]（Q&Aデータより）」
 
@@ -856,10 +932,10 @@ function buildPrompt(query: string, conversationContext: string): string {
    
    また、決算資料によると[PDF内容による補完情報]があります。」
 
-3. PDF資料のみから回答する場合:
-   「決算資料によると、[具体的な数値や実績データ]です。」
+3. PDF資料のみから回答する場合（推奨形式）:
+   「決算資料によると、[具体的な数値や実績データ]です。これは[前年同期比や過去との比較データ]を表しています。」
 
 質問: ${query}${conversationContext}
 
-上記のコンテキスト情報に基づいて、質問に対する適切な回答を生成してください。肯定的で具体的な情報を中心に回答を構成してください。`;
+上記のコンテキスト情報に基づいて、質問に対する適切な回答を生成してください。必ず具体的な数値を含めて回答してください。`;
 }

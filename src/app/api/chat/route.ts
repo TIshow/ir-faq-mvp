@@ -26,8 +26,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '企業を選択してください' }, { status: 400 });
     }
 
-    console.log('Processing chat message:', { message, sessionId, companyId });
-
     // Generate RAG response with company context
     const ragResponse = await generateRAGResponse({
       query: message,
