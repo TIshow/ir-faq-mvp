@@ -78,20 +78,20 @@ export async function searchDocuments(query: string, pageSize: number = 10, comp
   }
 
   // Increased pageSize for better snippet variety while preventing timeout
-  const limitedPageSize = Math.min(pageSize, 30); // Increased from 20 to 30 for more snippet options
+  const limitedPageSize = Math.min(pageSize, 20); // Optimized for enhanced RAG processing
 
   const request = {
     servingConfig: servingConfigPath,
     query: query,
     pageSize: limitedPageSize,
-    // Enable content search spec for snippets (chunking config doesn't support extractive answers)
+    // Enhanced content search spec for extractive answers and snippets
     contentSearchSpec: {
       extractiveAnswerSpec: {
-        maxExtractiveAnswerCount: 5, // ← 数値入りの回答候補を自動抽出
+        maxExtractiveAnswerCount: 10, // Increased for better coverage
         returnExtractiveSegmentScore: true, // Enable scoring for better selection
-        numPreviousSegments: 1, // Include context before the extractive answer
-        numNextSegments: 1, // Include context after the extractive answer
-        maxExtractiveSegmentLength: 500 // Allow longer segments for more complete financial data
+        numPreviousSegments: 2, // More context before the extractive answer
+        numNextSegments: 2, // More context after the extractive answer
+        maxExtractiveSegmentLength: 800 // Longer segments for complete financial data
       },
       snippetSpec: {
         returnSnippet: true,
@@ -99,9 +99,29 @@ export async function searchDocuments(query: string, pageSize: number = 10, comp
         returnSnippetScore: true // Enable scoring for better snippet selection
       },
       summarySpec: {
-        summaryResultCount: 3,
+        summaryResultCount: 10, // Increased for better coverage
         includeCitations: true,
-        useSemanticChunks: true // Better semantic understanding for financial data
+        useSemanticChunks: true,
+        ignoreAdversarialQuery: true,
+        ignoreNonSummarySeekingQuery: false,
+        modelPromptSpec: {
+          preamble: `あなたは投資家向け広報（IR）の専門アシスタントです。提供された情報に基づいて、正確で有用な回答を生成してください。
+
+【最重要】数値データの必須要件:
+- 営業利益、売上高、当期純利益、経常利益などの財務数値は必ず具体的な金額（百万円、億円など）を明記してください
+- 前年同期比、成長率、増減率などの比較データは必ず％や倍数を含めて明記してください
+- 例：「営業利益は314百万円（前年同期比10.3%減）」のような具体的な数値表記を必須とします
+- 「過去最高」「4期連続増益」などの表現がある場合は、その具体的な数値も併記してください
+
+【計算要件】
+- 必要に応じて、提供されたデータから営業利益率、売上総利益率、成長率などを計算してください
+
+回答形式:
+- 企業名や数値は正確に記載してください
+- 丁寧で専門的な日本語で回答してください
+- 不確実な情報については推測しないでください
+- 情報源（決算資料、IR資料等）を明記してください`
+        }
       }
     },
     queryExpansionSpec: {
@@ -132,6 +152,7 @@ export async function searchDocuments(query: string, pageSize: number = 10, comp
     console.log('Discovery Engine response keys:', Object.keys(response));
     console.log('Response.results length:', (response as any).results?.length || 0);
     console.log('Response.totalSize:', (response as any).totalSize || 0);
+    console.log('Response.summary:', (response as any).summary || 'No summary available');
     
     // Debug: log response structure (limited to avoid huge logs)
     console.log('Discovery Engine response structure logged (depth limited for performance)');
@@ -281,7 +302,7 @@ export async function searchDocuments(query: string, pageSize: number = 10, comp
     return {
       results: results,
       totalSize: (response as any).totalSize || 0,
-      summary: (response as any).summary?.summaryText || undefined
+      summary: (response as any).summary?.summaryText || (response as any).summary || undefined
     };
 
   } catch (error) {

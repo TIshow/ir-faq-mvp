@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateRAGResponse, ConversationMessage } from '@/lib/rag-service';
+import { generateEnhancedRAGResponse, ConversationMessage } from '@/lib/enhanced-rag-service';
 import { getFirestore, collections } from '@/lib/firestore';
 import { Timestamp, FieldValue } from '@google-cloud/firestore';
 import { v4 as uuidv4 } from 'uuid';
@@ -11,11 +11,12 @@ interface ChatRequest {
   sessionId?: string;
   conversationHistory?: ConversationMessage[];
   companyId?: string;
+  generateFollowUp?: boolean;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, sessionId, conversationHistory = [], companyId }: ChatRequest = await request.json();
+    const { message, sessionId, conversationHistory = [], companyId, generateFollowUp = false }: ChatRequest = await request.json();
     
     if (!message || message.trim() === '') {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -26,12 +27,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '企業を選択してください' }, { status: 400 });
     }
 
-    // Generate RAG response with company context
-    const ragResponse = await generateRAGResponse({
+    // Generate Enhanced RAG response with company context
+    const ragResponse = await generateEnhancedRAGResponse({
       query: message,
       conversationHistory: conversationHistory,
-      maxResults: 5,
-      companyId: companyId
+      maxResults: 10,
+      companyId: companyId,
+      generateFollowUp: generateFollowUp
     });
 
     // Save to Firestore if sessionId is provided
@@ -78,7 +80,9 @@ export async function POST(request: NextRequest) {
           sources: ragResponse.sources,
           metadata: {
             confidence: ragResponse.confidence,
-            topics: extractTopicsFromSources(ragResponse.sources)
+            topics: extractTopicsFromSources(ragResponse.sources),
+            processingSteps: ragResponse.processingSteps,
+            followUpQuestions: ragResponse.followUpQuestions
           }
         };
         
@@ -96,6 +100,8 @@ export async function POST(request: NextRequest) {
       sources: ragResponse.sources,
       confidence: ragResponse.confidence,
       searchResultsCount: ragResponse.searchResultsCount,
+      followUpQuestions: ragResponse.followUpQuestions,
+      processingSteps: ragResponse.processingSteps,
       sessionId: currentSessionId,
       companyId: companyId
     });

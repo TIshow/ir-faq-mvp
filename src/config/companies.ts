@@ -40,6 +40,18 @@ export const companies: Company[] = [
     datastoreId: 'philcompany-ir-data_1752224320775',
     searchEngineId: 'philcompany-search-engine',
     isActive: true
+  },
+  {
+    id: 'peers',
+    name: '株式会社ピアズ',
+    nameEn: 'Peers Inc.',
+    ticker: '7066',
+    sector: '人材・開発',
+    description: '人材派遣・営業コンサル',
+    websiteUrl: 'https://peers.jp/',
+    datastoreId: 'peers-ir-data_1752651535271',
+    searchEngineId: 'peers-search-engine',
+    isActive: true
   }
 ];
 

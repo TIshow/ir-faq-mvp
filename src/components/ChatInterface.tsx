@@ -12,6 +12,13 @@ interface Message {
   sources?: DocumentReference[];
   confidence?: number;
   isLoading?: boolean;
+  followUpQuestions?: string[];
+  processingSteps?: {
+    extractiveAnswersFound: number;
+    snippetsFound: number;
+    contextLength: number;
+    modelUsed: string;
+  };
 }
 
 interface ChatInterfaceProps {
@@ -81,7 +88,8 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           message: userMessage.content,
           sessionId: currentSessionId,
           conversationHistory: conversationHistory,
-          companyId: selectedCompany.id
+          companyId: selectedCompany.id,
+          generateFollowUp: true
         }),
       });
 
@@ -102,7 +110,9 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         content: data.message,
         timestamp: new Date(),
         sources: data.sources || [],
-        confidence: data.confidence
+        confidence: data.confidence,
+        followUpQuestions: data.followUpQuestions || [],
+        processingSteps: data.processingSteps
       };
 
       // Replace loading message with actual response
@@ -127,6 +137,11 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const clearChat = () => {
     setMessages([]);
     setCurrentSessionId(undefined);
+    inputRef.current?.focus();
+  };
+
+  const handleFollowUpClick = (question: string) => {
+    setInputValue(question);
     inputRef.current?.focus();
   };
 
@@ -193,6 +208,31 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                 {message.confidence && (
                   <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     信頼度: {Math.round(message.confidence * 100)}%
+                  </div>
+                )}
+
+                {message.processingSteps && (
+                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    処理: {message.processingSteps.modelUsed} | 
+                    抽出回答: {message.processingSteps.extractiveAnswersFound} | 
+                    スニペット: {message.processingSteps.snippetsFound}
+                  </div>
+                )}
+
+                {message.followUpQuestions && message.followUpQuestions.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-300 dark:border-gray-600">
+                    <p className="text-xs font-medium mb-2 text-gray-600 dark:text-gray-400">関連質問:</p>
+                    <div className="space-y-1">
+                      {message.followUpQuestions.map((question, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleFollowUpClick(question)}
+                          className="block w-full text-left text-xs p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800 hover:border-blue-300 dark:hover:border-blue-700"
+                        >
+                          {question}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
                 
