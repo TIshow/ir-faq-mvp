@@ -132,12 +132,13 @@ export const CompactCompanySelector: React.FC<CompanySelectorProps> = ({ classNa
       <select
         value={selectedCompany?.id || ''}
         onChange={handleCompanyChange}
-        className="block w-full px-3 py-1 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+        aria-label="企業を選択"
+        className="block w-full px-3 py-1.5 text-sm rounded-md shadow-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
       >
-        <option value="">企業を選択</option>
+        <option value="">企業を選択…</option>
         {companies.map((company) => (
           <option key={company.id} value={company.id}>
-            {company.name}
+            {company.name}（{company.ticker}）
           </option>
         ))}
       </select>
