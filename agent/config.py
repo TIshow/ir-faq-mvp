@@ -22,9 +22,9 @@ VERTEX_LOCATION = os.environ.get("GCP_VERTEX_AI_LOCATION", "us-central1")
 # .env の MODEL_NAME で上書き可。Gemini 3 開放後に差し替え。
 MODEL_NAME = os.environ.get("MODEL_NAME", "gemini-2.5-flash")
 
-# --- リトリーバ（PoC=既存 Discovery Engine データストアを再利用）-----------
-# ヴィスのデータストア（companies.ts の datastoreId）
-VIS_DATASTORE_ID = os.environ.get("VIS_DATASTORE_ID", "vis-ir-data_1752223995110")
+# --- リトリーバ（層2） -------------------------------------------------------
+# データストアIDは固定しない。リクエストごとに企業コンテキスト(datastore_id)から
+# datastore_serving_config() で組み立てる（マルチテナント）。
 
 # --- Cloud SQL（層1: financial_facts）---------------------------------------
 DB_INSTANCE_CONNECTION_NAME = os.environ.get(
