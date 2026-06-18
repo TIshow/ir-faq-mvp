@@ -1,5 +1,5 @@
-# Use Node.js LTS
-FROM node:18-alpine
+# Node.js 24（.tool-versions の nodejs 24.16.0 に合わせる。node:18 は EOL）
+FROM node:24-alpine
 
 # Set working directory
 WORKDIR /app
