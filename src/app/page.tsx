@@ -10,7 +10,7 @@ export default function Home() {
         <header className="flex items-center justify-between gap-4 border-b border-gray-200 dark:border-gray-700 px-4 py-2.5">
           <div className="flex items-baseline gap-2 min-w-0">
             <h1 className="text-lg font-bold text-gray-900 dark:text-white whitespace-nowrap">
-              IR FAQ Bot
+              IR Agent
             </h1>
             <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400 truncate">
               企業のIR情報についてお答えします
