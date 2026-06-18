@@ -134,11 +134,13 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
   return (
     <div className="flex flex-col h-full max-w-4xl mx-auto">
-      <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">IR太郎</h1>
+      <div className="flex justify-between items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+        <span className="text-sm text-gray-500 dark:text-gray-400 truncate">
+          {selectedCompany ? `${selectedCompany.name} のIR情報` : '企業を選択してください'}
+        </span>
         <button
           onClick={clearChat}
-          className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800"
+          className="shrink-0 px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800"
         >
           新しいチャット
         </button>
