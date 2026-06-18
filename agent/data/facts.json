@@ -1,4 +1,85 @@
 {
-  "note": "層1（構造化財務ファクト）。ダミーは置かない。実データのみ ticカー別に投入する。数値は決算短信/有報のXBRL or Document AI抽出による検証済み値だけを入れること（捏造禁止）。空なら層1は数値を返さない（層2/エスカレーションにフォールバック）。",
-  "facts": []
+  "note": "層1（構造化財務ファクト）。検証済みの実データのみ・ticカー別。捏造禁止。出典は決算資料。空なら層1は数値を返さない。",
+  "facts": [
+    {
+      "ticker": "5071", "metric_key": "revenue", "metric_label_ja": "売上高",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 16253, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2025年 決算説明資料", "source_page": 18,
+      "source_url": "gs://vis-ir-data/pdf/2025-material.pdf", "source_quote": "売上高 16,253",
+      "verified": true
+    },
+    {
+      "ticker": "5071", "metric_key": "gross_profit", "metric_label_ja": "売上総利益",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 4726, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2025年 決算説明資料", "source_page": 18,
+      "source_url": "gs://vis-ir-data/pdf/2025-material.pdf", "source_quote": "売上総利益 4,726",
+      "verified": true
+    },
+    {
+      "ticker": "5071", "metric_key": "operating_profit", "metric_label_ja": "営業利益",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 1915, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2025年 決算説明資料", "source_page": 18,
+      "source_url": "gs://vis-ir-data/pdf/2025-material.pdf", "source_quote": "営業利益 1,915",
+      "verified": true
+    },
+    {
+      "ticker": "5071", "metric_key": "ordinary_profit", "metric_label_ja": "経常利益",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 1910, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2025年 決算説明資料", "source_page": 18,
+      "source_url": "gs://vis-ir-data/pdf/2025-material.pdf", "source_quote": "経常利益 1,910",
+      "verified": true
+    },
+    {
+      "ticker": "5071", "metric_key": "net_income", "metric_label_ja": "親会社株主に帰属する当期純利益",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 1357, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2025年 決算説明資料", "source_page": 18,
+      "source_url": "gs://vis-ir-data/pdf/2025-material.pdf", "source_quote": "親会社株主に帰属する当期純利益 1,357",
+      "verified": true
+    },
+    {
+      "ticker": "5071", "metric_key": "dividend_per_share", "metric_label_ja": "1株当たり配当",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 49, "unit": "円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2025年 決算説明資料", "source_page": 19,
+      "source_url": "gs://vis-ir-data/pdf/2025-material.pdf", "source_quote": "配当金は49円と増配",
+      "verified": true
+    },
+    {
+      "ticker": "5071", "metric_key": "revenue", "metric_label_ja": "売上高",
+      "period_label": "2025Q4", "fiscal_year": 2025, "fiscal_quarter": 4,
+      "value_numeric": 4121, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2025年 決算説明資料", "source_page": 24,
+      "source_url": "gs://vis-ir-data/pdf/2025-material.pdf", "source_quote": "4,121",
+      "verified": true
+    },
+    {
+      "ticker": "5071", "metric_key": "operating_profit", "metric_label_ja": "営業利益",
+      "period_label": "2025Q4", "fiscal_year": 2025, "fiscal_quarter": 4,
+      "value_numeric": 462, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2025年 決算説明資料", "source_page": 25,
+      "source_url": "gs://vis-ir-data/pdf/2025-material.pdf", "source_quote": "462",
+      "verified": true
+    },
+    {
+      "ticker": "5071", "metric_key": "revenue", "metric_label_ja": "売上高",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 17200, "unit": "百万円", "consolidated": true, "is_forecast": true,
+      "source_doc_label": "2025年 決算説明資料", "source_page": 30,
+      "source_url": "gs://vis-ir-data/pdf/2025-material.pdf", "source_quote": "17,200",
+      "verified": true
+    },
+    {
+      "ticker": "5071", "metric_key": "operating_profit", "metric_label_ja": "営業利益",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 1922, "unit": "百万円", "consolidated": true, "is_forecast": true,
+      "source_doc_label": "2025年 決算説明資料", "source_page": 30,
+      "source_url": "gs://vis-ir-data/pdf/2025-material.pdf", "source_quote": "1,922",
+      "verified": true
+    }
+  ]
 }

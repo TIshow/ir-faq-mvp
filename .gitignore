@@ -53,3 +53,5 @@ __pycache__/
 
 # ir agent runtime artifacts (PoC)
 agent/data/escalations.jsonl
+# 層1抽出の未検証草案（人手検証後に facts.json へ反映）
+agent/data/*.draft.json
