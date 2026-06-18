@@ -195,11 +195,10 @@ def search_disclosures(query: str, tool_context: ToolContext = None) -> dict[str
         serving_config=serving_config,
         query=query,
         page_size=config.MAX_DISCLOSURE_RESULTS,
+        # 注: このデータストアは chunking config のため extractive_content_spec は不可。
+        # snippet のみ指定（FAQの question/answer は structData から取得する）。
         content_search_spec=de.SearchRequest.ContentSearchSpec(
             snippet_spec=de.SearchRequest.ContentSearchSpec.SnippetSpec(return_snippet=True),
-            extractive_content_spec=de.SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
-                max_extractive_answer_count=2,
-            ),
         ),
         query_expansion_spec=de.SearchRequest.QueryExpansionSpec(
             condition=de.SearchRequest.QueryExpansionSpec.Condition.AUTO,
@@ -207,22 +206,47 @@ def search_disclosures(query: str, tool_context: ToolContext = None) -> dict[str
         language_code="ja",
     )
 
+    def _g(obj, key):  # proto MapComposite / dict 両対応の get
+        try:
+            return obj.get(key)
+        except Exception:
+            return None
+
     passages: list[dict[str, Any]] = []
     try:
         response = client.search(request)
         for result in response.results:
             doc = result.document
-            derived = dict(doc.derived_struct_data or {})
-            title = derived.get("title") or derived.get("link") or "開示資料"
-            link = derived.get("link")
+            sd = doc.struct_data            # 構造化（FAQ: question/answer）
+            dd = doc.derived_struct_data     # 非構造（PDF: title/link/extractive/snippet）
+            title = _g(dd, "title") or "開示資料"
+            link = _g(dd, "link")
+
+            # 1) 構造化FAQ（IR承認のQ&A）を最優先でパッセージ化
+            answer = _g(sd, "answer")
+            if answer:
+                q = _g(sd, "question") or ""
+                a = _clean(str(answer))
+                if a:
+                    passages.append({
+                        "text": a,
+                        "doc": "IR想定問答（FAQ）" + (f"：{q}" if q else ""),
+                        "page": None, "url": link,
+                        "quote": _clean(f"Q: {q} / A: {answer}")[:300],
+                    })
+                continue
+
+            # 2) 非構造（PDF）: extractive answers / snippets
             chunks: list[tuple[str, int | None]] = []
-            for ea in derived.get("extractive_answers", []) or []:
-                if isinstance(ea, dict) and ea.get("content"):
-                    page = ea.get("pageNumber")
-                    chunks.append((ea["content"], int(page) if page else None))
-            for sn in derived.get("snippets", []) or []:
-                if isinstance(sn, dict) and sn.get("snippet"):
-                    chunks.append((sn["snippet"], None))
+            for ea in (_g(dd, "extractive_answers") or []):
+                content = _g(ea, "content")
+                if content:
+                    page = _g(ea, "pageNumber") or _g(ea, "page_number")
+                    chunks.append((str(content), int(page) if page else None))
+            for sn in (_g(dd, "snippets") or []):
+                snip = _g(sn, "snippet")
+                if snip:
+                    chunks.append((str(snip), None))
             for content, page in chunks:
                 cleaned = _clean(content)
                 if len(cleaned) > 10:
