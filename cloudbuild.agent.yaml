@@ -1,0 +1,33 @@
+# エージェント(Python/ADK)を Cloud Run `ir-agent` にビルド＆デプロイ。
+# 実行: gcloud builds submit --config cloudbuild.agent.yaml
+# 前提: ランタイムSAに roles/aiplatform.user と roles/discoveryengine.viewer（別途・要IAM許可）
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.agent', '-t', 'gcr.io/$PROJECT_ID/ir-agent', '.']
+    timeout: '1200s'
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/ir-agent']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ir-agent'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/ir-agent'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '1'
+      - '--timeout'
+      - '300'
+      - '--set-env-vars'
+      - 'GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,MODEL_NAME=gemini-2.5-flash,GCP_PROJECT_ID=$PROJECT_ID,GCP_LOCATION=global,VIS_DATASTORE_ID=vis-ir-data_1752223995110,FACTS_BACKEND=json'
+timeout: '1800s'
+images:
+  - 'gcr.io/$PROJECT_ID/ir-agent'
