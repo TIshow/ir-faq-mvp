@@ -5,21 +5,21 @@ import { useCompany } from '@/contexts/CompanyContext';
 import { AgentResponse } from '@/lib/agent-types';
 import { AgentAnswer } from '@/components/FactCard';
 
-// ガイド付き入口（企業はセレクタで選択するため企業名は含めない＝スコープ安全）
+// ガイド付き入口（企業はピッカーで選択するため企業名は含めない＝スコープ安全）
 const GUIDED_ENTRIES = [
-  '最新の決算サマリを教えてください',
+  '最新の決算サマリ',
   '営業利益は前年同期比でどうでしたか？',
-  'セグメント別の業績を教えてください',
+  'セグメント別の業績',
   '配当はどうなっていますか？',
-  '中期経営計画の進捗を教えてください',
+  '中期経営計画の進捗',
 ];
 
 interface Message {
   id: string;
   type: 'user' | 'assistant';
-  content: string;            // ユーザー文 / アシスタントのストリーミング中 prose
+  content: string;
   timestamp: Date;
-  response?: AgentResponse;   // 確定した構造化回答（アシスタント）
+  response?: AgentResponse;
   isStreaming?: boolean;
 }
 
@@ -36,63 +36,42 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { selectedCompany } = useCompany();
 
-  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  useEffect(() => { scrollToBottom(); }, [messages]);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  const patchMessage = (id: string, patch: Partial<Message>) => {
+  const patchMessage = (id: string, patch: Partial<Message>) =>
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
-  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputValue.trim() || isLoading) return;
-    if (!selectedCompany) {
-      alert('企業を選択してから質問してください。');
-      return;
-    }
+  const send = async (text: string) => {
+    const q = text.trim();
+    if (!q || isLoading) return;
+    if (!selectedCompany) { alert('銘柄を選択してから質問してください。'); return; }
 
-    const userMessage: Message = {
-      id: Date.now().toString(), type: 'user', content: inputValue.trim(), timestamp: new Date(),
-    };
+    const userMessage: Message = { id: Date.now().toString(), type: 'user', content: q, timestamp: new Date() };
     const assistantId = (Date.now() + 1).toString();
-    const assistantMessage: Message = {
-      id: assistantId, type: 'assistant', content: '', timestamp: new Date(), isStreaming: true,
-    };
-
-    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    setMessages((prev) => [...prev, userMessage, { id: assistantId, type: 'assistant', content: '', timestamp: new Date(), isStreaming: true }]);
     setInputValue('');
     setIsLoading(true);
 
     try {
-      // next.config.ts の trailingSlash:true に合わせ末尾スラッシュ（308リダイレクト回避）
       const res = await fetch('/api/chat/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: userMessage.content,
-          companyId: selectedCompany.id,
-          sessionId: currentSessionId,
-        }),
+        body: JSON.stringify({ message: q, companyId: selectedCompany.id, sessionId: currentSessionId }),
       });
-
       if (!res.ok || !res.body) throw new Error('Chat request failed');
 
-      // SSE をパース: "event: <name>\ndata: <json>\n\n"
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
       let prose = '';
-
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-
         let sep: number;
         while ((sep = buffer.indexOf('\n\n')) !== -1) {
           const raw = buffer.slice(0, sep);
           buffer = buffer.slice(sep + 2);
-
           let event = 'message';
           let data = '';
           for (const line of raw.split('\n')) {
@@ -100,10 +79,8 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             else if (line.startsWith('data:')) data += line.slice(5).trim();
           }
           if (!data) continue;
-
           if (event === 'delta') {
-            const { text } = JSON.parse(data);
-            prose += text ?? '';
+            prose += JSON.parse(data).text ?? '';
             patchMessage(assistantId, { content: prose });
           } else if (event === 'final') {
             const response = JSON.parse(data) as AgentResponse;
@@ -111,56 +88,60 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           }
         }
       }
-    } catch (error) {
-      console.error('Chat error:', error);
-      patchMessage(assistantId, {
-        content: 'エラーが発生しました。しばらくしてから再度お試しください。',
-        isStreaming: false,
-      });
+    } catch (e) {
+      console.error('Chat error:', e);
+      patchMessage(assistantId, { content: 'エラーが発生しました。しばらくしてから再度お試しください。', isStreaming: false });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const clearChat = () => {
-    setMessages([]);
-    inputRef.current?.focus();
-  };
-
-  const handleContactIR = () => {
-    // PoC: CTA。本番は IR 連絡フォーム/チケットへ。
-    alert('IR窓口へのお取り次ぎを受け付けました。');
-  };
+  const clearChat = () => { setMessages([]); inputRef.current?.focus(); };
+  const handleContactIR = () => alert('IR窓口へのお取り次ぎを受け付けました。');
 
   return (
-    <div className="flex flex-col h-full max-w-4xl mx-auto">
-      <div className="flex justify-between items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-        <span className="text-sm text-gray-500 dark:text-gray-400 truncate">
-          {selectedCompany ? `${selectedCompany.name} のIR情報` : '企業を選択してください'}
+    <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
+      {/* コンテキストバー */}
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+        <span className="flex items-center gap-2 truncate text-sm text-zinc-500">
+          {selectedCompany ? (
+            <>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span className="truncate text-zinc-400">{selectedCompany.name.replace(/^株式会社/, '')} のIR情報</span>
+            </>
+          ) : '銘柄を選択してください'}
         </span>
-        <button
-          onClick={clearChat}
-          className="shrink-0 px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800"
-        >
-          新しいチャット
-        </button>
+        {messages.length > 0 && (
+          <button
+            onClick={clearChat}
+            className="shrink-0 rounded-lg border border-zinc-800 px-2.5 py-1 text-xs text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-200"
+          >
+            新しいチャット
+          </button>
+        )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* メッセージ */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4">
         {messages.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-gray-500 dark:text-gray-400 mb-4">
-              {selectedCompany
-                ? `${selectedCompany.name}の開示済みIR情報についてお答えします`
-                : '企業を選択してご質問ください'}
+          <div className="flex h-full flex-col items-center justify-center px-2 text-center">
+            <h2 className="text-2xl font-semibold tracking-tight text-zinc-100">
+              {selectedCompany ? (
+                <>
+                  <span className="text-emerald-400">{selectedCompany.name.replace(/^株式会社/, '')}</span> について聞く
+                </>
+              ) : '銘柄を選んで質問しよう'}
+            </h2>
+            <p className="mt-2 text-sm text-zinc-500">
+              開示済みのIR情報を、出典付きでお答えします。
             </p>
-            <div className="grid gap-2 max-w-md mx-auto text-sm">
+            <div className="mt-6 flex max-w-xl flex-wrap justify-center gap-2">
               {GUIDED_ENTRIES.map((entry) => (
                 <button
                   key={entry}
-                  onClick={() => setInputValue(entry)}
-                  disabled={!selectedCompany}
-                  className="p-2 text-left text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => (selectedCompany ? send(entry) : inputRef.current?.focus())}
+                  disabled={!selectedCompany || isLoading}
+                  className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1.5 text-sm text-zinc-300 transition hover:border-emerald-500/40 hover:bg-zinc-800/80 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {entry}
                 </button>
@@ -168,50 +149,62 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             </div>
           </div>
         ) : (
-          messages.map((message) => (
-            <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div
-                className={`max-w-3xl p-3 rounded-lg ${
-                  message.type === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
-                }`}
-              >
-                {message.type === 'assistant' && message.response ? (
-                  <AgentAnswer response={message.response} onContactIR={handleContactIR} />
+          <div className="space-y-4 py-2">
+            {messages.map((m) => (
+              <div key={m.id} className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {m.type === 'user' ? (
+                  <div className="max-w-[85%] rounded-2xl rounded-br-md bg-emerald-500 px-4 py-2.5 text-sm font-medium text-zinc-950">
+                    {m.content}
+                  </div>
                 ) : (
-                  <div className="whitespace-pre-wrap">{message.content || '考え中...'}</div>
-                )}
-
-                {message.isStreaming && (
-                  <div className="flex items-center mt-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                  <div className="max-w-[90%] rounded-2xl rounded-bl-md border border-zinc-800 bg-zinc-900/70 px-4 py-3 text-sm leading-relaxed text-zinc-200">
+                    {m.response ? (
+                      <AgentAnswer response={m.response} onContactIR={handleContactIR} />
+                    ) : (
+                      <span className="flex items-center gap-2 text-zinc-400">
+                        {m.content || '考え中'}
+                        {m.isStreaming && (
+                          <span className="inline-flex gap-1">
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.3s]" />
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.15s]" />
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500" />
+                          </span>
+                        )}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
-            </div>
-          ))
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-        <form onSubmit={handleSubmit} className="flex gap-2">
+      {/* 入力 */}
+      <div className="px-4 pb-5 pt-1">
+        <form
+          onSubmit={(e) => { e.preventDefault(); send(inputValue); }}
+          className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-1.5 pl-4 transition focus-within:border-zinc-600"
+        >
           <input
             ref={inputRef}
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder={selectedCompany ? `${selectedCompany.name}についてご質問ください...` : '企業を選択してから質問してください...'}
-            className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
+            placeholder={selectedCompany ? `${selectedCompany.name.replace(/^株式会社/, '')}について質問する…` : '銘柄を選択してください'}
             disabled={isLoading || !selectedCompany}
+            className="flex-1 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:cursor-not-allowed"
           />
           <button
             type="submit"
             disabled={!inputValue.trim() || isLoading || !selectedCompany}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="送信"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500 text-zinc-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600"
           >
-            送信
+            <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M3.4 2.6a1 1 0 00-1.3 1.2l1.6 5.4a1 1 0 00.8.7l7.1 1.1-7.1 1.1a1 1 0 00-.8.7l-1.6 5.4a1 1 0 001.3 1.2l14.2-6.6a1 1 0 000-1.8L3.4 2.6z" />
+            </svg>
           </button>
         </form>
       </div>
