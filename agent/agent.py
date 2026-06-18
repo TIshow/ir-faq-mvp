@@ -1,18 +1,15 @@
 """
-IR Agent 本体（ADK）＋ AgentResponse 合成 ＋ ストリーミング。
+IR Agent 本体（ADK）＋ AgentResponse 合成 ＋ ストリーミング（マルチテナント）。
+
+対象企業はハードコードしない。リクエストごとに company={ticker,name,datastore_id} を受け取り:
+  - システムプロンプトと利用可能データのヒントを company から構築
+  - セッション状態 state["company"] に seed → ツールがそこから対象企業を読む
+  - セッションIDに ticker を含め、企業切替で状態が混ざらないようにする
 
 設計の肝（数値はLLMの文章を経由させない）:
-  - LLM は answer_prose（語り）とツール選択のみ担う。
-  - fact_cards は get_financial_facts のツール戻り値から「コードで」合成する。
-  - citations は search_disclosures のツール戻り値から合成する。
-  - scope_status は入口分類(scope.classify_scope) と escalate_to_ir 呼び出しから決める。
-
-多層防御:
-  [1] 入口: classify_scope で明白な助言/予測/未開示を短絡拒否
-  [2] 生成: 鉄則プロンプト＋ツール接地（戻り値以外を語らせない）
-  [3] 出口: compose 時に出典欠落カード除去・scope確定
-
-注: ADK 2.x のイベント/型は環境で要確認。アクセスは防御的に実装。
+  - fact_cards は get_financial_facts のツール戻り値から「コードで」合成
+  - citations は search_disclosures のツール戻り値から合成
+  - scope_status は入口分類(scope) と escalate_to_ir 呼び出しから決める
 """
 
 from __future__ import annotations
@@ -29,8 +26,9 @@ from .scope import classify_scope
 from .tools import escalate_to_ir, get_financial_facts, search_disclosures
 
 APP_NAME = "ir-agent"
-COMPANY_NAME = "株式会社ヴィス"  # PoC。本番はテナント設定から注入。
-COMPANY_TICKER = "5071"
+
+_session_service = InMemorySessionService()
+_TOOLS = [get_financial_facts, search_disclosures, escalate_to_ir]
 
 
 def _build_data_hint(ticker: str) -> str:
@@ -48,25 +46,35 @@ def _build_data_hint(ticker: str) -> str:
             lines.append(f"- 会社予想の期間ラベル(periods, basis='forecast'): {', '.join(s['periods_forecast'])}")
         if metrics:
             lines.append(f"- 指標キー(metric_keys): {metrics}")
+        if not lines:
+            return "- この企業の構造化財務データはまだ登録されていません（数値が無ければ無理に答えず escalate_to_ir）。"
         lines.append("- 営業利益率は metric_keys に 'operating_margin' を指定（コードで計算）。")
         return "\n".join(lines)
     except Exception:
         return ""
 
 
-# ADKエージェント（ツールは関数の型ヒント＋docstringから自動ラップ）
+def _make_agent(company_name: str, ticker: str) -> Agent:
+    """対象企業向けのエージェントを構築（プロンプトに企業名＋利用可能データを注入）。"""
+    return Agent(
+        name="ir_agent",
+        model=config.MODEL_NAME,
+        instruction=prompt.build_instruction(company_name, _build_data_hint(ticker)),
+        tools=_TOOLS,
+    )
+
+
+# ADK CLI（adk web/run）用の汎用フォールバック。実サーブは run_agent_stream が企業別に構築。
 root_agent = Agent(
     name="ir_agent",
     model=config.MODEL_NAME,
-    instruction=prompt.build_instruction(COMPANY_NAME, _build_data_hint(COMPANY_TICKER)),
-    tools=[get_financial_facts, search_disclosures, escalate_to_ir],
+    instruction=prompt.build_instruction("対象企業", ""),
+    tools=_TOOLS,
 )
-
-_session_service = InMemorySessionService()
 
 
 # --------------------------------------------------------------------------- #
-# イベントからの抽出（ADKイベントを防御的に読む）
+# イベント抽出
 # --------------------------------------------------------------------------- #
 def _iter_parts(event: Any):
     content = getattr(event, "content", None)
@@ -75,16 +83,10 @@ def _iter_parts(event: Any):
 
 
 def _extract_text(event: Any) -> str:
-    out = []
-    for part in _iter_parts(event):
-        text = getattr(part, "text", None)
-        if text:
-            out.append(text)
-    return "".join(out)
+    return "".join(getattr(p, "text", None) or "" for p in _iter_parts(event))
 
 
 def _extract_tool_responses(event: Any) -> list[tuple[str, dict[str, Any]]]:
-    """(tool_name, response_dict) のリストを返す。"""
     results: list[tuple[str, dict[str, Any]]] = []
     for part in _iter_parts(event):
         fr = getattr(part, "function_response", None)
@@ -113,17 +115,14 @@ def _dedup_citations(cites: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _compose(prose: str, fact_cards: list[dict[str, Any]], citations: list[dict[str, Any]],
              escalated: bool) -> dict[str, Any]:
-    # [3] 出口チェック: 出典の無いカードは捨てる
     fact_cards = [c for c in fact_cards if (c.get("source") or {}).get("doc")]
     citations = _dedup_citations(citations)
-
     if escalated:
         scope_status, scope_reason = "escalated", "out_of_corpus"
     elif not fact_cards and not citations and not prose.strip():
         scope_status, scope_reason = "escalated", "unknown"
     else:
         scope_status, scope_reason = "answered", None
-
     return {
         "answer_prose": prose.strip(),
         "fact_cards": fact_cards,
@@ -138,44 +137,48 @@ def _refusal_response(decision) -> dict[str, Any]:
         "answer_prose": decision.message or "お答えできません。",
         "fact_cards": [],
         "citations": [],
-        "scope_status": decision.status,   # 'refused'
+        "scope_status": decision.status,
         "scope_reason": decision.reason,
     }
 
 
 # --------------------------------------------------------------------------- #
-# 実行（ストリーミング / 一括）
+# 実行
 # --------------------------------------------------------------------------- #
-async def run_agent_stream(query: str, company_ticker: str = "5071",
+async def run_agent_stream(query: str, company: dict[str, Any],
                            user_id: str = "anon", session_id: str = "s1") -> AsyncIterator[dict[str, Any]]:
     """
-    yield:
-      {"type":"prose_delta","text": "..."}   # 逐次（体感速度=Q4）
-      {"type":"final","response": AgentResponse}
+    company = {"ticker","name","datastore_id"}。
+    yield: {"type":"prose_delta","text":...} / {"type":"final","response": AgentResponse}
     """
-    # [1] 入口スコープ分類で明白な拒否を短絡（エージェント呼び出し不要）
+    ticker = str(company.get("ticker") or "")
+    name = company.get("name") or "対象企業"
+
     decision = classify_scope(query)
     if decision.status != "answered":
         yield {"type": "prose_delta", "text": decision.message or ""}
         yield {"type": "final", "response": _refusal_response(decision)}
         return
 
-    # セッションは get-or-create（同一IDの再作成で落とさない）
+    # 企業ごとにセッションを分離し、状態に企業コンテキストを seed
+    sid = f"{session_id}:{ticker}"
     existing = None
     try:
-        existing = await _session_service.get_session(
-            app_name=APP_NAME, user_id=user_id, session_id=session_id
-        )
+        existing = await _session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=sid)
     except Exception:
         existing = None
     if existing is None:
         try:
             await _session_service.create_session(
-                app_name=APP_NAME, user_id=user_id, session_id=session_id
+                app_name=APP_NAME, user_id=user_id, session_id=sid,
+                state={"company": {"ticker": ticker, "name": name,
+                                   "datastore_id": company.get("datastore_id")}},
             )
         except Exception:
-            pass  # 競合等で既に作成済みなら無視
-    runner = Runner(agent=root_agent, app_name=APP_NAME, session_service=_session_service)
+            pass
+
+    agent = _make_agent(name, ticker)
+    runner = Runner(agent=agent, app_name=APP_NAME, session_service=_session_service)
 
     prose_parts: list[str] = []
     fact_cards: list[dict[str, Any]] = []
@@ -183,18 +186,14 @@ async def run_agent_stream(query: str, company_ticker: str = "5071",
     escalated = False
 
     message = types.Content(role="user", parts=[types.Part(text=query)])
-
-    async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=message):
-        # ツール戻り値を捕捉（数値・引用はここから合成）
-        for name, resp in _extract_tool_responses(event):
-            if name == "get_financial_facts":
+    async for event in runner.run_async(user_id=user_id, session_id=sid, new_message=message):
+        for tname, resp in _extract_tool_responses(event):
+            if tname == "get_financial_facts":
                 fact_cards.extend(resp.get("facts", []))
-            elif name == "search_disclosures":
+            elif tname == "search_disclosures":
                 citations.extend(resp.get("passages", []))
-            elif name == "escalate_to_ir":
+            elif tname == "escalate_to_ir":
                 escalated = escalated or bool(resp.get("escalated"))
-
-        # モデルの語りを逐次ストリーム
         text = _extract_text(event)
         if text:
             prose_parts.append(text)
@@ -204,10 +203,10 @@ async def run_agent_stream(query: str, company_ticker: str = "5071",
            "response": _compose("".join(prose_parts), fact_cards, citations, escalated)}
 
 
-async def run_agent(query: str, company_ticker: str = "5071") -> dict[str, Any]:
-    """非ストリーミング（評価ハーネス eval_harness.call_agent から利用）。"""
+async def run_agent(query: str, company: dict[str, Any]) -> dict[str, Any]:
+    """非ストリーミング（評価ハーネス等）。company={ticker,name,datastore_id}。"""
     final: dict[str, Any] = {}
-    async for chunk in run_agent_stream(query, company_ticker):
+    async for chunk in run_agent_stream(query, company):
         if chunk["type"] == "final":
             final = chunk["response"]
     return final
