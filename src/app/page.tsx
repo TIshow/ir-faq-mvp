@@ -1,27 +1,23 @@
 import ChatInterface from '@/components/ChatInterface';
 import { CompanyProvider } from '@/contexts/CompanyContext';
-import { CompactCompanySelector } from '@/components/CompanySelector';
+import { CompanyPicker } from '@/components/CompanyPicker';
 
 export default function Home() {
   return (
     <CompanyProvider>
-      <div className="h-screen flex flex-col bg-white dark:bg-gray-900">
-        {/* スリムな単一ヘッダー: タイトル + コンパクトな企業セレクタ */}
-        <header className="flex items-center justify-between gap-4 border-b border-gray-200 dark:border-gray-700 px-4 py-2.5">
-          <div className="flex items-baseline gap-2 min-w-0">
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white whitespace-nowrap">
-              IR Agent
-            </h1>
-            <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400 truncate">
-              企業のIR情報についてお答えします
+      <div className="flex h-screen flex-col bg-[#0a0b0d] text-zinc-100">
+        {/* Header */}
+        <header className="flex items-center justify-between gap-4 border-b border-zinc-900 px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/15 font-black text-emerald-400 ring-1 ring-emerald-500/30">
+              IR
             </span>
+            <span className="text-base font-semibold tracking-tight text-zinc-100">IR Agent</span>
           </div>
-          <div className="w-44 sm:w-64 shrink-0">
-            <CompactCompanySelector />
-          </div>
+          <CompanyPicker />
         </header>
 
-        {/* Main Chat Interface */}
+        {/* Main Chat */}
         <div className="flex-1 overflow-hidden">
           <ChatInterface />
         </div>
