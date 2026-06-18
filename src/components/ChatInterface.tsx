@@ -1,24 +1,26 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { DocumentReference } from '@/lib/firestore';
 import { useCompany } from '@/contexts/CompanyContext';
+import { AgentResponse } from '@/lib/agent-types';
+import { AgentAnswer } from '@/components/FactCard';
+
+// ガイド付き入口（企業はセレクタで選択するため企業名は含めない＝スコープ安全）
+const GUIDED_ENTRIES = [
+  '最新の決算サマリを教えてください',
+  '営業利益は前年同期比でどうでしたか？',
+  'セグメント別の業績を教えてください',
+  '配当はどうなっていますか？',
+  '中期経営計画の進捗を教えてください',
+];
 
 interface Message {
   id: string;
   type: 'user' | 'assistant';
-  content: string;
+  content: string;            // ユーザー文 / アシスタントのストリーミング中 prose
   timestamp: Date;
-  sources?: DocumentReference[];
-  confidence?: number;
-  isLoading?: boolean;
-  followUpQuestions?: string[];
-  processingSteps?: {
-    extractiveAnswersFound: number;
-    snippetsFound: number;
-    contextLength: number;
-    modelUsed: string;
-  };
+  response?: AgentResponse;   // 確定した構造化回答（アシスタント）
+  isStreaming?: boolean;
 }
 
 interface ChatInterfaceProps {
@@ -29,106 +31,92 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(sessionId);
+  const [currentSessionId] = useState<string | undefined>(sessionId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { selectedCompany } = useCompany();
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  useEffect(() => { scrollToBottom(); }, [messages]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  const patchMessage = (id: string, patch: Partial<Message>) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!inputValue.trim() || isLoading) return;
-    
-    // 企業が選択されているかチェック
     if (!selectedCompany) {
       alert('企業を選択してから質問してください。');
       return;
-    }    
+    }
 
     const userMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: inputValue.trim(),
-      timestamp: new Date()
+      id: Date.now().toString(), type: 'user', content: inputValue.trim(), timestamp: new Date(),
+    };
+    const assistantId = (Date.now() + 1).toString();
+    const assistantMessage: Message = {
+      id: assistantId, type: 'assistant', content: '', timestamp: new Date(), isStreaming: true,
     };
 
-    const loadingMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      type: 'assistant',
-      content: '考え中...',
-      timestamp: new Date(),
-      isLoading: true
-    };
-
-    setMessages(prev => [...prev, userMessage, loadingMessage]);
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setInputValue('');
     setIsLoading(true);
 
     try {
-      // Build conversation history
-      const conversationHistory = messages.map(msg => ({
-        role: msg.type as 'user' | 'assistant',
-        content: msg.content
-      }));
-
-      const response = await fetch('/api/chat', {
+      // next.config.ts の trailingSlash:true に合わせ末尾スラッシュ（308リダイレクト回避）
+      const res = await fetch('/api/chat/', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: userMessage.content,
-          sessionId: currentSessionId,
-          conversationHistory: conversationHistory,
           companyId: selectedCompany.id,
-          generateFollowUp: true
+          sessionId: currentSessionId,
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Chat request failed');
+      if (!res.ok || !res.body) throw new Error('Chat request failed');
+
+      // SSE をパース: "event: <name>\ndata: <json>\n\n"
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let prose = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let sep: number;
+        while ((sep = buffer.indexOf('\n\n')) !== -1) {
+          const raw = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+
+          let event = 'message';
+          let data = '';
+          for (const line of raw.split('\n')) {
+            if (line.startsWith('event:')) event = line.slice(6).trim();
+            else if (line.startsWith('data:')) data += line.slice(5).trim();
+          }
+          if (!data) continue;
+
+          if (event === 'delta') {
+            const { text } = JSON.parse(data);
+            prose += text ?? '';
+            patchMessage(assistantId, { content: prose });
+          } else if (event === 'final') {
+            const response = JSON.parse(data) as AgentResponse;
+            patchMessage(assistantId, { response, content: response.answer_prose, isStreaming: false });
+          }
+        }
       }
-
-      const data = await response.json();
-
-      // Update session ID if returned
-      if (data.sessionId && !currentSessionId) {
-        setCurrentSessionId(data.sessionId);
-      }
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 2).toString(),
-        type: 'assistant',
-        content: data.message,
-        timestamp: new Date(),
-        sources: data.sources || [],
-        confidence: data.confidence,
-        followUpQuestions: data.followUpQuestions || [],
-        processingSteps: data.processingSteps
-      };
-
-      // Replace loading message with actual response
-      setMessages(prev => prev.slice(0, -1).concat([assistantMessage]));
-
     } catch (error) {
       console.error('Chat error:', error);
-      
-      const errorMessage: Message = {
-        id: (Date.now() + 2).toString(),
-        type: 'assistant',
+      patchMessage(assistantId, {
         content: 'エラーが発生しました。しばらくしてから再度お試しください。',
-        timestamp: new Date()
-      };
-
-      setMessages(prev => prev.slice(0, -1).concat([errorMessage]));
+        isStreaming: false,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -136,22 +124,18 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
   const clearChat = () => {
     setMessages([]);
-    setCurrentSessionId(undefined);
     inputRef.current?.focus();
   };
 
-  const handleFollowUpClick = (question: string) => {
-    setInputValue(question);
-    inputRef.current?.focus();
+  const handleContactIR = () => {
+    // PoC: CTA。本番は IR 連絡フォーム/チケットへ。
+    alert('IR窓口へのお取り次ぎを受け付けました。');
   };
 
   return (
     <div className="flex flex-col h-full max-w-4xl mx-auto">
-      {/* Header */}
       <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-          IR太郎
-        </h1>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">IR太郎</h1>
         <button
           onClick={clearChat}
           className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -160,83 +144,44 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         </button>
       </div>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-gray-500 dark:text-gray-400 mb-4">
-              IR関連のご質問をお気軽にどうぞ
+              {selectedCompany
+                ? `${selectedCompany.name}の開示済みIR情報についてお答えします`
+                : '企業を選択してご質問ください'}
             </p>
             <div className="grid gap-2 max-w-md mx-auto text-sm">
-              <button
-                onClick={() => setInputValue('トヨタの最新の決算について教えてください')}
-                className="p-2 text-left text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
-              >
-                トヨタの最新の決算について教えてください
-              </button>
-              <button
-                onClick={() => setInputValue('自動車業界の市場動向はどうですか？')}
-                className="p-2 text-left text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
-              >
-                自動車業界の市場動向はどうですか？
-              </button>
+              {GUIDED_ENTRIES.map((entry) => (
+                <button
+                  key={entry}
+                  onClick={() => setInputValue(entry)}
+                  disabled={!selectedCompany}
+                  className="p-2 text-left text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {entry}
+                </button>
+              ))}
             </div>
           </div>
         ) : (
           messages.map((message) => (
             <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-3xl p-3 rounded-lg ${
-                message.type === 'user'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
-              }`}>
-                <div className="whitespace-pre-wrap">{message.content}</div>
-                
-                {message.sources && message.sources.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-gray-300 dark:border-gray-600">
-                    <p className="text-xs font-medium mb-2 text-gray-600 dark:text-gray-400">参考情報:</p>
-                    <div className="space-y-1">
-                      {message.sources.map((source, index) => (
-                        <div key={index} className="text-xs text-gray-600 dark:text-gray-400">
-                          • {source.title} ({source.source})
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {message.confidence && (
-                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    信頼度: {Math.round(message.confidence * 100)}%
-                  </div>
+              <div
+                className={`max-w-3xl p-3 rounded-lg ${
+                  message.type === 'user'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
+                }`}
+              >
+                {message.type === 'assistant' && message.response ? (
+                  <AgentAnswer response={message.response} onContactIR={handleContactIR} />
+                ) : (
+                  <div className="whitespace-pre-wrap">{message.content || '考え中...'}</div>
                 )}
 
-                {message.processingSteps && (
-                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    処理: {message.processingSteps.modelUsed} | 
-                    抽出回答: {message.processingSteps.extractiveAnswersFound} | 
-                    スニペット: {message.processingSteps.snippetsFound}
-                  </div>
-                )}
-
-                {message.followUpQuestions && message.followUpQuestions.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-gray-300 dark:border-gray-600">
-                    <p className="text-xs font-medium mb-2 text-gray-600 dark:text-gray-400">関連質問:</p>
-                    <div className="space-y-1">
-                      {message.followUpQuestions.map((question, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleFollowUpClick(question)}
-                          className="block w-full text-left text-xs p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800 hover:border-blue-300 dark:hover:border-blue-700"
-                        >
-                          {question}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {message.isLoading && (
+                {message.isStreaming && (
                   <div className="flex items-center mt-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
                   </div>
@@ -248,7 +193,6 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <div className="p-4 border-t border-gray-200 dark:border-gray-700">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
@@ -256,7 +200,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder={selectedCompany ? `${selectedCompany.name}についてご質問ください...` : "企業を選択してから質問してください..."}
+            placeholder={selectedCompany ? `${selectedCompany.name}についてご質問ください...` : '企業を選択してから質問してください...'}
             className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
             disabled={isLoading || !selectedCompany}
           />
