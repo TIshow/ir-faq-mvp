@@ -1,124 +1,55 @@
-# IR FAQ RAG System
+# IR Agent
 
-GCPを使用したRAG（Retrieval-Augmented Generation）システムによるIR情報チャットボット
+個人投資家が **選んだ上場企業の開示情報について自然言語で相談できる IR Agent**（B2B2C）。
+開示済み情報のみを、**出典付きで・対話的に**答える（投資助言や未開示情報は返さない）。
 
-## アーキテクチャ
+> **ドキュメントの入口**
+> - `CLAUDE.md` … プロジェクト指示・全体像・実行/デプロイ（AI/エンジニアはまずこれ）
+> - `docs/ARCHITECTURE.md` … 設計詳細（二層グラウンディング・契約・マルチテナント）
+> - `docs/HANDOFF.md` … 現状・実デプロイ済みリソース・残課題・再開手順
+> - `docs/phase1-gcp-setup.md` … GCPセットアップ（既存資産の再利用版）
+> - `docs/investor-experience-quality.md` … 投資家体験の品質仕様（受け入れ基準）
 
-- **フロントエンド**: Next.js 15 + TypeScript + Tailwind CSS
-- **検索エンジン**: Google Cloud Discovery Engine
-- **生成AI**: Vertex AI (Gemini Pro)
-- **データベース**: Cloud Firestore
-- **デプロイ**: Cloud Run
-
-## セットアップ
-
-### 1. GCPプロジェクトの準備
-
-以下のAPIを有効化してください：
-
-```bash
-gcloud services enable discoveryengine.googleapis.com
-gcloud services enable aiplatform.googleapis.com
-gcloud services enable firestore.googleapis.com
+## アーキテクチャ（2サービス・全GCP）
 ```
-
-### 2. Discovery Engine の設定
-
-1. GCPコンソールでDiscovery Engineに移動
-2. 新しい検索アプリを作成
-3. データストアを作成してQ&Aデータをアップロード
-4. エンジンIDを`.env.local`に設定
-
-### 3. Firestore の設定
-
-1. GCPコンソールでFirestoreに移動
-2. ネイティブモードでデータベースを作成
-3. 必要に応じてセキュリティルールを設定
-
-### 4. サービスアカウントの作成
-
-```bash
-gcloud iam service-accounts create ir-faq-service \
-    --display-name="IR FAQ Service Account"
-
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-    --member="serviceAccount:ir-faq-service@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-    --role="roles/discoveryengine.editor"
-
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-    --member="serviceAccount:ir-faq-service@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-    --role="roles/aiplatform.user"
-
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-    --member="serviceAccount:ir-faq-service@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-    --role="roles/datastore.user"
+ブラウザ → Cloud Run ir-frontend (Next.js 15 / TS)
+            └ /api/chat/ → Cloud Run ir-agent (Python / Google ADK / FastAPI)
+                  ├ 層1 数値: get_financial_facts（決定論。数値はLLMを通さない）
+                  ├ 層2 定性: search_disclosures（Discovery Engine: PDF+FAQ、引用付き）
+                  └ LLM: Vertex AI Gemini (gemini-2.5-flash)
 ```
+- **設計の背骨**: 数値=決定論層／語り=引用付きRAG、ガードレール（助言・予測・未開示は拒否）、マルチテナント（`src/config/companies.ts` が唯一の正）。
 
-### 5. 環境変数の設定
-
-`.env.local`ファイルは既に設定済みです。
-
-必要に応じて値を調整してください。
-
-## ローカル開発
-
+## クイックスタート（ローカル）
 ```bash
+# エージェント（:8080）
+uv sync
+cp agent/.env.example agent/.env
+gcloud auth application-default login
+gcloud auth application-default set-quota-project hallowed-trail-462613-v1
+uv run uvicorn agent.server:app --port 8080
+
+# フロント（:3000）
 npm install
-npm run dev
+AGENT_URL=http://localhost:8080 npm run dev   # → http://localhost:3000
+
+# 評価ハーネス（GCP不要のロジック検証）
+python3 eval/eval_harness.py --self-test
 ```
 
-http://localhost:3000 にアクセス
-
-## Cloud Run デプロイ
-
-### 1. Docker イメージをビルド
-
+## デプロイ（Cloud Run）
 ```bash
-gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/ir-faq-rag
+gcloud builds submit --config cloudbuild.agent.yaml         # ir-agent
+gcloud run deploy ir-frontend --source . --region us-central1 --allow-unauthenticated --port 3000
+gcloud run services update ir-frontend --region us-central1 \
+  --update-env-vars AGENT_URL=$(gcloud run services describe ir-agent --region us-central1 --format='value(status.url)')
 ```
 
-### 2. Cloud Run にデプロイ
+## 技術スタック
+Next.js 15 / TypeScript・Google ADK (Python)・Vertex AI Gemini・Discovery Engine・Cloud Run（全GCP）。
+PoCの層1数値は JSON（`agent/data/vis_facts.json`）、本番は Cloud SQL（`database/`）に切替（`FACTS_BACKEND`）。
 
-```bash
-gcloud run deploy ir-faq-rag \
-    --image gcr.io/YOUR_PROJECT_ID/ir-faq-rag \
-    --platform managed \
-    --region us-central1 \
-    --allow-unauthenticated \
-    --set-env-vars="GCP_PROJECT_ID=YOUR_PROJECT_ID,GCP_SEARCH_ENGINE_ID=YOUR_ENGINE_ID"
-```
-
-## データ投入
-
-Q&Aデータは以下の形式でDiscovery Engineにアップロードしてください：
-
-```json
-{
-  "question": "質問内容",
-  "answer": "回答内容", 
-  "company": "企業名",
-  "category": "カテゴリ"
-}
-```
-
-## 機能
-
-- 自然言語による質問・回答
-- 検索結果に基づくRAG生成
-- チャット履歴の保存
-- ソース情報の表示
-- 信頼度スコア表示
-
-## トラブルシューティング
-
-### 認証エラー
-- サービスアカウントキーが正しく設定されているか確認
-- IAMロールが適切に設定されているか確認
-
-### 検索結果が返らない
-- Discovery Engineのデータストアにデータが投入されているか確認
-- 検索エンジンIDが正しいか確認
-
-### Vertex AI エラー  
-- Vertex AI APIが有効化されているか確認
-- リージョン設定が正しいか確認
+## 現状（2026-06）
+- ✅ 全GCPで実稼働・マルチテナント切替・ガードレール・**層2の実FAQ/PDF回答（出典付き）**
+- ⚠️ 層1（数値）は実データ未投入＝数値質問は「確認できません」を返す（捏造しない方針）
+- 詳細・残課題は `docs/HANDOFF.md` と GitHub Issue #3

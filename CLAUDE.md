@@ -1,225 +1,104 @@
-# IR FAQ RAG System - 複数企業対応設計
+# IR Agent — プロジェクト指示 / 引き継ぎガイド
 
-## プロジェクト概要
+> このファイルは AI / エンジニアが最初に読む「正」のドキュメント。
+> 詳細は `docs/ARCHITECTURE.md`（設計）と `docs/HANDOFF.md`（現状・残課題・再開手順）。
 
-複数企業に対応したIR（Investor Relations）情報のRAG（Retrieval-Augmented Generation）システム。投資家が複数企業の財務情報や決算データについて自然言語で質問し、AIが適切な回答を生成する。
+## 1. これは何か
+個人投資家が **選んだ上場企業の開示情報について自然言語で相談できる「IR Agent」**（B2B2C / 発行体に提供する想定）。
+単なるFAQボットではなく、**開示済み情報のみを、出典付きで、対話的に深く言い換える**エージェント。
 
-## 技術構想
+**設計の背骨（最重要・崩さない）**
+- **数値はLLMの文章を経由させない**。数値は決定論的な「層1」から取得し、`fact_cards` としてUIへ直接出す。語り（散文）はLLMが書くが数値は持たせない。
+- **二層グラウンディング**: 層1=構造化財務ファクト（決定論）／層2=開示文書の引用付き検索（定性）。
+- **ガードレール**（コンプライアンス）: 投資助言・将来予測・未開示情報は答えない。開示済みの「会社予想」は『会社予想』と明示すれば可。不明・コーパス外は捏造せず IR 窓口へエスカレーション。
+- **マルチテナント**: 対象企業はハードコードしない。リクエストごとに企業コンテキスト（ticker/name/datastore_id）を渡す。`companies.ts` が唯一の正。
 
-### データストレージ設計
+## 2. アーキテクチャ（2層・2サービス）
+```
+ブラウザ
+  └→ Cloud Run "ir-frontend"（Next.js 15 / TypeScript・UI）
+        └ /api/chat/ が SSE プロキシ → AGENT_URL
+             └→ Cloud Run "ir-agent"（Python / Google ADK・FastAPI・頭脳）
+                  ├ 層1: get_financial_facts → 構造化ファクト（PoC=JSON / 本番=Cloud SQL）※YoY・利益率はコード計算
+                  ├ 層2: search_disclosures → Discovery Engine データストア（PDF＋FAQ）
+                  ├ escalate_to_ir → 質問ログ（痛み②: IRインテリジェンス）
+                  └ LLM: Vertex AI Gemini（現 gemini-2.5-flash）
+```
+- フロントとエージェントが**別言語・別責務なので2サービス**（Next.js=画面、Python ADK=頭脳）。
+- 回答契約 `AgentResponse = { answer_prose, fact_cards[], citations[], scope_status, scope_reason }`（`src/lib/agent-types.ts` と Python 側で一致）。
 
-#### メインデータベース: Cloud SQL (PostgreSQL)
-```sql
--- 企業マスター
-CREATE TABLE companies (
-    company_id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    ticker VARCHAR(10) UNIQUE,
-    sector VARCHAR(100),
-    market_cap BIGINT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 決算メタデータ
-CREATE TABLE financial_reports (
-    report_id SERIAL PRIMARY KEY,
-    company_id INTEGER REFERENCES companies(company_id),
-    period DATE,
-    report_type VARCHAR(50),
-    file_path VARCHAR(500),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- チャット履歴
-CREATE TABLE chat_sessions (
-    session_id SERIAL PRIMARY KEY,
-    company_id INTEGER REFERENCES companies(company_id),
-    user_id VARCHAR(255),
-    query TEXT,
-    response TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+## 3. リポジトリ構成
+```
+src/                      フロント（Next.js）
+  app/page.tsx, layout    画面
+  app/api/chat/route.ts   エージェントへの SSE プロキシ（companies.ts から企業コンテキスト送信）
+  components/ChatInterface.tsx  チャットUI（SSE受信・ストリーミング表示）
+  components/FactCard.tsx       数値カード/出典リンク/scope分岐 描画
+  components/CompanySelector.tsx 企業選択
+  config/companies.ts     企業マスター（id/name/ticker/datastoreId）＝唯一の正
+  contexts/CompanyContext.tsx
+  lib/agent-types.ts      AgentResponse 等の型（契約）
+agent/                    エージェント（Python / ADK）
+  agent.py                本体。リクエストごとに企業別 Agent 構築＋AgentResponse 合成＋ストリーミング
+  tools.py                3ツール（get_financial_facts / search_disclosures / escalate_to_ir）。企業は tool_context.state から取得
+  prompt.py               システムプロンプト（鉄則6項）
+  scope.py                入口スコープ分類（助言/予測/未開示の短絡拒否）
+  store.py / facts_store.py / db.py  層1ストア（json=PoC / cloudsql=本番 を FACTS_BACKEND で切替）
+  server.py               FastAPI（/chat の SSE, /health）
+  config.py               環境設定（.env 読込）
+  data/vis_facts.json     層1の実データ（現在は空＝捏造しない方針。ticカー別に実値を投入）
+  .env.example            ローカル設定例
+eval/
+  eval_harness.py         評価ハーネス（数値=決定論比較・コンプラ=ゼロ許容CI関門・品質eval・--self-test）
+  golden_set.vis.jsonl    ゴールデンセット（数値は実値投入待ち）
+database/                 層1本番用 Cloud SQL スキーマ（financial_facts.sql 等。未接続=将来）
+docs/                     ARCHITECTURE.md / HANDOFF.md / phase1-gcp-setup.md / investor-experience-quality.md
+Dockerfile                フロント用 / Dockerfile.agent  エージェント用
+cloudbuild.yaml           フロント用 / cloudbuild.agent.yaml  エージェント用
 ```
 
-#### 分析データベース: BigQuery
-- 決算詳細データ（パーティション: company_id, fiscal_year）
-- 集計済みメトリクス（事前計算済み指標）
-- 大量データの高速分析用
+## 4. ローカル実行
+```bash
+# エージェント（Python, port 8080）
+uv sync
+cp agent/.env.example agent/.env          # GOOGLE_GENAI_USE_VERTEXAI=TRUE 等を確認
+gcloud auth application-default login      # Vertex/Discovery Engine 用 ADC
+gcloud auth application-default set-quota-project hallowed-trail-462613-v1
+uv run uvicorn agent.server:app --port 8080
 
-### RAG実装アーキテクチャ
+# フロント（Next.js, port 3000）
+npm install
+AGENT_URL=http://localhost:8080 npm run dev
+# → http://localhost:3000
 
-#### 文書ストレージ: Cloud Storage
-```
-/raw-documents/{company_id}/{period}/
-├── annual_report.pdf
-├── quarterly_report.pdf
-└── presentation.pdf
-
-/processed-documents/{company_id}/{period}/
-├── extracted_text.json
-├── financial_data.json
-└── metadata.json
+# 評価ハーネスのロジック確認（GCP不要）
+python3 eval/eval_harness.py --self-test
 ```
 
-#### 検索エンジン: Discovery Engine（現状維持）
-- 企業別データストア分離
-- ベクトル検索機能
-- 企業コンテキスト保持
-
-### アプリケーション設計
-
+## 5. デプロイ（全て GCP / Cloud Run）
+```bash
+# エージェント
+gcloud builds submit --config cloudbuild.agent.yaml
+# フロント
+gcloud run deploy ir-frontend --source . --region us-central1 --allow-unauthenticated --port 3000
+# フロントに AGENT_URL を設定
+gcloud run services update ir-frontend --region us-central1 \
+  --update-env-vars AGENT_URL=$(gcloud run services describe ir-agent --region us-central1 --format='value(status.url)')
 ```
-User → Next.js Frontend → Cloud Run API
-                           ├── 企業選択サービス → Cloud SQL
-                           ├── RAG検索サービス → Discovery Engine
-                           └── LLM応答生成 → Vertex AI
+詳細・既存資産の再利用は `docs/phase1-gcp-setup.md`。
+
+## 6. 規約・注意
+- **数値を捏造しない**。層1に実データが無ければ数値は返さず層2/エスカレーションへ。
+- **企業をハードコードしない**。新企業は `companies.ts` に追加し、対応する Discovery Engine データストアを用意。
+- **モデルは交換可能に保つ**。`MODEL_NAME`（env / config）で切替。現状 `gemini-2.5-flash`（このプロジェクトで `gemini-3-*` は未開放）。
+- コミットは小さくPRで。main 直 push しない（PR→squash merge 運用）。
+- 秘密情報はコミットしない（`.env*` は gitignore、`agent/.env.example` のみ追跡）。
+
+## 7. 現状サマリ（2026-06）
+- ✅ 全GCPで実稼働（Vercel廃止）。マルチテナント切替・ガードレール・**層2の実FAQ/PDF回答（出典付き）**が動作。
+- ⚠️ **層1（数値）は空**＝数値質問は「確認できません」を返す（実数値の抽出が次の作業）。
+- 詳細・残課題・再開手順は **`docs/HANDOFF.md`** と GitHub Issue #3。
 ```
-
-## 現在システムとの主な差異
-
-| 項目 | 現在 | 構想 |
-|------|------|------|
-| データベース | Firestore | Cloud SQL + BigQuery |
-| 検索エンジン | Discovery Engine | Discovery Engine（継続） |
-| 企業対応 | 単一企業 | 複数企業 |
-| 企業選択 | なし | 企業検索・選択機能 |
-| データパイプライン | 手動 | 自動化 |
-
-## 改善された設計
-
-### 1. セキュリティ強化
-- Row Level Security (RLS) 実装
-- 企業別IAMロール設定
-- データアクセス監査ログ
-
-### 2. パフォーマンス最適化
-- Redis/Memorystore でクエリ結果キャッシュ
-- CDN で静的コンテンツ配信
-- Connection Pooling 実装
-
-### 3. 監視・運用
-- Cloud Monitoring でメトリクス監視
-- Error Reporting で例外追跡
-- SLO/SLI 定義
-
-### 4. データ品質保証
-- Data Quality Engine 導入
-- 自動データ検証パイプライン
-- 異常検知アラート設定
-
-## 実装フェーズ計画
-
-### Phase 1: 基盤構築
-- [ ] Cloud SQL (PostgreSQL) セットアップ
-- [ ] 企業マスターDB構築
-- [ ] 基本的なスキーマ設計
-
-### Phase 2: データ移行
-- [ ] 既存Firestoreデータの移行
-- [ ] Discovery Engineデータストア再構築
-- [ ] データ整合性チェック
-
-### Phase 3: 企業選択機能
-- [ ] 企業検索API実装
-- [ ] 企業選択UI開発
-- [ ] 企業別コンテキスト管理
-
-### Phase 4: RAG機能拡張
-- [ ] 企業別RAG検索ロジック
-- [ ] BigQueryとの連携
-- [ ] 回答生成の最適化
-
-### Phase 5: 運用機能
-- [ ] 監視・ログ機能
-- [ ] 自動データパイプライン
-- [ ] 複数企業データ追加
-
-## 重要な技術的決定
-
-### Discovery Engine継続利用
-- 理由: 現在のシステムが安定稼働中
-- 移行コスト・リスクを考慮し段階的アプローチ
-
-### Cloud SQL選択
-- 理由: リレーショナルデータの管理が容易
-- 企業間の関係性データを効率的に管理
-
-### BigQuery併用
-- 理由: 大量の財務データ分析に最適
-- 集計済みメトリクスで高速応答
-
-## 開発・運用注意事項
-
-### コスト管理
-- BigQueryクエリ量の監視とキャッシュ戦略
-- Cloud SQL インスタンスサイズの最適化
-- Discovery Engine使用量の監視
-
-### セキュリティ
-- 企業データの完全分離
-- 個人情報保護の徹底
-- APIアクセス制御の実装
-
-### パフォーマンス
-- データベースインデックス最適化
-- キャッシュ戦略の実装
-- 検索レスポンス時間の監視
-
-### データ品質
-- 定期的なデータ検証
-- 異常データの自動検出
-- データ更新の自動化
-
-## テスト戦略
-
-### 単体テスト
-- API エンドポイントテスト
-- データベース操作テスト
-- RAG検索ロジックテスト
-
-### 統合テスト
-- エンドツーエンドテスト
-- 企業選択からRAG応答まで
-- データパイプラインテスト
-
-### 負荷テスト
-- 同時接続数テスト
-- 大量データ処理テスト
-- レスポンス時間測定
-
-## 監視項目
-
-### システムメトリクス
-- API レスポンス時間
-- データベース接続数
-- エラー発生率
-
-### ビジネスメトリクス
-- 企業別利用状況
-- 質問カテゴリ分析
-- 回答精度指標
-
-### 運用メトリクス
-- データ更新頻度
-- システム可用性
-- コスト効率性
-
-## 災害対策
-
-### バックアップ戦略
-- Cloud SQL自動バックアップ
-- BigQueryデータセット複製
-- Cloud Storage多重化
-
-### リカバリ手順
-- データベース復旧手順
-- 検索インデックス再構築
-- システム全体の復旧テスト
-
-## 次のアクション
-
-1. 現在のシステムの詳細調査
-2. 企業マスターデータの準備
-3. データ移行計画の策定
-4. 開発チームでの技術レビュー
-5. プロトタイプの開発開始
+GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#10 マージ済）
+GCP project: hallowed-trail-462613-v1 / region us-central1
+```
