@@ -16,7 +16,7 @@ from typing import Any
 from . import config
 
 _DATA_DIR = pathlib.Path(__file__).with_name("data")
-_DEFAULT_FACTS = _DATA_DIR / "vis_facts.json"
+_DEFAULT_FACTS = _DATA_DIR / "facts.json"
 _ESCALATIONS = _DATA_DIR / "escalations.jsonl"
 
 

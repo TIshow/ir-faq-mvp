@@ -15,7 +15,7 @@
 | 検索アプリ | Discovery Engine engine **ir-bot-mvp-app_1750418304373** | 3データストアを束ねる |
 | データストア | **vis-ir-data_1752223995110** / **philcompany-ir-data_1752224320775** / **peers-ir-data_1752651535271** | GENERIC・chunking config。コンソールは「AI Applications」 |
 | GCS | gs://vis-ir-data, gs://philcompany-ir-data, gs://peers_ir_data | 各 `/pdf/`（決算PDF）＋ `/qa/faq.csv`（定性Q&A） |
-| 層1 DB(本番用) | Cloud SQL **未作成** | `database/financial_facts.sql`。PoCはJSON(`agent/data/vis_facts.json`)で `FACTS_BACKEND=json` |
+| 層1 DB(本番用) | Cloud SQL **未作成** | `database/financial_facts.sql`。PoCはJSON(`agent/data/facts.json`)で `FACTS_BACKEND=json` |
 | Firestore | (default) | 旧構成の残骸・**未使用** |
 | 旧フロント | Cloud Run ir-bot-mvp | **削除済み** |
 | Vercel | — | **削除済み**（全GCPに集約） |
@@ -46,7 +46,7 @@ curl -s -N -X POST https://ir-frontend-255752121803.us-central1.run.app/api/chat
 
 ## 5. 次にやること（優先度順）
 1. **層1の数値を点灯（ヴィス1社・深掘り）**
-   - 決算PDF/XBRL から検証済み数値を抽出し `agent/data/vis_facts.json` に投入（ticカー別。捏造禁止）。
+   - 決算PDF/XBRL から検証済み数値を抽出し `agent/data/facts.json` に投入（ticカー別。捏造禁止）。
    - 併せて `eval/golden_set.vis.jsonl` の `gold_numbers`（現在空・`note`付き）を実値で埋める。
    - 目標: 「営業利益は？」が **数値カード(+YoY)+出典** で返る。`python3 eval/eval_harness.py` のCI関門（数値100%）を通す。
    - 本格化するなら **XBRL(EDINET/TDnet)を正本**に（`docs/phase1-gcp-setup.md`／Issue #3）。

@@ -47,7 +47,7 @@ gcloud run services update ir-frontend --region us-central1 \
 
 ## 技術スタック
 Next.js 15 / TypeScript・Google ADK (Python)・Vertex AI Gemini・Discovery Engine・Cloud Run（全GCP）。
-PoCの層1数値は JSON（`agent/data/vis_facts.json`）、本番は Cloud SQL（`database/`）に切替（`FACTS_BACKEND`）。
+PoCの層1数値は JSON（`agent/data/facts.json`）、本番は Cloud SQL（`database/`）に切替（`FACTS_BACKEND`）。
 
 ## 現状（2026-06）
 - ✅ 全GCPで実稼働・マルチテナント切替・ガードレール・**層2の実FAQ/PDF回答（出典付き）**

@@ -46,7 +46,7 @@ agent/                    エージェント（Python / ADK）
   store.py / facts_store.py / db.py  層1ストア（json=PoC / cloudsql=本番 を FACTS_BACKEND で切替）
   server.py               FastAPI（/chat の SSE, /health）
   config.py               環境設定（.env 読込）
-  data/vis_facts.json     層1の実データ（現在は空＝捏造しない方針。ticカー別に実値を投入）
+  data/facts.json     層1の実データ（現在は空＝捏造しない方針。ticカー別に実値を投入）
   .env.example            ローカル設定例
 eval/
   eval_harness.py         評価ハーネス（数値=決定論比較・コンプラ=ゼロ許容CI関門・品質eval・--self-test）
