@@ -31,8 +31,11 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        // 企業コンテキストは companies.ts が唯一の正（エージェント側はハードコードしない）
         message,
-        companyTicker: company.ticker ?? '5071',
+        companyTicker: company.ticker ?? company.id,
+        companyName: company.name,
+        datastoreId: company.datastoreId,
         sessionId: sessionId || 's1',
       }),
     });

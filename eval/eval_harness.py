@@ -83,8 +83,10 @@ def call_agent(query: str, company_id: str = "vis") -> dict[str, Any]:
 
     from agent.agent import run_agent  # 遅延 import
 
-    ticker = {"vis": "5071"}.get(company_id, company_id)
-    return asyncio.run(run_agent(query, ticker))
+    # ゴールデンセットはヴィス。company コンテキストを明示（ハードコードはここ＝テスト範囲のみ）
+    company = {"ticker": "5071", "name": "株式会社ヴィス",
+               "datastore_id": "vis-ir-data_1752223995110"}
+    return asyncio.run(run_agent(query, company))
 
 
 # --------------------------------------------------------------------------- #

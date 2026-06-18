@@ -25,7 +25,10 @@ app = FastAPI(title="IR Agent")
 
 class ChatRequest(BaseModel):
     message: str
-    companyTicker: str = "5071"
+    # 企業コンテキスト（フロントの companies.ts が唯一の正・ハードコードしない）
+    companyTicker: str
+    companyName: str = "対象企業"
+    datastoreId: str | None = None
     sessionId: str = "s1"
     userId: str = "anon"
 
@@ -41,10 +44,12 @@ def health() -> dict[str, str]:
 
 @app.post("/chat")
 async def chat(req: ChatRequest) -> StreamingResponse:
+    company = {"ticker": req.companyTicker, "name": req.companyName, "datastore_id": req.datastoreId}
+
     async def gen():
         try:
             async for chunk in run_agent_stream(
-                req.message, req.companyTicker, user_id=req.userId, session_id=req.sessionId
+                req.message, company, user_id=req.userId, session_id=req.sessionId
             ):
                 if chunk["type"] == "prose_delta":
                     yield _sse("delta", {"text": chunk["text"]})
