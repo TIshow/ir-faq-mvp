@@ -1,22 +1,29 @@
+# フロント（Next.js）を Cloud Run にデプロイ。
+# サービス名: ir-frontend（旧 ir-bot-mvp とは別。混同回避）
+# _AGENT_URL: フロントの /api/chat が叩く Python エージェント(Cloud Run ir-agent)のURL。
+#   トリガー実行時に substitution で渡す（例: --substitutions=_AGENT_URL=https://ir-agent-xxxx.run.app）
+substitutions:
+  _AGENT_URL: ""   # 未設定だとチャットは動かない（UIのみ）。agentデプロイ後に設定
+
 steps:
   # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/ir-bot-mvp', '.']
-    timeout: '1200s'  # 20 minutes
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/ir-frontend', '.']
+    timeout: '1200s'
 
-  # Push the container image to Container Registry
+  # Push the container image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/ir-bot-mvp']
+    args: ['push', 'gcr.io/$PROJECT_ID/ir-frontend']
 
-  # Deploy container image to Cloud Run
+  # Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
-      - 'ir-bot-mvp'
+      - 'ir-frontend'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/ir-bot-mvp'
+      - 'gcr.io/$PROJECT_ID/ir-frontend'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -30,9 +37,10 @@ steps:
       - '1'
       - '--timeout'
       - '300'
+      - '--set-env-vars'
+      - 'AGENT_URL=${_AGENT_URL}'
 
-# Increase overall timeout
-timeout: '1800s'  # 30 minutes
+timeout: '1800s'
 
 images:
-  - 'gcr.io/$PROJECT_ID/ir-bot-mvp'
+  - 'gcr.io/$PROJECT_ID/ir-frontend'
