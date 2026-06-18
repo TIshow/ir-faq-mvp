@@ -12,12 +12,20 @@ import sqlalchemy
 def init_connection_pool():
     """Cloud SQL PostgreSQL connection using Cloud SQL Connector"""
     
-    # Cloud SQL connection details
-    instance_connection_name = "hallowed-trail-462613-v1:us-central1:ir-faq-db"
-    db_user = "ir_app_user"
-    db_pass = "AppUser2024SecurePass"
-    db_name = "ir_faq"
-    
+    # Cloud SQL connection details（認証情報は環境変数/Secret Managerから注入）
+    instance_connection_name = os.environ.get(
+        "DB_INSTANCE_CONNECTION_NAME",
+        "hallowed-trail-462613-v1:us-central1:ir-faq-db",
+    )
+    db_user = os.environ.get("DB_USER", "ir_app_user")
+    db_pass = os.environ.get("DB_PASSWORD")
+    db_name = os.environ.get("DB_NAME", "ir_faq")
+
+    if not db_pass:
+        raise RuntimeError(
+            "環境変数 DB_PASSWORD が未設定です。Secret Manager等から注入してください。"
+        )
+
     # Initialize Cloud SQL Connector
     connector = Connector()
     
