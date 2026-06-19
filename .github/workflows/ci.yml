@@ -1,0 +1,72 @@
+name: CI
+
+# PR と main への push で実行。
+# このリポは「Next.js(フロント)」と「Python/ADK(エージェント)」の二刀流なので
+# ジョブを分けて並列実行する。
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# 同一PR/ブランチで新しい push が来たら、進行中の古い実行を自動キャンセル
+#（CI時間とランナーコストの節約）。
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# 最小権限の原則（既定の広い権限を与えない）。CIはコード読み取りのみで足りる。
+permissions:
+  contents: read
+
+jobs:
+  # --- フロント（Next.js / TypeScript）-------------------------------------
+  frontend:
+    name: Frontend (Next.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # 本番イメージ(Dockerfile)と一致
+          cache: npm # package-lock.json から依存をキャッシュ
+
+      - name: Install (npm ci)
+        run: npm ci
+
+      # 重要: next.config.mjs は build 時の型/Lint エラーを握り潰す設定のため、
+      # CIでは type-check と lint を「明示的に」回して初めてエラーを検知できる。
+      - name: Type check (tsc --noEmit)
+        run: npm run type-check
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Build (next build)
+        run: npm run build
+
+  # --- エージェント（Python / uv / ADK）------------------------------------
+  agent:
+    name: Agent (Python / uv)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true # uv.lock からの依存をキャッシュ
+
+      - name: Install (uv sync --frozen)
+        run: uv sync --frozen # ロックファイル厳守（dev=ruff も入る）
+
+      - name: Lint (ruff check)
+        run: uv run ruff check agent eval scripts
+
+      - name: Format check (ruff format)
+        run: uv run ruff format --check agent eval scripts
+
+      # GCP不要でハーネス自体のロジックを検証（数値/コンプラ関門のリグレッション検出）
+      - name: Eval harness self-test
+        run: uv run python eval/eval_harness.py --self-test

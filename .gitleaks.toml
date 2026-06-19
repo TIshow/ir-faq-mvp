@@ -1,0 +1,13 @@
+# gitleaks 設定（CI のシークレット検出）。既定ルールに加え、是正済みの
+# 履歴上の値を許可リスト化して全履歴スキャンの誤検知を防ぐ。
+title = "IR Agent gitleaks config"
+
+[extend]
+useDefault = true # gitleaks の標準ルールセットを継承
+
+[allowlist]
+description = "是正済みの履歴上シークレット。現行コードからは除去済み（Secret Manager/env 化）。全履歴スキャンで過去コミットを再検出して失敗するのを防ぐためのみ許可。"
+regexes = [
+  # database/init-db.py に過去コミットされていた平文DBパスワード（除去・ローテーション済み）。
+  '''AppUser2024SecurePass''',
+]
