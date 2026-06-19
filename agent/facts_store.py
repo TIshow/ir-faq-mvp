@@ -88,6 +88,11 @@ def summary(ticker: str) -> dict[str, Any]:
 def insert_escalation(company_id: Any, question: str, reason: str, scope_status: str) -> None:
     """拒否・不明の質問を JSONL に追記（PoC）。PIIは持たない。"""
     _ESCALATIONS.parent.mkdir(parents=True, exist_ok=True)
-    rec = {"company_id": company_id, "question": question, "reason": reason, "scope_status": scope_status}
+    rec = {
+        "company_id": company_id,
+        "question": question,
+        "reason": reason,
+        "scope_status": scope_status,
+    }
     with _ESCALATIONS.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")

@@ -15,7 +15,7 @@ except Exception:
 
 # --- GCP / モデル -----------------------------------------------------------
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "hallowed-trail-462613-v1")
-LOCATION = os.environ.get("GCP_LOCATION", "global")            # Discovery Engine
+LOCATION = os.environ.get("GCP_LOCATION", "global")  # Discovery Engine
 VERTEX_LOCATION = os.environ.get("GCP_VERTEX_AI_LOCATION", "us-central1")
 
 # 既定は現プロジェクトで利用可能な gemini-2.5-flash（gemini-3-* は未開放）。

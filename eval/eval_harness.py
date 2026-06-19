@@ -22,9 +22,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 GOLDEN_DEFAULT = Path(__file__).with_name("golden_set.vis.jsonl")
 
@@ -34,9 +35,9 @@ COMPLIANCE_CRITICAL = {"advice", "undisclosed"}
 # 投資家体験 品質eval のしきい値（docs/investor-experience-quality.md §3）
 # LLM-as-judge の 1〜5 採点に対する合格ライン。
 QUALITY_THRESHOLDS = {
-    "depth": 4.0,                # Q1 合成の深さ
-    "educational": 4.0,          # Q2 教育的足場（用語質問のみ）
-    "tone": 4.0,                 # 中立・専門・丁寧
+    "depth": 4.0,  # Q1 合成の深さ
+    "educational": 4.0,  # Q2 教育的足場（用語質問のみ）
+    "tone": 4.0,  # 中立・専門・丁寧
     "followup_usefulness": 3.5,  # Q3 接地したフォローアップ
 }
 # 体感速度（Q4）
@@ -84,15 +85,20 @@ def call_agent(query: str, company_id: str = "vis") -> dict[str, Any]:
     from agent.agent import run_agent  # 遅延 import
 
     # ゴールデンセットはヴィス。company コンテキストを明示（ハードコードはここ＝テスト範囲のみ）
-    company = {"ticker": "5071", "name": "株式会社ヴィス",
-               "datastore_id": "vis-ir-data_1752223995110"}
+    company = {
+        "ticker": "5071",
+        "name": "株式会社ヴィス",
+        "datastore_id": "vis-ir-data_1752223995110",
+    }
     return asyncio.run(run_agent(query, company))
 
 
 # --------------------------------------------------------------------------- #
 # 決定論的な数値マッチャ
 # --------------------------------------------------------------------------- #
-def numbers_match(gold_numbers: list[dict[str, Any]], fact_cards: list[dict[str, Any]]) -> tuple[bool, list[str]]:
+def numbers_match(
+    gold_numbers: list[dict[str, Any]], fact_cards: list[dict[str, Any]]
+) -> tuple[bool, list[str]]:
     """
     gold_numbers の全件が fact_cards のいずれかに (metric_key, period) で一致し、
     値が tolerance 以内で合致するか。1件でも外れたら不合格（全問正解主義）。
@@ -115,11 +121,15 @@ def numbers_match(gold_numbers: list[dict[str, Any]], fact_cards: list[dict[str,
             notes.append(f"数値が解釈不能: {mk}@{period} -> {match.get('valueNumeric')!r}")
             return False, notes
         if abs(actual - float(gold["value"])) > tol:
-            notes.append(f"数値不一致: {mk}@{period} gold={gold['value']} actual={actual} (tol={tol})")
+            notes.append(
+                f"数値不一致: {mk}@{period} gold={gold['value']} actual={actual} (tol={tol})"
+            )
             return False, notes
         # basis（実績/予想）の整合（gold に指定があれば）
         if "basis" in gold and match.get("basis") != gold["basis"]:
-            notes.append(f"basis不一致: {mk}@{period} gold={gold['basis']} actual={match.get('basis')}")
+            notes.append(
+                f"basis不一致: {mk}@{period} gold={gold['basis']} actual={match.get('basis')}"
+            )
             return False, notes
     return True, notes
 
@@ -139,8 +149,9 @@ def citations_present(gold_citations: list[dict[str, Any]], response: dict[str, 
 # --------------------------------------------------------------------------- #
 # 投資家体験 品質eval（docs/investor-experience-quality.md）
 # --------------------------------------------------------------------------- #
-def judge_quality(query: str, category: str, response: dict[str, Any],
-                  reference_citations: list[dict[str, Any]]) -> dict[str, float]:
+def judge_quality(
+    query: str, category: str, response: dict[str, Any], reference_citations: list[dict[str, Any]]
+) -> dict[str, float]:
     """
     LLM-as-judge で答えの質を 1〜5 採点する（depth/educational/tone/followup_usefulness）。
     Task #6 で Vertex AI Gen AI Evaluation / judgeモデル呼び出しを実装する。
@@ -152,7 +163,9 @@ def judge_quality(query: str, category: str, response: dict[str, Any],
     )
 
 
-def quality_thresholds_pass(scores: dict[str, float], is_term_question: bool) -> tuple[bool, list[str]]:
+def quality_thresholds_pass(
+    scores: dict[str, float], is_term_question: bool
+) -> tuple[bool, list[str]]:
     """品質スコアが QUALITY_THRESHOLDS を満たすか。educational は用語質問のみ評価。"""
     notes: list[str] = []
     ok = True
@@ -253,14 +266,22 @@ def summarize(results: list[CaseResult]) -> dict[str, Any]:
 def print_report(results: list[CaseResult], summary: dict[str, Any]) -> None:
     print("\n=== IR Agent 評価レポート ===")
     for r in results:
-        flag = "✅" if (r.scope_ok and r.numbers_ok and r.citations_ok and not r.compliance_violation) else "❌"
-        print(f"{flag} [{r.id}] {r.category} scope={r.actual_scope}(期待={r.expected_scope}) "
-              f"num={'OK' if r.numbers_ok else 'NG'} cite={'OK' if r.citations_ok else 'NG'}")
+        flag = (
+            "✅"
+            if (r.scope_ok and r.numbers_ok and r.citations_ok and not r.compliance_violation)
+            else "❌"
+        )
+        print(
+            f"{flag} [{r.id}] {r.category} scope={r.actual_scope}(期待={r.expected_scope}) "
+            f"num={'OK' if r.numbers_ok else 'NG'} cite={'OK' if r.citations_ok else 'NG'}"
+        )
         for n in r.notes:
             print(f"      - {n}")
     print("\n--- サマリ ---")
-    print(f"数値一致率: {summary['numeric_rate']*100:.1f}% ({summary['numeric_pass']}/{summary['answered_total']})")
-    print(f"スコープ正解率: {summary['scope_accuracy']*100:.1f}%")
+    print(
+        f"数値一致率: {summary['numeric_rate'] * 100:.1f}% ({summary['numeric_pass']}/{summary['answered_total']})"
+    )
+    print(f"スコープ正解率: {summary['scope_accuracy'] * 100:.1f}%")
     print(f"コンプラ違反: {summary['compliance_violations']} 件")
     print(f"CI関門(ゼロ許容): {'PASS ✅' if summary['gate_pass'] else 'FAIL ❌'}")
 
@@ -307,70 +328,98 @@ def _self_test() -> int:
     # 数値一致（合格）
     resp_ok = {
         "answer_prose": "増益となりました。",
-        "fact_cards": [{"metricKey": "operating_profit", "period": "2025FY",
-                        "valueNumeric": 314, "basis": "actual",
-                        "source": {"doc": "2025年4Q決算短信", "page": 3}}],
+        "fact_cards": [
+            {
+                "metricKey": "operating_profit",
+                "period": "2025FY",
+                "valueNumeric": 314,
+                "basis": "actual",
+                "source": {"doc": "2025年4Q決算短信", "page": 3},
+            }
+        ],
         "citations": [{"doc": "2025年4Q決算短信", "page": 3}],
         "scope_status": "answered",
     }
-    m, _ = numbers_match([{"metric_key": "operating_profit", "period": "2025FY", "value": 314, "tolerance": 0}],
-                         resp_ok["fact_cards"])
-    ok &= (m is True)
+    m, _ = numbers_match(
+        [{"metric_key": "operating_profit", "period": "2025FY", "value": 314, "tolerance": 0}],
+        resp_ok["fact_cards"],
+    )
+    ok &= m is True
 
     # 数値不一致（不合格）
-    m2, _ = numbers_match([{"metric_key": "operating_profit", "period": "2025FY", "value": 315, "tolerance": 0}],
-                          resp_ok["fact_cards"])
-    ok &= (m2 is False)
+    m2, _ = numbers_match(
+        [{"metric_key": "operating_profit", "period": "2025FY", "value": 315, "tolerance": 0}],
+        resp_ok["fact_cards"],
+    )
+    ok &= m2 is False
 
     # カード欠落（不合格）
-    m3, _ = numbers_match([{"metric_key": "revenue", "period": "2025FY", "value": 5200, "tolerance": 0}],
-                          resp_ok["fact_cards"])
-    ok &= (m3 is False)
+    m3, _ = numbers_match(
+        [{"metric_key": "revenue", "period": "2025FY", "value": 5200, "tolerance": 0}],
+        resp_ok["fact_cards"],
+    )
+    ok &= m3 is False
 
     # コンプラ違反検出: advice を answered で返す
     case_adv = GoldCase("t-adv", "買うべき?", "advice", "refused", [], [], "advice")
     r_adv = evaluate_case(case_adv, {"scope_status": "answered", "fact_cards": [], "citations": []})
-    ok &= (r_adv.compliance_violation is True)
+    ok &= r_adv.compliance_violation is True
 
     # 正しく拒否（違反なし）
-    r_adv_ok = evaluate_case(case_adv, {"scope_status": "refused", "fact_cards": [], "citations": []})
-    ok &= (r_adv_ok.compliance_violation is False and r_adv_ok.scope_ok is True)
+    r_adv_ok = evaluate_case(
+        case_adv, {"scope_status": "refused", "fact_cards": [], "citations": []}
+    )
+    ok &= r_adv_ok.compliance_violation is False and r_adv_ok.scope_ok is True
 
     # 関門: 違反1件で FAIL
     summary = summarize([r_adv])
-    ok &= (summary["gate_pass"] is False)
+    ok &= summary["gate_pass"] is False
 
     # 関門: 全合格で PASS
-    case_fact = GoldCase("t-fact", "営業利益?", "fact", "answered",
-                         [{"metric_key": "operating_profit", "period": "2025FY", "value": 314, "tolerance": 0}],
-                         [{"doc": "2025年4Q決算短信", "page": 3}], None)
+    case_fact = GoldCase(
+        "t-fact",
+        "営業利益?",
+        "fact",
+        "answered",
+        [{"metric_key": "operating_profit", "period": "2025FY", "value": 314, "tolerance": 0}],
+        [{"doc": "2025年4Q決算短信", "page": 3}],
+        None,
+    )
     summary2 = summarize([evaluate_case(case_fact, resp_ok), r_adv_ok])
-    ok &= (summary2["gate_pass"] is True and summary2["numeric_rate"] == 1.0)
+    ok &= summary2["gate_pass"] is True and summary2["numeric_rate"] == 1.0
 
     # 品質しきい値: 合格／未達
     qp, _ = quality_thresholds_pass(
-        {"depth": 4.2, "tone": 4.5, "followup_usefulness": 3.6}, is_term_question=False)
-    ok &= (qp is True)
+        {"depth": 4.2, "tone": 4.5, "followup_usefulness": 3.6}, is_term_question=False
+    )
+    ok &= qp is True
     qf, _ = quality_thresholds_pass(
-        {"depth": 3.5, "tone": 4.5, "followup_usefulness": 3.6}, is_term_question=False)
-    ok &= (qf is False)
+        {"depth": 3.5, "tone": 4.5, "followup_usefulness": 3.6}, is_term_question=False
+    )
+    ok &= qf is False
     # educational は用語質問のみ評価
     qskip, _ = quality_thresholds_pass(
-        {"depth": 4.2, "tone": 4.5, "followup_usefulness": 3.6}, is_term_question=False)
-    ok &= (qskip is True)  # educational欠落でも非用語なら影響なし
+        {"depth": 4.2, "tone": 4.5, "followup_usefulness": 3.6}, is_term_question=False
+    )
+    ok &= qskip is True  # educational欠落でも非用語なら影響なし
     qterm, _ = quality_thresholds_pass(
-        {"depth": 4.2, "tone": 4.5, "followup_usefulness": 3.6, "educational": 3.0}, is_term_question=True)
-    ok &= (qterm is False)  # 用語質問で educational 未達
+        {"depth": 4.2, "tone": 4.5, "followup_usefulness": 3.6, "educational": 3.0},
+        is_term_question=True,
+    )
+    ok &= qterm is False  # 用語質問で educational 未達
 
     # dead-end チェック
-    ok &= (dead_end_ok({"scope_status": "escalated", "scope_reason": "out_of_corpus"}) is True)
-    ok &= (dead_end_ok({"scope_status": "escalated"}) is False)
-    ok &= (dead_end_ok({"scope_status": "refused", "answer_prose": "開示済みの範囲ではこちらです…"}) is True)
-    ok &= (dead_end_ok({"scope_status": "refused", "answer_prose": "", "fact_cards": []}) is False)
+    ok &= dead_end_ok({"scope_status": "escalated", "scope_reason": "out_of_corpus"}) is True
+    ok &= dead_end_ok({"scope_status": "escalated"}) is False
+    ok &= (
+        dead_end_ok({"scope_status": "refused", "answer_prose": "開示済みの範囲ではこちらです…"})
+        is True
+    )
+    ok &= dead_end_ok({"scope_status": "refused", "answer_prose": "", "fact_cards": []}) is False
 
     # レイテンシ予算
-    ok &= (latency_ok({"first_token_s": 1.2, "complete_s": 5.0}) is True)
-    ok &= (latency_ok({"first_token_s": 2.5, "complete_s": 5.0}) is False)
+    ok &= latency_ok({"first_token_s": 1.2, "complete_s": 5.0}) is True
+    ok &= latency_ok({"first_token_s": 2.5, "complete_s": 5.0}) is False
 
     print("セルフテスト:", "PASS ✅" if ok else "FAIL ❌")
     return 0 if ok else 1
@@ -379,7 +428,9 @@ def _self_test() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description="IR Agent 評価ハーネス")
     ap.add_argument("--golden", type=Path, default=GOLDEN_DEFAULT, help="ゴールデンセット(.jsonl)")
-    ap.add_argument("--self-test", action="store_true", help="エージェント不要でハーネスのロジックを検証")
+    ap.add_argument(
+        "--self-test", action="store_true", help="エージェント不要でハーネスのロジックを検証"
+    )
     args = ap.parse_args()
 
     if args.self_test:

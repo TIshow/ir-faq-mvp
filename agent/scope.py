@@ -18,9 +18,9 @@ Reason = str  # 'advice' | 'prediction' | 'undisclosed' | 'out_of_corpus' | 'unk
 
 @dataclass
 class ScopeDecision:
-    status: str             # 'answered' | 'refused' | 'escalated'
-    reason: Reason | None    # refused/escalated のとき
-    message: str | None      # 短絡時にユーザーへ返す丁寧文（answered では None）
+    status: str  # 'answered' | 'refused' | 'escalated'
+    reason: Reason | None  # refused/escalated のとき
+    message: str | None  # 短絡時にユーザーへ返す丁寧文（answered では None）
 
 
 # 投資助言（買う/売る/割安・割高/今が買い時 等）
@@ -48,13 +48,15 @@ def classify_scope(query: str) -> ScopeDecision:
 
     if _UNDISCLOSED.search(q):
         return ScopeDecision(
-            "refused", "undisclosed",
+            "refused",
+            "undisclosed",
             "未開示の情報にはお答えできません。すでに開示されている内容についてはお手伝いできます。",
         )
 
     if _ADVICE.search(q):
         return ScopeDecision(
-            "refused", "advice",
+            "refused",
+            "advice",
             "投資判断の助言はいたしかねます。開示済みの業績や事業内容についてはお答えできますので、"
             "知りたい点をお聞かせください。",
         )
@@ -62,7 +64,8 @@ def classify_scope(query: str) -> ScopeDecision:
     # 「会社予想」を尋ねる質問は予測ではない（開示事実）→ 通す
     if _PREDICTION.search(q) and not _COMPANY_FORECAST_OK.search(q):
         return ScopeDecision(
-            "refused", "prediction",
+            "refused",
+            "prediction",
             "将来の予測はいたしかねます。開示済みの『会社予想』であればご案内できます。",
         )
 

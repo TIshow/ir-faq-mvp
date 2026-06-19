@@ -78,20 +78,26 @@ def query_facts(
         """
     )
     with get_engine().connect() as conn:
-        rows = conn.execute(
-            sql,
-            {
-                "cid": company_id,
-                "mks": list(metric_keys),
-                "periods": list(periods),
-                "cons": consolidated,
-                "fc": is_forecast,
-            },
-        ).mappings().all()
+        rows = (
+            conn.execute(
+                sql,
+                {
+                    "cid": company_id,
+                    "mks": list(metric_keys),
+                    "periods": list(periods),
+                    "cons": consolidated,
+                    "fc": is_forecast,
+                },
+            )
+            .mappings()
+            .all()
+        )
     return [dict(r) for r in rows]
 
 
-def insert_escalation(company_id: int | None, question: str, reason: str, scope_status: str) -> None:
+def insert_escalation(
+    company_id: int | None, question: str, reason: str, scope_status: str
+) -> None:
     """拒否・不明の質問を IRインテリジェンスとして記録（痛み②）。PIIは持たない。"""
     sql = sqlalchemy.text(
         """
@@ -100,4 +106,6 @@ def insert_escalation(company_id: int | None, question: str, reason: str, scope_
         """
     )
     with get_engine().begin() as conn:
-        conn.execute(sql, {"cid": company_id, "q": question, "reason": reason, "status": scope_status})
+        conn.execute(
+            sql, {"cid": company_id, "q": question, "reason": reason, "status": scope_status}
+        )
