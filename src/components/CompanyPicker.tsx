@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useCompany } from '@/contexts/CompanyContext';
-import { Company } from '@/config/companies';
+import { Company, companyShortName } from '@/config/companies';
 
 // 銘柄ごとのモノグラム配色（株アプリ風のアバター）
 const MONO = [
@@ -12,8 +12,6 @@ const MONO = [
   'bg-amber-500/15 text-amber-300 ring-amber-500/30',
   'bg-rose-500/15 text-rose-300 ring-rose-500/30',
 ];
-
-const shortName = (c: Company) => c.name.replace(/^株式会社/, '').replace(/株式会社$/, '');
 
 export const CompanyPicker: React.FC = () => {
   const { selectedCompany, setSelectedCompany, companies } = useCompany();
@@ -40,7 +38,7 @@ export const CompanyPicker: React.FC = () => {
 
   const Monogram = ({ c, size }: { c: Company; size: string }) => (
     <span className={`grid ${size} shrink-0 place-items-center rounded-lg font-bold ring-1 ${colorOf(c)}`}>
-      {shortName(c).charAt(0)}
+      {companyShortName(c.name).charAt(0)}
     </span>
   );
 
@@ -58,7 +56,7 @@ export const CompanyPicker: React.FC = () => {
             <Monogram c={selectedCompany} size="h-7 w-7 text-xs" />
             <span className="min-w-0">
               <span className="block max-w-[9rem] truncate text-sm font-semibold leading-tight text-zinc-100">
-                {shortName(selectedCompany)}
+                {companyShortName(selectedCompany.name)}
               </span>
               <span className="block font-mono text-[11px] leading-tight text-zinc-500">
                 {selectedCompany.ticker}
@@ -95,7 +93,7 @@ export const CompanyPicker: React.FC = () => {
                   >
                     <Monogram c={c} size="h-9 w-9 text-sm" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-zinc-100">{shortName(c)}</span>
+                      <span className="block truncate text-sm font-semibold text-zinc-100">{companyShortName(c.name)}</span>
                       <span className="block truncate text-xs text-zinc-500">{c.sector}</span>
                     </span>
                     <span className="rounded-md bg-zinc-950 px-1.5 py-0.5 font-mono text-[11px] text-zinc-400 ring-1 ring-zinc-800">

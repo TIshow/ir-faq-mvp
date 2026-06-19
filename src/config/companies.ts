@@ -61,3 +61,8 @@ export function getCompanyById(companyId: string): Company | undefined {
 export function getActiveCompanies(): Company[] {
   return companies.filter((company) => company.isActive);
 }
+
+/** 表示用の短縮社名（「株式会社」を除去） */
+export function companyShortName(name: string): string {
+  return name.replace(/^株式会社/, '').replace(/株式会社$/, '');
+}
