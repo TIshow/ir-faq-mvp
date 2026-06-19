@@ -79,6 +79,7 @@ def _latest_period(periods: list[str]) -> str | None:
         if not m:
             return (0, 0)
         return (int(m.group(1)), int(m.group(2) or 9))
+
     return max(periods, key=keyf) if periods else None
 
 
@@ -151,18 +152,20 @@ def get_financial_facts(
             if not num_row or not den_row or float(den_row["value_numeric"]) == 0:
                 continue
             margin = float(num_row["value_numeric"]) / float(den_row["value_numeric"]) * 100.0
-            cards.append({
-                "metric": label,
-                "metricKey": dk,
-                "period": p,
-                "value": _fmt_value(margin, "%"),
-                "valueNumeric": round(margin, 4),
-                "unit": "%",
-                "yoy": None,
-                "consolidated": consolidated,
-                "basis": "forecast" if basis == "forecast" else "actual",
-                "source": _to_card(num_row)["source"],
-            })
+            cards.append(
+                {
+                    "metric": label,
+                    "metricKey": dk,
+                    "period": p,
+                    "value": _fmt_value(margin, "%"),
+                    "valueNumeric": round(margin, 4),
+                    "unit": "%",
+                    "yoy": None,
+                    "consolidated": consolidated,
+                    "basis": "forecast" if basis == "forecast" else "actual",
+                    "source": _to_card(num_row)["source"],
+                }
+            )
 
     return {"facts": cards}
 
@@ -217,8 +220,8 @@ def search_disclosures(query: str, tool_context: ToolContext = None) -> dict[str
         response = client.search(request)
         for result in response.results:
             doc = result.document
-            sd = doc.struct_data            # 構造化（FAQ: question/answer）
-            dd = doc.derived_struct_data     # 非構造（PDF: title/link/extractive/snippet）
+            sd = doc.struct_data  # 構造化（FAQ: question/answer）
+            dd = doc.derived_struct_data  # 非構造（PDF: title/link/extractive/snippet）
             title = _g(dd, "title") or "開示資料"
             link = _g(dd, "link")
 
@@ -228,39 +231,49 @@ def search_disclosures(query: str, tool_context: ToolContext = None) -> dict[str
                 q = _g(sd, "question") or ""
                 a = _clean(str(answer))
                 if a:
-                    passages.append({
-                        "text": a,
-                        "doc": "IR想定問答（FAQ）" + (f"：{q}" if q else ""),
-                        "page": None, "url": link,
-                        "quote": _clean(f"Q: {q} / A: {answer}")[:300],
-                    })
+                    passages.append(
+                        {
+                            "text": a,
+                            "doc": "IR想定問答（FAQ）" + (f"：{q}" if q else ""),
+                            "page": None,
+                            "url": link,
+                            "quote": _clean(f"Q: {q} / A: {answer}")[:300],
+                        }
+                    )
                 continue
 
             # 2) 非構造（PDF）: extractive answers / snippets
             chunks: list[tuple[str, int | None]] = []
-            for ea in (_g(dd, "extractive_answers") or []):
+            for ea in _g(dd, "extractive_answers") or []:
                 content = _g(ea, "content")
                 if content:
                     page = _g(ea, "pageNumber") or _g(ea, "page_number")
                     chunks.append((str(content), int(page) if page else None))
-            for sn in (_g(dd, "snippets") or []):
+            for sn in _g(dd, "snippets") or []:
                 snip = _g(sn, "snippet")
                 if snip:
                     chunks.append((str(snip), None))
             for content, page in chunks:
                 cleaned = _clean(content)
                 if len(cleaned) > 10:
-                    passages.append({
-                        "text": cleaned, "doc": title, "page": page,
-                        "url": link, "quote": cleaned[:300],
-                    })
+                    passages.append(
+                        {
+                            "text": cleaned,
+                            "doc": title,
+                            "page": page,
+                            "url": link,
+                            "quote": cleaned[:300],
+                        }
+                    )
     except Exception as e:
         return {"passages": [], "error": str(e)}
 
     return {"passages": passages}
 
 
-def escalate_to_ir(question: str, reason: str = "out_of_corpus", tool_context: ToolContext = None) -> dict[str, Any]:
+def escalate_to_ir(
+    question: str, reason: str = "out_of_corpus", tool_context: ToolContext = None
+) -> dict[str, Any]:
     """
     開示資料で答えられない正当な質問を、IR窓口へ橋渡しするため記録する（痛み②）。PII不可。
 
@@ -274,7 +287,12 @@ def escalate_to_ir(question: str, reason: str = "out_of_corpus", tool_context: T
     try:
         store.insert_escalation(company_id, question, reason, "escalated")
     except Exception as e:
-        return {"escalated": False, "error": str(e),
-                "message": "申し訳ありません、ただいまお取り次ぎに失敗しました。"}
-    return {"escalated": True,
-            "message": "この質問は開示資料に見当たりませんでした。IR窓口にお取り次ぎします。"}
+        return {
+            "escalated": False,
+            "error": str(e),
+            "message": "申し訳ありません、ただいまお取り次ぎに失敗しました。",
+        }
+    return {
+        "escalated": True,
+        "message": "この質問は開示資料に見当たりませんでした。IR窓口にお取り次ぎします。",
+    }

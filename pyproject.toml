@@ -18,3 +18,18 @@ dependencies = [
     "uvicorn>=0.30.0",
     "pydantic>=2.8.0",
 ]
+
+# 開発依存（CI用。本番イメージは uv sync --no-dev で除外）
+[dependency-groups]
+dev = ["ruff>=0.14.0"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv", "node_modules", ".next"]
+
+[tool.ruff.lint]
+# E/W=pycodestyle, F=pyflakes, I=import整列, B=bugbear, UP=pyupgrade
+select = ["E", "W", "F", "I", "B", "UP"]
+# 日本語の長文プロンプト/コメントが多いため行長(E501)は formatter に委ね lint では無視
+ignore = ["E501"]

@@ -44,7 +44,11 @@ def health() -> dict[str, str]:
 
 @app.post("/chat")
 async def chat(req: ChatRequest) -> StreamingResponse:
-    company = {"ticker": req.companyTicker, "name": req.companyName, "datastore_id": req.datastoreId}
+    company = {
+        "ticker": req.companyTicker,
+        "name": req.companyName,
+        "datastore_id": req.datastoreId,
+    }
 
     async def gen():
         try:
@@ -56,11 +60,16 @@ async def chat(req: ChatRequest) -> StreamingResponse:
                 elif chunk["type"] == "final":
                     yield _sse("final", chunk["response"])
         except Exception as e:  # 失敗も前進: ユーザーに丁寧なエラー＋ログ
-            yield _sse("final", {
-                "answer_prose": "申し訳ありません。ただいま回答できませんでした。",
-                "fact_cards": [], "citations": [],
-                "scope_status": "escalated", "scope_reason": "unknown",
-                "error": str(e),
-            })
+            yield _sse(
+                "final",
+                {
+                    "answer_prose": "申し訳ありません。ただいま回答できませんでした。",
+                    "fact_cards": [],
+                    "citations": [],
+                    "scope_status": "escalated",
+                    "scope_reason": "unknown",
+                    "error": str(e),
+                },
+            )
 
     return StreamingResponse(gen(), media_type="text/event-stream")

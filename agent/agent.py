@@ -14,7 +14,8 @@ IR Agent 本体（ADK）＋ AgentResponse 合成 ＋ ストリーミング（マ
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from google.adk.agents import Agent
 from google.adk.runners import Runner
@@ -35,15 +36,20 @@ def _build_data_hint(ticker: str) -> str:
     """利用可能な期間・指標をプロンプトに注入（エージェントの引数ズレ防止）。"""
     try:
         from . import store
+
         if not hasattr(store, "summary"):
             return ""
         s = store.summary(ticker)
         metrics = "、".join(f"{label}={key}" for key, label in s.get("metrics", {}).items())
         lines = []
         if s.get("periods_actual"):
-            lines.append(f"- 実績の期間ラベル(periods, basis='actual'): {', '.join(s['periods_actual'])}（最新＝最も大きい年度＝『前期/直近』）")
+            lines.append(
+                f"- 実績の期間ラベル(periods, basis='actual'): {', '.join(s['periods_actual'])}（最新＝最も大きい年度＝『前期/直近』）"
+            )
         if s.get("periods_forecast"):
-            lines.append(f"- 会社予想の期間ラベル(periods, basis='forecast'): {', '.join(s['periods_forecast'])}")
+            lines.append(
+                f"- 会社予想の期間ラベル(periods, basis='forecast'): {', '.join(s['periods_forecast'])}"
+            )
         if metrics:
             lines.append(f"- 指標キー(metric_keys): {metrics}")
         if not lines:
@@ -108,13 +114,20 @@ def _dedup_citations(cites: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if key in seen:
             continue
         seen.add(key)
-        out.append({"doc": c.get("doc"), "page": c.get("page"),
-                    "url": c.get("url"), "quote": c.get("quote")})
+        out.append(
+            {
+                "doc": c.get("doc"),
+                "page": c.get("page"),
+                "url": c.get("url"),
+                "quote": c.get("quote"),
+            }
+        )
     return out
 
 
-def _compose(prose: str, fact_cards: list[dict[str, Any]], citations: list[dict[str, Any]],
-             escalated: bool) -> dict[str, Any]:
+def _compose(
+    prose: str, fact_cards: list[dict[str, Any]], citations: list[dict[str, Any]], escalated: bool
+) -> dict[str, Any]:
     fact_cards = [c for c in fact_cards if (c.get("source") or {}).get("doc")]
     citations = _dedup_citations(citations)
     if escalated:
@@ -145,8 +158,9 @@ def _refusal_response(decision) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # 実行
 # --------------------------------------------------------------------------- #
-async def run_agent_stream(query: str, company: dict[str, Any],
-                           user_id: str = "anon", session_id: str = "s1") -> AsyncIterator[dict[str, Any]]:
+async def run_agent_stream(
+    query: str, company: dict[str, Any], user_id: str = "anon", session_id: str = "s1"
+) -> AsyncIterator[dict[str, Any]]:
     """
     company = {"ticker","name","datastore_id"}。
     yield: {"type":"prose_delta","text":...} / {"type":"final","response": AgentResponse}
@@ -164,15 +178,24 @@ async def run_agent_stream(query: str, company: dict[str, Any],
     sid = f"{session_id}:{ticker}"
     existing = None
     try:
-        existing = await _session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=sid)
+        existing = await _session_service.get_session(
+            app_name=APP_NAME, user_id=user_id, session_id=sid
+        )
     except Exception:
         existing = None
     if existing is None:
         try:
             await _session_service.create_session(
-                app_name=APP_NAME, user_id=user_id, session_id=sid,
-                state={"company": {"ticker": ticker, "name": name,
-                                   "datastore_id": company.get("datastore_id")}},
+                app_name=APP_NAME,
+                user_id=user_id,
+                session_id=sid,
+                state={
+                    "company": {
+                        "ticker": ticker,
+                        "name": name,
+                        "datastore_id": company.get("datastore_id"),
+                    }
+                },
             )
         except Exception:
             pass
@@ -199,8 +222,10 @@ async def run_agent_stream(query: str, company: dict[str, Any],
             prose_parts.append(text)
             yield {"type": "prose_delta", "text": text}
 
-    yield {"type": "final",
-           "response": _compose("".join(prose_parts), fact_cards, citations, escalated)}
+    yield {
+        "type": "final",
+        "response": _compose("".join(prose_parts), fact_cards, citations, escalated),
+    }
 
 
 async def run_agent(query: str, company: dict[str, Any]) -> dict[str, Any]:

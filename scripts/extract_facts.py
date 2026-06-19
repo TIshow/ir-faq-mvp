@@ -96,7 +96,7 @@ def main() -> int:
 
     try:
         raw = json.loads(resp.text)
-    except Exception as e:
+    except Exception:
         print("JSON parse 失敗。生出力:\n" + (resp.text or "")[:2000], file=sys.stderr)
         return 1
 
@@ -110,7 +110,7 @@ def main() -> int:
 
     out = {
         "note": f"【草案・未検証】{args.company}({args.ticker}) を {MODEL} で {args.gcs} から抽出。"
-                f"人手で値を検証し、verified=true にして agent/data/facts.json へ反映すること。",
+        f"人手で値を検証し、verified=true にして agent/data/facts.json へ反映すること。",
         "facts": facts,
     }
     with open(args.out, "w", encoding="utf-8") as fp:
@@ -118,10 +118,12 @@ def main() -> int:
 
     print(f"[extract] {len(facts)} 件を抽出 → {args.out}")
     for f in facts:
-        print(f"  - {f.get('metric_label_ja')}({f.get('metric_key')}) "
-              f"{f.get('period_label')} {f.get('value_numeric')}{f.get('unit')} "
-              f"[{'予想' if f.get('is_forecast') else '実績'}/{'連結' if f.get('consolidated') else '単体'}] "
-              f"p.{f.get('source_page')}「{f.get('source_quote')}」")
+        print(
+            f"  - {f.get('metric_label_ja')}({f.get('metric_key')}) "
+            f"{f.get('period_label')} {f.get('value_numeric')}{f.get('unit')} "
+            f"[{'予想' if f.get('is_forecast') else '実績'}/{'連結' if f.get('consolidated') else '単体'}] "
+            f"p.{f.get('source_page')}「{f.get('source_quote')}」"
+        )
     return 0
 
 
