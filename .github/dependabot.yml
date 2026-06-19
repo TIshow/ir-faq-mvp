@@ -14,8 +14,9 @@ updates:
         update-types: [minor, patch]
     labels: [dependencies, frontend]
 
-  # エージェント（Python / uv は pip エコシステムで解決）
-  - package-ecosystem: pip
+  # エージェント（Python / uv）。uv.lock を理解・同期する専用エコシステムを使う
+  #（pip だと uv.lock を更新できず CI の `uv sync --frozen` と食い違うため）。
+  - package-ecosystem: uv
     directory: "/"
     schedule:
       interval: weekly
