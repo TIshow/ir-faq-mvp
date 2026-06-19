@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { AgentResponse, Citation, FactCard, ScopeStatus } from '@/lib/agent-types';
+import { Markdown } from '@/components/Markdown';
 
 /** 出典リンク：原本PDFの該当ページへ #page=N でディープリンク */
 export const CitationLink: React.FC<{ citation: Citation; compact?: boolean }> = ({ citation, compact }) => {
@@ -86,7 +87,7 @@ export const AgentAnswer: React.FC<{ response: AgentResponse; onContactIR?: () =
   const { answer_prose, fact_cards, citations, scope_status } = response;
   return (
     <div>
-      {answer_prose && <div className="whitespace-pre-wrap">{answer_prose}</div>}
+      {answer_prose && <Markdown>{answer_prose}</Markdown>}
 
       {fact_cards && fact_cards.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
