@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useCompany } from '@/contexts/CompanyContext';
+import { companyShortName } from '@/config/companies';
 import { AgentResponse } from '@/lib/agent-types';
 import { AgentAnswer } from '@/components/FactCard';
 
@@ -107,7 +108,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           {selectedCompany ? (
             <>
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span className="truncate text-zinc-400">{selectedCompany.name.replace(/^株式会社/, '')} のIR情報</span>
+              <span className="truncate text-zinc-400">{companyShortName(selectedCompany.name)} のIR情報</span>
             </>
           ) : '銘柄を選択してください'}
         </span>
@@ -128,7 +129,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             <h2 className="text-2xl font-semibold tracking-tight text-zinc-100">
               {selectedCompany ? (
                 <>
-                  <span className="text-emerald-400">{selectedCompany.name.replace(/^株式会社/, '')}</span> について聞く
+                  <span className="text-emerald-400">{companyShortName(selectedCompany.name)}</span> について聞く
                 </>
               ) : '銘柄を選んで質問しよう'}
             </h2>
@@ -192,7 +193,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder={selectedCompany ? `${selectedCompany.name.replace(/^株式会社/, '')}について質問する…` : '銘柄を選択してください'}
+            placeholder={selectedCompany ? `${companyShortName(selectedCompany.name)}について質問する…` : '銘柄を選択してください'}
             disabled={isLoading || !selectedCompany}
             className="flex-1 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:cursor-not-allowed"
           />

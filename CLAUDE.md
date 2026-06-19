@@ -34,7 +34,8 @@ src/                      フロント（Next.js）
   app/api/chat/route.ts   エージェントへの SSE プロキシ（companies.ts から企業コンテキスト送信）
   components/ChatInterface.tsx  チャットUI（SSE受信・ストリーミング表示）
   components/FactCard.tsx       数値カード/出典リンク/scope分岐 描画
-  components/CompanySelector.tsx 企業選択
+  components/CompanyPicker.tsx  企業選択ピッカー（モノグラム＋ティッカー・ダークUI）
+  components/Markdown.tsx       回答散文のMarkdown描画（react-markdown）
   config/companies.ts     企業マスター（id/name/ticker/datastoreId）＝唯一の正
   contexts/CompanyContext.tsx
   lib/agent-types.ts      AgentResponse 等の型（契約）
@@ -46,11 +47,13 @@ agent/                    エージェント（Python / ADK）
   store.py / facts_store.py / db.py  層1ストア（json=PoC / cloudsql=本番 を FACTS_BACKEND で切替）
   server.py               FastAPI（/chat の SSE, /health）
   config.py               環境設定（.env 読込）
-  data/facts.json     層1の実データ（現在は空＝捏造しない方針。ticカー別に実値を投入）
+  data/facts.json     層1の実データ（ヴィス(5071)投入済み・検証済み実値のみ／ticカー別。捏造禁止）
   .env.example            ローカル設定例
+scripts/
+  extract_facts.py        層1取り込み（GeminiでPDF→構造化ファクト草案。人手検証後 facts.json へ）
 eval/
   eval_harness.py         評価ハーネス（数値=決定論比較・コンプラ=ゼロ許容CI関門・品質eval・--self-test）
-  golden_set.vis.jsonl    ゴールデンセット（数値は実値投入待ち）
+  golden_set.vis.jsonl    ゴールデンセット（ヴィス実値投入済み）
 database/                 層1本番用 Cloud SQL スキーマ（financial_facts.sql 等。未接続=将来）
 docs/                     ARCHITECTURE.md / HANDOFF.md / phase1-gcp-setup.md / investor-experience-quality.md
 Dockerfile                フロント用 / Dockerfile.agent  エージェント用
@@ -95,10 +98,11 @@ gcloud run services update ir-frontend --region us-central1 \
 - 秘密情報はコミットしない（`.env*` は gitignore、`agent/.env.example` のみ追跡）。
 
 ## 7. 現状サマリ（2026-06）
-- ✅ 全GCPで実稼働（Vercel廃止）。マルチテナント切替・ガードレール・**層2の実FAQ/PDF回答（出典付き）**が動作。
-- ⚠️ **層1（数値）は空**＝数値質問は「確認できません」を返す（実数値の抽出が次の作業）。
+- ✅ 全GCPで実稼働（Vercel廃止）。マルチテナント切替・ガードレール・**層2の実FAQ/PDF回答（出典付き）**・モダンなダークUI（Markdown描画）が動作。
+- ✅ **層1（数値）はヴィス点灯済み**＝「営業利益は？」等が数値カード＋出典で返る（`scripts/extract_facts.py`でPDF抽出→人手検証→`facts.json`）。
+- ⚠️ フィル/ピアズの層1数値・ヴィスのYoY/セグメントは未投入。
 - 詳細・残課題・再開手順は **`docs/HANDOFF.md`** と GitHub Issue #3。
 ```
-GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#10 マージ済）
+GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#19 マージ済）
 GCP project: hallowed-trail-462613-v1 / region us-central1
 ```
