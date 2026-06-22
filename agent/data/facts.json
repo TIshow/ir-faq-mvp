@@ -2,6 +2,254 @@
   "note": "層1（構造化財務ファクト）。検証済みの実データのみ・ticカー別。捏造禁止。出典は決算資料。空なら層1は数値を返さない。",
   "facts": [
     {
+      "ticker": "7561", "metric_key": "revenue", "metric_label_ja": "売上高",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 45175, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 4,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "売上高 45175百万円（2025FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "revenue", "metric_label_ja": "売上高",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 52427, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 4,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "売上高 52427百万円（2026FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "gross_profit", "metric_label_ja": "売上総利益",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 14491, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 4,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "売上総利益 14491百万円（2025FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "gross_profit", "metric_label_ja": "売上総利益",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 16754, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 4,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "売上総利益 16754百万円（2026FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "operating_profit", "metric_label_ja": "営業利益",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 1931, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 4,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "営業利益 1931百万円（2025FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "operating_profit", "metric_label_ja": "営業利益",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 3057, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 4,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "営業利益 3057百万円（2026FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "ordinary_profit", "metric_label_ja": "経常利益",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 2082, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 4,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "経常利益 2082百万円（2025FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "ordinary_profit", "metric_label_ja": "経常利益",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 3003, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 4,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "経常利益 3003百万円（2026FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "net_income", "metric_label_ja": "親会社株主に帰属する当期純利益",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 1204, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 4,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "親会社株主に帰属する当期純利益 1204百万円（2025FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "net_income", "metric_label_ja": "親会社株主に帰属する当期純利益",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 1483, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 4,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "親会社株主に帰属する当期純利益 1483百万円（2026FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "eps", "metric_label_ja": "1株当たり当期純利益",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 65.17, "unit": "円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 4,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "1株当たり当期純利益 65.17円（2025FY）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "eps", "metric_label_ja": "1株当たり当期純利益",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 80.24, "unit": "円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 4,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "1株当たり当期純利益 80.24円（2026FY）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "dividend_per_share", "metric_label_ja": "1株当たり配当（年間）",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 28, "unit": "円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 10,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "1株当たり配当（年間） 28円（2026FY）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "segment.takeout_lunch.revenue", "metric_label_ja": "中食事業（売上高）",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 17325, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "中食事業（売上高） 17325百万円（2025FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "segment.takeout_lunch.revenue", "metric_label_ja": "中食事業（売上高）",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 16764, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "中食事業（売上高） 16764百万円（2026FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "segment.takeout_lunch.operating_profit", "metric_label_ja": "中食事業（営業利益）",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": -72, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "中食事業（営業利益） -72百万円（2025FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "segment.takeout_lunch.operating_profit", "metric_label_ja": "中食事業（営業利益）",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 320, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "中食事業（営業利益） 320百万円（2026FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "segment.store_asset_solution.revenue", "metric_label_ja": "店舗アセット＆ソリューション事業（売上高）",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 12190, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "店舗アセット＆ソリューション事業（売上高） 12190百万円（2025FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "segment.store_asset_solution.revenue", "metric_label_ja": "店舗アセット＆ソリューション事業（売上高）",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 14331, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "店舗アセット＆ソリューション事業（売上高） 14331百万円（2026FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "segment.store_asset_solution.operating_profit", "metric_label_ja": "店舗アセット＆ソリューション事業（営業利益）",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 1734, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "店舗アセット＆ソリューション事業（営業利益） 1734百万円（2025FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "segment.store_asset_solution.operating_profit", "metric_label_ja": "店舗アセット＆ソリューション事業（営業利益）",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 2228, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "店舗アセット＆ソリューション事業（営業利益） 2228百万円（2026FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "segment.logistics_food.revenue", "metric_label_ja": "物流・食品加工事業（売上高）",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 18091, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "物流・食品加工事業（売上高） 18091百万円（2025FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "segment.logistics_food.revenue", "metric_label_ja": "物流・食品加工事業（売上高）",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 23758, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "物流・食品加工事業（売上高） 23758百万円（2026FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "segment.logistics_food.operating_profit", "metric_label_ja": "物流・食品加工事業（営業利益）",
+      "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
+      "value_numeric": 888, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "物流・食品加工事業（営業利益） 888百万円（2025FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "segment.logistics_food.operating_profit", "metric_label_ja": "物流・食品加工事業（営業利益）",
+      "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
+      "value_numeric": 835, "unit": "百万円", "consolidated": true, "is_forecast": false,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "物流・食品加工事業（営業利益） 835百万円（2026FY・連結。有報XBRLと一致）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "revenue", "metric_label_ja": "売上高",
+      "period_label": "2027FY", "fiscal_year": 2027, "fiscal_quarter": null,
+      "value_numeric": 55500, "unit": "百万円", "consolidated": true, "is_forecast": true,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 10,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "売上高 55500百万円（2027FY・会社予想）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "operating_profit", "metric_label_ja": "営業利益",
+      "period_label": "2027FY", "fiscal_year": 2027, "fiscal_quarter": null,
+      "value_numeric": 2800, "unit": "百万円", "consolidated": true, "is_forecast": true,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 10,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "営業利益 2800百万円（2027FY・会社予想）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "ordinary_profit", "metric_label_ja": "経常利益",
+      "period_label": "2027FY", "fiscal_year": 2027, "fiscal_quarter": null,
+      "value_numeric": 2600, "unit": "百万円", "consolidated": true, "is_forecast": true,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 10,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "経常利益 2600百万円（2027FY・会社予想）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "net_income", "metric_label_ja": "親会社株主に帰属する当期純利益",
+      "period_label": "2027FY", "fiscal_year": 2027, "fiscal_quarter": null,
+      "value_numeric": 1600, "unit": "百万円", "consolidated": true, "is_forecast": true,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 10,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "親会社株主に帰属する当期純利益 1600百万円（2027FY・会社予想）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "eps", "metric_label_ja": "1株当たり当期純利益",
+      "period_label": "2027FY", "fiscal_year": 2027, "fiscal_quarter": null,
+      "value_numeric": 86.53, "unit": "円", "consolidated": true, "is_forecast": true,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 10,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "1株当たり当期純利益 86.53円（2027FY・会社予想）",
+      "verified": true
+    },
+    {
+      "ticker": "7561", "metric_key": "dividend_per_share", "metric_label_ja": "1株当たり配当（年間）",
+      "period_label": "2027FY", "fiscal_year": 2027, "fiscal_quarter": null,
+      "value_numeric": 30, "unit": "円", "consolidated": true, "is_forecast": true,
+      "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 10,
+      "source_url": "gs://harux-ir-data/pdf/2026-fy-material.pdf", "source_quote": "1株当たり配当（年間） 30円（2027FY・会社予想）",
+      "verified": true
+    },
+    {
       "ticker": "5071", "metric_key": "revenue", "metric_label_ja": "売上高",
       "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
       "value_numeric": 16253, "unit": "百万円", "consolidated": true, "is_forecast": false,
