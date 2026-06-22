@@ -27,3 +27,17 @@ body {
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 9999px; }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* クリック可能要素はポインタカーソルに（Tailwind v4 Preflight は button に既定で付けない）。
+   企業ピッカー/送信/クリア/IR連絡/各種ボタンを一括でカバー。無効時は not-allowed。 */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary,
+select,
+label[for] {
+  cursor: pointer;
+}
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
