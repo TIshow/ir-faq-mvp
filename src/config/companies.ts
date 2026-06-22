@@ -50,6 +50,19 @@ export const companies: Company[] = [
     datastoreId: 'peers-ir-data_1752651535271',
     isActive: true,
   },
+  {
+    // 旗艦（深掘り対象）。層1はEDINET XBRLから点灯済み（FY25/FY26実績＋セグメント＋FY27予想）。
+    // 層2は Discovery Engine データストア harux-ir-data（決算補足説明資料PDF）。
+    id: 'harux',
+    name: '株式会社ハークスレイ',
+    nameEn: 'HURXLEY CORPORATION',
+    ticker: '7561',
+    sector: '中食・店舗ソリューション・物流（東証スタンダード）',
+    description: '本家かまどや等の中食、店舗アセット＆ソリューション、物流・食品加工',
+    websiteUrl: 'https://www.harx.co.jp/',
+    datastoreId: 'harux-ir-data',
+    isActive: true,
+  },
 ];
 
 /** 企業IDから企業情報を取得 */
