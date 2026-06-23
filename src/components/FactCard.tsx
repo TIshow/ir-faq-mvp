@@ -19,8 +19,9 @@ function toDocHref(citation: Citation): string | undefined {
   const slash = rest.indexOf('/');
   if (slash < 0) return undefined;
   const params = new URLSearchParams({ b: rest.slice(0, slash), o: rest.slice(slash + 1) });
-  if (citation.page) params.set('page', String(citation.page));
-  return `/api/doc?${params.toString()}`;
+  // trailingSlash:true のため末尾スラッシュ。ページ指定はフラグメントでPDFビューアが解釈
+  const frag = citation.page ? `#page=${citation.page}` : '';
+  return `/api/doc/?${params.toString()}${frag}`;
 }
 
 /** 出典リンク：原本PDFの該当ページへ署名URL経由でディープリンク */
