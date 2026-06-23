@@ -24,6 +24,7 @@ from google.genai import types
 
 from . import config, prompt
 from .scope import classify_scope
+from .suggest import build_suggestions
 from .tools import escalate_to_ir, get_financial_facts, search_disclosures
 
 APP_NAME = "ir-agent"
@@ -126,7 +127,11 @@ def _dedup_citations(cites: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _compose(
-    prose: str, fact_cards: list[dict[str, Any]], citations: list[dict[str, Any]], escalated: bool
+    prose: str,
+    fact_cards: list[dict[str, Any]],
+    citations: list[dict[str, Any]],
+    escalated: bool,
+    suggestions: list[str],
 ) -> dict[str, Any]:
     fact_cards = [c for c in fact_cards if (c.get("source") or {}).get("doc")]
     citations = _dedup_citations(citations)
@@ -142,16 +147,18 @@ def _compose(
         "citations": citations,
         "scope_status": scope_status,
         "scope_reason": scope_reason,
+        "suggestions": suggestions,
     }
 
 
-def _refusal_response(decision) -> dict[str, Any]:
+def _refusal_response(decision, suggestions: list[str]) -> dict[str, Any]:
     return {
         "answer_prose": decision.message or "お答えできません。",
         "fact_cards": [],
         "citations": [],
         "scope_status": decision.status,
         "scope_reason": decision.reason,
+        "suggestions": suggestions,
     }
 
 
@@ -168,10 +175,13 @@ async def run_agent_stream(
     ticker = str(company.get("ticker") or "")
     name = company.get("name") or "対象企業"
 
+    # 次の質問サジェスト（A-lite: 開示データから決定論生成。拒否時も「行き止まり」にしない）
+    suggestions = build_suggestions(ticker, exclude=query)
+
     decision = classify_scope(query)
     if decision.status != "answered":
         yield {"type": "prose_delta", "text": decision.message or ""}
-        yield {"type": "final", "response": _refusal_response(decision)}
+        yield {"type": "final", "response": _refusal_response(decision, suggestions)}
         return
 
     # 企業ごとにセッションを分離し、状態に企業コンテキストを seed
@@ -224,7 +234,7 @@ async def run_agent_stream(
 
     yield {
         "type": "final",
-        "response": _compose("".join(prose_parts), fact_cards, citations, escalated),
+        "response": _compose("".join(prose_parts), fact_cards, citations, escalated, suggestions),
     }
 
 

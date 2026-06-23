@@ -163,7 +163,11 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                 ) : (
                   <div className="max-w-[90%] rounded-2xl rounded-bl-md border border-zinc-800 bg-zinc-900/70 px-4 py-3 text-sm leading-relaxed text-zinc-200">
                     {m.response ? (
-                      <AgentAnswer response={m.response} onContactIR={handleContactIR} />
+                      <AgentAnswer
+                        response={m.response}
+                        onContactIR={handleContactIR}
+                        onSuggestion={(q) => send(q)}
+                      />
                     ) : (
                       <span className="flex items-center gap-2 text-zinc-400">
                         {m.content || '考え中'}

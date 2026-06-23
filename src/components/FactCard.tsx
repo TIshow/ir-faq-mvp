@@ -102,9 +102,13 @@ const ScopeNotice: React.FC<{ status: ScopeStatus; onContactIR?: () => void }> =
   );
 };
 
-/** IR Agent の回答（散文＋数値カード＋出典＋scope分岐） */
-export const AgentAnswer: React.FC<{ response: AgentResponse; onContactIR?: () => void }> = ({ response, onContactIR }) => {
-  const { answer_prose, fact_cards, citations, scope_status } = response;
+/** IR Agent の回答（散文＋数値カード＋出典＋scope分岐＋次の質問サジェスト） */
+export const AgentAnswer: React.FC<{
+  response: AgentResponse;
+  onContactIR?: () => void;
+  onSuggestion?: (q: string) => void;
+}> = ({ response, onContactIR, onSuggestion }) => {
+  const { answer_prose, fact_cards, citations, scope_status, suggestions } = response;
   return (
     <div>
       {answer_prose && <Markdown>{answer_prose}</Markdown>}
@@ -127,6 +131,23 @@ export const AgentAnswer: React.FC<{ response: AgentResponse; onContactIR?: () =
       )}
 
       <ScopeNotice status={scope_status} onContactIR={onContactIR} />
+
+      {onSuggestion && suggestions && suggestions.length > 0 && (
+        <div className="mt-3 border-t border-zinc-800 pt-3">
+          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500">次に聞いてみる</p>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((s, i) => (
+              <button
+                key={i}
+                onClick={() => onSuggestion(s)}
+                className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3 py-1 text-xs text-zinc-300 transition hover:border-emerald-500/40 hover:bg-zinc-800/80 hover:text-zinc-100"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
