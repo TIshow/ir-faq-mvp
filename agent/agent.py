@@ -144,6 +144,11 @@ def _compose(
         scope_status, scope_reason = "escalated", "out_of_corpus"
     else:
         scope_status, scope_reason = "answered", None
+
+    # エスカレーション＝未回答。答えを支えない数値カード/参考資料は出さない（誤誘導を防ぐ）。
+    if scope_status == "escalated":
+        fact_cards, citations = [], []
+
     return {
         "answer_prose": prose.strip(),
         "fact_cards": fact_cards,
