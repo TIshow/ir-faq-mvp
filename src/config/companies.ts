@@ -14,6 +14,7 @@ export interface Company {
   websiteUrl?: string;           // 公式サイト
   datastoreId: string;           // Discovery Engine データストアID（層2の検索先）
   isActive: boolean;             // 有効/無効
+  guidedQuestions?: string[];    // 初期画面のガイドチップ。未設定なら汎用にフォールバック
 }
 
 export const companies: Company[] = [
@@ -62,6 +63,13 @@ export const companies: Company[] = [
     websiteUrl: 'https://www.harx.co.jp/',
     datastoreId: 'harux-ir-data',
     isActive: true,
+    guidedQuestions: [
+      '営業利益は前年と比べてどう？',
+      'セグメント別の売上は？',
+      '来期の会社予想は？',
+      '配当はどうなっている？',
+      '物流・食品加工事業の状況は？',
+    ],
   },
 ];
 
