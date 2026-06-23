@@ -1,10 +1,12 @@
 # HANDOFF — 引き継ぎ（現状・実リソース・再開手順）
 
-最終更新: 2026-06-18 / 別のエンジニア・AIがそのまま続けられるための実状ドキュメント。
+最終更新: 2026-06-23 / 別のエンジニア・AIがそのまま続けられるための実状ドキュメント。
 設計は `ARCHITECTURE.md`、方針は `../CLAUDE.md`。
 
 ## 1. 一言でいうと今どこ
-**全GCPで実稼働するマルチテナントIR Agent**が動いている。**層2（定性・FAQ/PDF）は実データで出典付き回答**まで到達。**層1（数値）はヴィス(5071)が点灯済み**（「営業利益は？」等が数値カード＋出典で返る）。フィル/ピアズの数値・ヴィスのYoY/セグメントは未投入。モダンなダークUI＋Markdown描画。
+**全GCPで実稼働するマルチテナントIR Agent**。**層2（定性・FAQ/PDF）は出典付き回答**まで到達。**層1（数値）は ハークスレイ(7561) を旗艦に深掘り点灯**＝FY25/FY26実績＋3セグメント＋FY27会社予想（**EDINET有報XBRLから決定論抽出**、31件、`scripts/extract_facts_xbrl.py`）。ヴィス(5071)も10件点灯済み（YoY/セグメント未）。フィル/ピアズは層2のみ（試験導入の見せ方）。**CI/CD（GitHub Actions＋ブランチ保護＋Dependabot）**、モダンなダークUI＋Markdown、クリック要素のポインタカーソル対応済み。ハークスレイは本番デプロイ済みでデモ可能。
+
+> **データ調達方針（確定）**: 発行体オリジン×自動取込×EDINET検証。**TDnet有料フィードは不要**（顧客の分は発行体本人が原本保有）。速報数値は短信XBRL/発行体提供、公式裏取りは無料のEDINET XBRL、定性はPDF＋想定問答。詳細は戦略プラン。
 
 ## 2. 実デプロイ済みリソース（GCP project: `hallowed-trail-462613-v1` / region: `us-central1`）
 | 種別 | 名前 / ID | URL・備考 |
@@ -12,22 +14,22 @@
 | フロント | Cloud Run **ir-frontend** | https://ir-frontend-255752121803.us-central1.run.app （公開） |
 | エージェント | Cloud Run **ir-agent** | https://ir-agent-eyqs2m6yva-uc.a.run.app （公開=allUsers・**本番前に非公開化**） |
 | LLM | Vertex AI **gemini-2.5-flash** | `gemini-3-*` は当プロジェクト未開放(404) |
-| 検索アプリ | Discovery Engine engine **ir-bot-mvp-app_1750418304373** | 3データストアを束ねる |
-| データストア | **vis-ir-data_1752223995110** / **philcompany-ir-data_1752224320775** / **peers-ir-data_1752651535271** | GENERIC・chunking config。コンソールは「AI Applications」 |
-| GCS | gs://vis-ir-data, gs://philcompany-ir-data, gs://peers_ir_data | 各 `/pdf/`（決算PDF）＋ `/qa/faq.csv`（定性Q&A） |
-| 層1 DB(本番用) | Cloud SQL **未作成** | `database/financial_facts.sql`。PoCはJSON(`agent/data/facts.json`)で `FACTS_BACKEND=json` |
-| Firestore | (default) | 旧構成の残骸・**未使用** |
-| 旧フロント | Cloud Run ir-bot-mvp | **削除済み** |
-| Vercel | — | **削除済み**（全GCPに集約） |
+| 検索アプリ | Discovery Engine engine **ir-bot-mvp-app_1750418304373** | vis/phil/peers の3データストアを束ねる |
+| データストア | **vis-ir-data_1752223995110** / **philcompany-ir-data_1752224320775** / **peers-ir-data_1752651535271** / **harux-ir-data**（旗艦・engine外で自前 default_search で検索） | GENERIC・CONTENT_REQUIRED。コンソールは「AI Applications」 |
+| GCS | gs://vis-ir-data, gs://philcompany-ir-data, gs://peers_ir_data, **gs://harux-ir-data**（`/pdf/2026-fy-material.pdf`） | 各 `/pdf/`（決算PDF）＋ `/qa/faq.csv`（定性Q&A。haruxはFAQ未投入） |
+| 層1（数値） | `agent/data/facts.json`（`FACTS_BACKEND=json`） | 5071=10件 / **7561=31件**。本番DBは Cloud SQL **未作成**（`database/financial_facts.sql`） |
+| CI/CD | GitHub Actions（`.github/workflows/ci.yml`・`security.yml`）＋ **main ブランチ保護**＋ Dependabot | frontend(型/lint/build)＋agent(ruff/eval)＋gitleaks＋CodeQL。緑必須・PR経由 |
+| Firestore / 旧フロント / Vercel | (default) / ir-bot-mvp / — | 未使用 / **削除済み** / **削除済み**（全GCP集約） |
 
-GitHub: https://github.com/TIshow/ir-faq-mvp （main、PR #1〜#19 マージ済）。Issue #3 に経緯と残課題。
+GitHub: https://github.com/TIshow/ir-faq-mvp （main、PR #1〜#34 マージ済）。Issue #3 に経緯と残課題。
 
 ## 3. 今の挙動（ブラウザで確認可能）
 フロント URL を開く → 企業選択 → 質問:
 | 質問タイプ | 結果 |
 |---|---|
 | 定性（faq.csv にある内容。例「業績に季節性は？」「為替の影響は？」） | ✅ 実FAQ回答＋出典（ストリーミング） |
-| 数値（例「営業利益は？」）※ヴィス | ✅ 数値カード（売上16,253/営業利益1,915百万円ほか）＋出典。フィル/ピアズは層1未投入で「確認できません」 |
+| 数値（例「営業利益は？」）※**ハークスレイ＝旗艦** | ✅ 営業利益3,057百万円・**セグメント別**（中食320/店舗2,228/物流835）・**FY27会社予想**2,800（点線枠）＋出典p.4/6/10。前年比は「前年と比べて」等で2期＋YoYバッジ |
+| 数値 ※ヴィス | ✅ 売上16,253/営業利益1,915百万円ほか＋出典。フィル/ピアズは層1未投入で「確認できません」 |
 | 助言（買うべき？）・予測（株価上がる？）・未開示（次の決算数字） | ✅ 丁寧に拒否 |
 | フィル/ピアズ選択 | 各社データストアにスコープ（中身の投入量に依存） |
 
@@ -44,19 +46,34 @@ curl -s -N -X POST https://ir-frontend-255752121803.us-central1.run.app/api/chat
 ```
 ローカル起動・デプロイは `../CLAUDE.md` の §4/§5。
 
-## 5. 次にやること（優先度順）
-0. ✅ **済: 層1ヴィス点灯**（`scripts/extract_facts.py` でPDF→検証→`facts.json` 10件投入。「営業利益は？」が数値カード＋出典で返る）。
-1. **層1の深掘り・拡張**
-   - ヴィスの**YoY点灯**（同PDFのP/L前期=2024FYを追加抽出）／**セグメント別**の抽出。
-   - **フィル/ピアズの層1投入**（同スクリプトで各社PDFから抽出→検証）。
-   - golden_set の YoY/セグメント分を実値化し `python3 eval/eval_harness.py` のCI関門（数値100%）を通す。
-   - 本格化するなら **XBRL(EDINET/TDnet)を正本**に＋取り込みの **Cloud Run Job 化**（`docs/phase1-gcp-setup.md`／Issue #3）。
-   - 既知: 無指定「売上は？」は会社予想を返しがち→プロンプトで「無指定は最新実績優先・予想は併記」に調整。
-2. **フィル/ピアズの中身確認 → 切替を3社の実データで総仕上げ**
-   - 各データストアの文書数を確認（下記スニペット）。薄ければ GCS の /pdf・/qa から追加投入。
-3. **セキュリティ: ir-agent を非公開化**（現状 allUsers）。フロントSAに限定 invoker ＋ route.ts に IDトークン送信、または内部 ingress。Issue #3。
-4. **品質磨き**: 散文が数値/カードを二重列挙する傾向（プロンプトで散文を薄く=Q6）。データ無し時に `scope=answered` でなく `escalated`＋CTA にする小修正。
-5. （運用）main push で自動デプロイする Cloud Build トリガー。
+## 5. 次にやること（成功逆算・優先度順）
+ゴール: 旗艦ハークスレイのIR室が「これめっちゃいい」、投資家が「まず聞こう」。
+
+### Tier 0 — ハークスレイIR室レビューで刺す（最優先）
+- **0-1 想定問答集(FAQ)を層2へ投入**（入手待ち）。`harux-ir-data` に structData{question,answer} で追加→手動インポート。複利ループの初期投入。
+- **0-2 プロンプト調整**: 無指定「売上は？/営業利益は？」で**最新実績＋YoYバッジ＋会社予想併記**を自然に出す（現状は単期のみ。既知の癖）。
+- **0-3 7561向けガイド入口**（最新ハイライト/前年比/セグメント/中計/配当のチップ）。空欄に放り込まない。
+- **0-4 7561ゴールデンセット＋eval CI関門**（数値ゼロ許容）。実クライアントに誤数値を出さない保証。
+
+### Tier 1 — 堀（痛み②＝発行体が金を払う理由）
+- **1-1 escalation→FAQ 自動資産化ループの一級機能化**（質問するほど賢くなる複利資産）。
+- **1-2 IR向けアウトカム・ダッシュボード**（質問トレンド/論点カバレッジ/エスカレーション/回答率）。「効果が測れない罠」を計測で先回り。
+
+### Tier 2 — 信頼・コンプラ
+- **2-1 出口チェック強化**: 散文に数値が出てカードに無い＝鉄則違反フラグ／prose二重列挙の解消（Q6）。データ無し時は `escalated`＋CTA。
+- **2-2 ガードレールのゴールデン拡充**（助言/予測/未開示の混同行列・過剰拒否も測定）。
+
+### Tier 3 — 運用・セキュリティ・スケール
+- **3-1 ir-agent 非公開化**（現状 allUsers）。フロントSAに限定 invoker＋IDトークン、または内部 ingress。Issue #3。
+- **3-2 429クォータ対策**（リトライ/バックオフ）。 **3-3 CI自動デプロイ**（main→Cloud Run）。
+- **3-4 層1取り込み自動化**（provisioningスクリプト／XBRL自動更新）＝発行体増加時のみ。今は手動でOK。
+- **3-5 フィル/ピアズの層1投入**（`scripts/extract_facts_xbrl.py` で各社XBRLから）＝旗艦が固まった後。
+
+### Tier 4 — 非技術（事業成功の本丸）
+- **4-1 提案を「工数削減」でなく「企業価値・投資家エンゲージメント」で**（内向き象限＝解約予備軍の回避）。
+- **4-2 ハークスレイをケーススタディ化**（反応・before/after）。 **4-3 課金/契約モデル**（発行体課金・データ分離を売りに）。
+
+> 推奨スタート: **0-2 → 0-4 →（FAQ来たら）0-1**。FAQ待ちの間に 0-2/0-4 を進める。
 
 ## 6. よく使う調査コマンド
 ```bash
