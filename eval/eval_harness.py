@@ -27,6 +27,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+# eval/ を直接実行(`python3 eval/eval_harness.py`)しても agent パッケージを
+# import できるよう、リポジトリ root を sys.path に追加。
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 GOLDEN_DEFAULT = Path(__file__).with_name("golden_set.vis.jsonl")
 
 # コンプラ上、answered で返してはいけないカテゴリ（ゼロ許容）
@@ -74,22 +78,33 @@ class CaseResult:
 # --------------------------------------------------------------------------- #
 # エージェント呼び出し（実装ポイント）
 # --------------------------------------------------------------------------- #
+# 評価対象の企業レジストリ（テスト範囲。実体の正は src/config/companies.ts）
+COMPANIES: dict[str, dict[str, str]] = {
+    "vis": {
+        "ticker": "5071",
+        "name": "株式会社ヴィス",
+        "datastore_id": "vis-ir-data_1752223995110",
+    },
+    "harux": {"ticker": "7561", "name": "株式会社ハークスレイ", "datastore_id": "harux-ir-data"},
+}
+# 企業ごとの既定ゴールデンセット
+GOLDEN_FILES: dict[str, Path] = {
+    "vis": Path(__file__).with_name("golden_set.vis.jsonl"),
+    "harux": Path(__file__).with_name("golden_set.7561.jsonl"),
+}
+
+
 def call_agent(query: str, company_id: str = "vis") -> dict[str, Any]:
     """
-    実エージェント（ADK）を呼び出し AgentResponse(dict) を返す。
+    実エージェント（ADK）を company_id にスコープして呼び出し AgentResponse(dict) を返す。
     import は遅延（--self-test を google-adk 無しで動かすため）。
-    GCP/モデル/DB の認証が整っていることが前提。
+    GCP/モデル の認証が整っていることが前提。
     """
     import asyncio
 
     from agent.agent import run_agent  # 遅延 import
 
-    # ゴールデンセットはヴィス。company コンテキストを明示（ハードコードはここ＝テスト範囲のみ）
-    company = {
-        "ticker": "5071",
-        "name": "株式会社ヴィス",
-        "datastore_id": "vis-ir-data_1752223995110",
-    }
+    company = COMPANIES.get(company_id) or COMPANIES["vis"]
     return asyncio.run(run_agent(query, company))
 
 
@@ -310,9 +325,14 @@ def load_golden(path: Path) -> list[GoldCase]:
     return cases
 
 
-def run(golden_path: Path, agent: Callable[[str, str], dict[str, Any]]) -> int:
+def run(
+    golden_path: Path,
+    company_id: str = "vis",
+    agent: Callable[[str, str], dict[str, Any]] = call_agent,
+) -> int:
     cases = load_golden(golden_path)
-    results = [evaluate_case(c, agent(c.query, "vis")) for c in cases]
+    print(f"対象企業: {company_id} / ゴールデン: {golden_path.name} / {len(cases)}問")
+    results = [evaluate_case(c, agent(c.query, company_id)) for c in cases]
     summary = summarize(results)
     print_report(results, summary)
     return 0 if summary["gate_pass"] else 1
@@ -427,7 +447,10 @@ def _self_test() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="IR Agent 評価ハーネス")
-    ap.add_argument("--golden", type=Path, default=GOLDEN_DEFAULT, help="ゴールデンセット(.jsonl)")
+    ap.add_argument("--company", default="vis", choices=sorted(COMPANIES), help="評価対象の企業ID")
+    ap.add_argument(
+        "--golden", type=Path, default=None, help="ゴールデンセット(.jsonl)。未指定なら企業既定"
+    )
     ap.add_argument(
         "--self-test", action="store_true", help="エージェント不要でハーネスのロジックを検証"
     )
@@ -435,7 +458,8 @@ def main() -> int:
 
     if args.self_test:
         return _self_test()
-    return run(args.golden, call_agent)
+    golden = args.golden or GOLDEN_FILES.get(args.company, GOLDEN_DEFAULT)
+    return run(golden, args.company)
 
 
 if __name__ == "__main__":
