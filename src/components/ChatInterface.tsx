@@ -37,6 +37,9 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { selectedCompany } = useCompany();
 
+  // 企業固有のガイドチップがあれば優先、無ければ汎用にフォールバック
+  const chips = selectedCompany?.guidedQuestions ?? GUIDED_ENTRIES;
+
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const patchMessage = (id: string, patch: Partial<Message>) =>
@@ -137,7 +140,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
               開示済みのIR情報を、出典付きでお答えします。
             </p>
             <div className="mt-6 flex max-w-xl flex-wrap justify-center gap-2">
-              {GUIDED_ENTRIES.map((entry) => (
+              {chips.map((entry) => (
                 <button
                   key={entry}
                   onClick={() => (selectedCompany ? send(entry) : inputRef.current?.focus())}
