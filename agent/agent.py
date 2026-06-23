@@ -137,8 +137,11 @@ def _compose(
     citations = _dedup_citations(citations)
     if escalated:
         scope_status, scope_reason = "escalated", "out_of_corpus"
-    elif not fact_cards and not citations and not prose.strip():
-        scope_status, scope_reason = "escalated", "unknown"
+    elif not fact_cards and not citations:
+        # 接地ゼロ（数値カードも引用も無い）＝開示資料で答えられていない。
+        # LLM が escalate_to_ir を呼ばず散文で謝っただけのケースもここで拾い、
+        # 「IR窓口へ」CTA を必ず出す（行き止まりにしない／answered 誤ラベルを防ぐ）。
+        scope_status, scope_reason = "escalated", "out_of_corpus"
     else:
         scope_status, scope_reason = "answered", None
     return {
