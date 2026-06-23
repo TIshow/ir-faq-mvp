@@ -4,10 +4,29 @@ import React from 'react';
 import { AgentResponse, Citation, FactCard, ScopeStatus } from '@/lib/agent-types';
 import { Markdown } from '@/components/Markdown';
 
-/** 出典リンク：原本PDFの該当ページへ #page=N でディープリンク */
+/**
+ * gs:// の出典URLを、署名URLを発行する内部ルート /api/doc?... に変換する。
+ * （非公開バケットのまま、クリック時に時限・署名URLでPDFを開く。ページ指定も付与）
+ * 既に http(s):// なら従来どおり #page=N を付けて返す。
+ */
+function toDocHref(citation: Citation): string | undefined {
+  const url = citation.url;
+  if (!url) return undefined;
+  if (!url.startsWith('gs://')) {
+    return citation.page ? `${url}#page=${citation.page}` : url;
+  }
+  const rest = url.slice('gs://'.length); // bucket/object…
+  const slash = rest.indexOf('/');
+  if (slash < 0) return undefined;
+  const params = new URLSearchParams({ b: rest.slice(0, slash), o: rest.slice(slash + 1) });
+  if (citation.page) params.set('page', String(citation.page));
+  return `/api/doc?${params.toString()}`;
+}
+
+/** 出典リンク：原本PDFの該当ページへ署名URL経由でディープリンク */
 export const CitationLink: React.FC<{ citation: Citation; compact?: boolean }> = ({ citation, compact }) => {
   const label = citation.page ? `${citation.doc} p.${citation.page}` : citation.doc;
-  const href = citation.url ? (citation.page ? `${citation.url}#page=${citation.page}` : citation.url) : undefined;
+  const href = toDocHref(citation);
   const cls = `inline-flex items-center gap-1 ${compact ? 'text-[11px]' : 'text-xs'} text-zinc-400 transition hover:text-emerald-400`;
   const content = <span title={citation.quote ?? undefined}>📄 {label}</span>;
   return href ? (
