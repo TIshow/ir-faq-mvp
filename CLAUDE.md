@@ -32,7 +32,8 @@
 src/                      フロント（Next.js）
   app/page.tsx, layout    画面
   app/api/chat/route.ts   エージェントへの SSE プロキシ（companies.ts から企業コンテキスト送信）
-  components/ChatInterface.tsx  チャットUI（SSE受信・ストリーミング表示）
+  app/api/doc/route.ts    出典PDFのプロキシ配信（非公開GCSをSA権限で中継・許可バケットのみ）
+  components/ChatInterface.tsx  チャットUI（SSE受信・ストリーミング表示・次質問サジェスト）
   components/FactCard.tsx       数値カード/出典リンク/scope分岐 描画
   components/CompanyPicker.tsx  企業選択ピッカー（モノグラム＋ティッカー・ダークUI）
   components/Markdown.tsx       回答散文のMarkdown描画（react-markdown）
@@ -44,16 +45,19 @@ agent/                    エージェント（Python / ADK）
   tools.py                3ツール（get_financial_facts / search_disclosures / escalate_to_ir）。企業は tool_context.state から取得
   prompt.py               システムプロンプト（鉄則6項）
   scope.py                入口スコープ分類（助言/予測/未開示の短絡拒否）
+  suggest.py              次質問サジェスト（A-lite: 利用可能データから決定論生成）
+  analytics.py            Q&A永続ログ（痛み②: BigQuery へ匿名記録。ANALYTICS_ENABLED で切替）
   store.py / facts_store.py / db.py  層1ストア（json=PoC / cloudsql=本番 を FACTS_BACKEND で切替）
   server.py               FastAPI（/chat の SSE, /health）
   config.py               環境設定（.env 読込）
-  data/facts.json     層1の実データ（ヴィス(5071)投入済み・検証済み実値のみ／ticカー別。捏造禁止）
+  data/facts.json     層1の実データ（ハークスレイ(7561)旗艦＋ヴィス(5071)。検証済み実値のみ／ティッカー別。捏造禁止）
   .env.example            ローカル設定例
 scripts/
   extract_facts.py        層1取り込み（GeminiでPDF→構造化ファクト草案。人手検証後 facts.json へ）
+  extract_facts_xbrl.py   層1取り込み（EDINET有報XBRL→決定論抽出。連結ヘッドライン＋セグメント）
 eval/
-  eval_harness.py         評価ハーネス（数値=決定論比較・コンプラ=ゼロ許容CI関門・品質eval・--self-test）
-  golden_set.vis.jsonl    ゴールデンセット（ヴィス実値投入済み）
+  eval_harness.py         評価ハーネス（数値=決定論比較・コンプラ=ゼロ許容CI関門・--company で企業別）
+  golden_set.vis.jsonl / golden_set.7561.jsonl  ゴールデンセット（vis / ハークスレイ）
 database/                 層1本番用 Cloud SQL スキーマ（financial_facts.sql 等。未接続=将来）
 docs/                     ARCHITECTURE.md / HANDOFF.md / phase1-gcp-setup.md / investor-experience-quality.md
 Dockerfile                フロント用 / Dockerfile.agent  エージェント用
