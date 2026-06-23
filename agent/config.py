@@ -45,6 +45,12 @@ FACTS_JSON_PATH = os.environ.get("FACTS_JSON_PATH", "")  # 空ならパッケー
 # --- 取得パラメータ ----------------------------------------------------------
 MAX_DISCLOSURE_RESULTS = int(os.environ.get("MAX_DISCLOSURE_RESULTS", "8"))
 
+# --- 分析ログ（痛み②: IRインテリジェンス。BigQuery）------------------------
+# 全Q&Aを匿名・集計用に記録（個人識別子は持たない）。ローカル/評価では既定OFF。
+ANALYTICS_ENABLED = os.environ.get("ANALYTICS_ENABLED", "").upper() in ("1", "TRUE", "YES")
+BQ_DATASET = os.environ.get("BQ_DATASET", "ir_analytics")
+BQ_TABLE = os.environ.get("BQ_TABLE", "interactions")
+
 
 def datastore_serving_config(datastore_id: str) -> str:
     """Discovery Engine の servingConfig パスを構築。"""

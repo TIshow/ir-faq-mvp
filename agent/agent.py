@@ -23,6 +23,7 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from . import config, prompt
+from .analytics import log_interaction
 from .scope import classify_scope
 from .suggest import build_suggestions
 from .tools import escalate_to_ir, get_financial_facts, search_disclosures
@@ -188,6 +189,7 @@ async def run_agent_stream(
 
     decision = classify_scope(query)
     if decision.status != "answered":
+        log_interaction(ticker, query, decision.status, decision.reason, 0, 0)
         yield {"type": "prose_delta", "text": decision.message or ""}
         yield {"type": "final", "response": _refusal_response(decision, suggestions)}
         return
@@ -240,10 +242,16 @@ async def run_agent_stream(
             prose_parts.append(text)
             yield {"type": "prose_delta", "text": text}
 
-    yield {
-        "type": "final",
-        "response": _compose("".join(prose_parts), fact_cards, citations, escalated, suggestions),
-    }
+    final = _compose("".join(prose_parts), fact_cards, citations, escalated, suggestions)
+    log_interaction(
+        ticker,
+        query,
+        final["scope_status"],
+        final.get("scope_reason"),
+        len(final["fact_cards"]),
+        len(final["citations"]),
+    )
+    yield {"type": "final", "response": final}
 
 
 async def run_agent(query: str, company: dict[str, Any]) -> dict[str, Any]:
