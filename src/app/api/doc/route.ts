@@ -1,10 +1,12 @@
-import { Storage } from '@google-cloud/storage';
+// 出典PDF（非公開GCS）をアプリ経由でストリーム配信する。
+// 署名URL方式(signBlob)は Cloud Run 上で iamcredentials への通信が "Premature close" で
+// 不安定だったため、メタデータサーバのアクセストークンでGCSから直接取得して中継する。
+// 依存ライブラリ不要＝バンドル/通信の不確実性を排除。バケットは非公開のまま閲覧できる。
 
-// @google-cloud/storage は Node ランタイムが必要（Edge 不可）。毎回署名するため動的。
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// 署名を許可するバケット（任意の gs:// を署名させない＝SSRF/情報漏洩を防ぐホワイトリスト）。
+// 配信を許可するバケット（任意GCS読み取り＝SSRF/情報漏洩を防ぐホワイトリスト）。
 const ALLOWED_BUCKETS = new Set([
   'vis-ir-data',
   'philcompany-ir-data',
@@ -12,40 +14,50 @@ const ALLOWED_BUCKETS = new Set([
   'harux-ir-data',
 ]);
 
-const SIGNED_URL_TTL_MS = 15 * 60 * 1000; // 15分
-
-const storage = new Storage();
+/** Cloud Run 実行SAのアクセストークン（メタデータサーバ。ローカルには無いので本番専用）。 */
+async function accessToken(): Promise<string> {
+  const res = await fetch(
+    'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+    { headers: { 'Metadata-Flavor': 'Google' } },
+  );
+  if (!res.ok) throw new Error(`metadata token ${res.status}`);
+  const json = (await res.json()) as { access_token: string };
+  return json.access_token;
+}
 
 /**
- * 出典PDF（非公開GCS）への時限・署名URL（V4）を発行して 302 リダイレクトする。
- *
- * 出典リンクは gs:// を直接出さず `/api/doc?b=<bucket>&o=<object>&page=<n>` を指す
- * （FactCard の toDocHref が生成）。クリック時に毎回新鮮な署名URLを発行するため、
- * 期限切れリンクが残らず、バケットは非公開のまま閲覧できる。
- *
- * 本番(Cloud Run)は実行SA＋IAM signBlob で署名。ローカルは署名にSA権限/鍵が要る場合がある。
+ * GET /api/doc/?b=<bucket>&o=<object>
+ * 許可バケットのオブジェクトを SA 権限で取得し、PDF をそのまま中継する。
+ * ページ指定はリンク側のフラグメント(#page=N)でビューアが解釈する。
  */
 export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
   const bucket = searchParams.get('b') ?? '';
   const object = searchParams.get('o') ?? '';
-  const page = searchParams.get('page');
 
   if (!bucket || !object || !ALLOWED_BUCKETS.has(bucket)) {
     return new Response('Not found', { status: 404 });
   }
 
   try {
-    const [signedUrl] = await storage
-      .bucket(bucket)
-      .file(object)
-      .getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + SIGNED_URL_TTL_MS });
-
-    // ページ指定はフラグメントで（PDFビューアが #page=N を解釈）
-    const location = page ? `${signedUrl}#page=${encodeURIComponent(page)}` : signedUrl;
-    return new Response(null, { status: 302, headers: { Location: location } });
+    const token = await accessToken();
+    const gcsUrl =
+      `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}` +
+      `/o/${encodeURIComponent(object)}?alt=media`;
+    const upstream = await fetch(gcsUrl, { headers: { Authorization: `Bearer ${token}` } });
+    if (!upstream.ok || !upstream.body) {
+      return new Response('資料が見つかりません。', { status: 502 });
+    }
+    return new Response(upstream.body, {
+      status: 200,
+      headers: {
+        'Content-Type': upstream.headers.get('content-type') ?? 'application/pdf',
+        'Content-Disposition': 'inline',
+        'Cache-Control': 'private, max-age=300',
+      },
+    });
   } catch (e) {
-    console.error('[api/doc] 署名URLの生成に失敗:', e);
-    return new Response('資料リンクの生成に失敗しました。', { status: 502 });
+    console.error('[api/doc] 取得失敗:', e);
+    return new Response('資料の取得に失敗しました。', { status: 502 });
   }
 }
