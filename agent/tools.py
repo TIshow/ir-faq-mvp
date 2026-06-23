@@ -176,6 +176,19 @@ def _clean(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _doc_label(title: str, link: str | None) -> str:
+    """層2の表示名を整える。facts.json の検証済み資料名（source_url 一致）があれば優先し、
+    無ければ派生title（ファイル名由来）にフォールバックする。"""
+    if link:
+        try:
+            label = store.doc_label_for_url(link)
+        except Exception:
+            label = None
+        if label:
+            return label
+    return title or "開示資料"
+
+
 def search_disclosures(query: str, tool_context: ToolContext = None) -> dict[str, Any]:
     """
     対象企業（セッションで指定）の開示資料から、質問に関連する定性的記述を引用付きで検索する。
@@ -259,7 +272,7 @@ def search_disclosures(query: str, tool_context: ToolContext = None) -> dict[str
                     passages.append(
                         {
                             "text": cleaned,
-                            "doc": title,
+                            "doc": _doc_label(title, link),
                             "page": page,
                             "url": link,
                             "quote": cleaned[:300],
