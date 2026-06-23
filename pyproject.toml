@@ -17,6 +17,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
     "pydantic>=2.8.0",
+    "google-cloud-bigquery>=3.42.0",
 ]
 
 # 開発依存（CI用。本番イメージは uv sync --no-dev で除外）
