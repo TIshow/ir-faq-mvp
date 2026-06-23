@@ -69,4 +69,6 @@ export interface AgentResponse {
   scope_status: ScopeStatus;
   /** エスカレーション/拒否の理由（②の分類）。answered では undefined */
   scope_reason?: 'out_of_corpus' | 'advice' | 'prediction' | 'undisclosed' | 'unknown';
+  /** 次の質問サジェスト（A-lite: その企業の開示データから決定論生成。クリックで再質問） */
+  suggestions?: string[];
 }
