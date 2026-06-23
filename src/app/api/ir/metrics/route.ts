@@ -89,7 +89,7 @@ export async function GET(request: Request): Promise<Response> {
 
     const escalated = await bqQuery(
       token,
-      `SELECT question, FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', ts) AS at FROM ${TABLE} ${where} AND scope_status='escalated' ORDER BY ts DESC LIMIT 20`,
+      `SELECT question, FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', ts) AS asked_at FROM ${TABLE} ${where} AND scope_status='escalated' ORDER BY ts DESC LIMIT 20`,
       since,
     );
     const top = await bqQuery(
@@ -106,7 +106,7 @@ export async function GET(request: Request): Promise<Response> {
         total,
         answer_rate: total ? Math.round((counts.answered / total) * 1000) / 10 : 0,
       },
-      escalated_questions: escalated.map((r) => ({ question: r.question, at: r.at })),
+      escalated_questions: escalated.map((r) => ({ question: r.question, at: r.asked_at })),
       top_questions: top.map((r) => ({ question: r.question, count: Number(r.c) })),
     });
   } catch (e) {
