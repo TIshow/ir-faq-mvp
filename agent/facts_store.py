@@ -85,6 +85,17 @@ def summary(ticker: str) -> dict[str, Any]:
     }
 
 
+def doc_label_for_url(url: str) -> str | None:
+    """source_url（gs://…）に対応する人間可読の資料名を facts から引く。
+    層2（検索）の表示名がファイル名由来で素っ気ない場合に、検証済みの資料名へ整える用途。"""
+    if not url:
+        return None
+    for r in _load():
+        if r.get("source_url") == url and r.get("source_doc_label"):
+            return str(r["source_doc_label"])
+    return None
+
+
 def insert_escalation(company_id: Any, question: str, reason: str, scope_status: str) -> None:
     """拒否・不明の質問を JSONL に追記（PoC）。PIIは持たない。"""
     _ESCALATIONS.parent.mkdir(parents=True, exist_ok=True)

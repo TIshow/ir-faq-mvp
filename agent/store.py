@@ -16,6 +16,7 @@ if config.FACTS_BACKEND == "cloudsql":
     from .db import insert_escalation, query_facts, resolve_company_id  # noqa: F401
 else:
     from .facts_store import (  # noqa: F401
+        doc_label_for_url,
         insert_escalation,
         query_facts,
         resolve_company_id,
