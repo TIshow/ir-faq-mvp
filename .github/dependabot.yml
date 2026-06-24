@@ -1,17 +1,23 @@
 # Dependabot: 依存の脆弱性修正と更新を自動でPR化する。
 # 過去に Next.js の脆弱性で更新を迫られた経緯があり、自動追従で再発を防ぐ。
+# ノイズ低減: 月次＋マイナー/パッチをグループ化。npm メジャー（Next/ESLint/TS等の
+# 破壊的更新）は自動PRを出さない（個別検証で扱う）。
 version: 2
 updates:
   # フロント（npm）
   - package-ecosystem: npm
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     groups:
       # マイナー/パッチはまとめて1PRに（PRノイズ削減）
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # メジャー更新は破壊的変更の恐れ → 自動PRしない（手動で計画的に上げる）
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     labels: [dependencies, frontend]
 
   # エージェント（Python / uv）。uv.lock を理解・同期する専用エコシステムを使う
@@ -19,16 +25,19 @@ updates:
   - package-ecosystem: uv
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     labels: [dependencies, agent]
 
-  # GitHub Actions 自身のバージョン更新
+  # GitHub Actions 自身のバージョン更新（メジャーはCIで検証されるため許可・月次）
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
     labels: [dependencies, ci]
