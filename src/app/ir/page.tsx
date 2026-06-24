@@ -76,6 +76,21 @@ export default function IrDashboardPage() {
     if (authReady && user) load();
   }, [authReady, user, ticker, days, load]);
 
+  // 未回答にIRが回答 → FAQとして層2に登録（次回から自動回答）。
+  const submitFaq = useCallback(
+    async (question: string, answer: string): Promise<boolean> => {
+      if (!user) return false;
+      const token = await user.getIdToken();
+      const res = await fetch('/api/ir/faq/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ question, answer, company: ticker }),
+      });
+      return res.ok;
+    },
+    [user, ticker],
+  );
+
   if (!authReady) {
     return <div className="mx-auto max-w-4xl px-5 py-8 text-sm text-zinc-500">認証確認中…</div>;
   }
@@ -151,10 +166,7 @@ export default function IrDashboardPage() {
             ) : (
               <ul className="mt-3 divide-y divide-zinc-800/70">
                 {data.escalated_questions.map((q, i) => (
-                  <li key={i} className="flex items-start justify-between gap-3 py-2 text-sm">
-                    <span className="text-zinc-200">{q.question}</span>
-                    <span className="shrink-0 font-mono text-xs text-zinc-500">{q.at}</span>
-                  </li>
+                  <EscalationRow key={i} question={q.question} at={q.at} onSubmit={submitFaq} />
                 ))}
               </ul>
             )}
@@ -190,6 +202,74 @@ export default function IrDashboardPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/** 未回答1件＋回答フォーム。回答するとFAQ登録→次回から自動回答。 */
+function EscalationRow({
+  question,
+  at,
+  onSubmit,
+}: {
+  question: string;
+  at: string;
+  onSubmit: (q: string, a: string) => Promise<boolean>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [answer, setAnswer] = useState('');
+  const [status, setStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
+
+  const save = async () => {
+    if (!answer.trim()) return;
+    setStatus('saving');
+    setStatus((await onSubmit(question, answer.trim())) ? 'done' : 'error');
+  };
+
+  if (status === 'done') {
+    return (
+      <li className="py-2 text-sm">
+        <span className="text-zinc-400 line-through">{question}</span>
+        <span className="ml-2 text-xs text-emerald-400">✓ FAQ登録済み（次回から自動回答）</span>
+      </li>
+    );
+  }
+
+  return (
+    <li className="py-2 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-zinc-200">{question}</span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="font-mono text-xs text-zinc-500">{at}</span>
+          <button
+            onClick={() => setOpen(!open)}
+            className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300 transition hover:border-emerald-500/40 hover:text-zinc-100"
+          >
+            {open ? '閉じる' : '回答する'}
+          </button>
+        </div>
+      </div>
+      {open && (
+        <div className="mt-2">
+          <textarea
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            rows={3}
+            placeholder="開示済みの内容で回答を入力（投資家にそのまま提示されます）"
+            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-zinc-600 focus:outline-none"
+          />
+          <div className="mt-1.5 flex items-center gap-2">
+            <button
+              onClick={save}
+              disabled={status === 'saving' || !answer.trim()}
+              className="rounded-lg bg-emerald-500 px-3 py-1 text-xs font-medium text-zinc-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600"
+            >
+              {status === 'saving' ? '登録中…' : 'FAQに登録'}
+            </button>
+            {status === 'error' && <span className="text-xs text-rose-400">登録に失敗しました</span>}
+          </div>
+        </div>
+      )}
+    </li>
   );
 }
 
