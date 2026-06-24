@@ -5,11 +5,10 @@
 // 認証(1-2d): Firebase IDトークンを検証し、company クレームでスコープを強制
 //（admin は全社可）。クライアントの company パラメータは詐称防止のため信用しない。
 import { verifyIrToken } from '@/lib/firebase-admin';
+import { GCP_PROJECT_ID as PROJECT } from '@/lib/gcp';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const PROJECT = process.env.GCP_PROJECT_ID || 'hallowed-trail-462613-v1';
 const TABLE = `\`${PROJECT}.ir_analytics.interactions\``;
 const MAX_BYTES = '100000000'; // 100MB 上限＝暴走課金を構造的に防ぐ
 

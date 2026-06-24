@@ -12,7 +12,7 @@
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 
-const PROJECT = 'hallowed-trail-462613-v1';
+const PROJECT = process.env.GCP_PROJECT_ID || 'hallowed-trail-462613-v1';
 
 function arg(name) {
   const i = process.argv.indexOf(`--${name}`);
