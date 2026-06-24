@@ -1,8 +1,10 @@
-// IRダッシュボード向け 集計API（#46 1-2b）。
+// IRダッシュボード向け 集計API（#46 1-2b/1-2d）。
 // BigQuery interactions を company スコープで集計して返す。
 // BQは @google-cloud/* を使わず、メタデータSAトークン＋REST(jobs.query)で叩く
 // （/api/doc と同方針：依存を増やさず・バンドル/署名の不確実性を回避）。
-// 認証は 1-2d で追加予定（現状は匿名集計のみ返す未認証エンドポイント）。
+// 認証(1-2d): Firebase IDトークンを検証し、company クレームでスコープを強制
+//（admin は全社可）。クライアントの company パラメータは詐称防止のため信用しない。
+import { verifyIrToken } from '@/lib/firebase-admin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -61,10 +63,23 @@ async function bqQuery(
 }
 
 export async function GET(request: Request): Promise<Response> {
+  // 認証: Firebase IDトークンを検証
+  const claims = await verifyIrToken(request.headers.get('authorization'));
+  if (!claims) return Response.json({ error: 'unauthorized' }, { status: 401 });
+
   const { searchParams } = new URL(request.url);
-  const company = (searchParams.get('company') || '').trim();
   const days = Math.min(Math.max(parseInt(searchParams.get('days') || '30', 10) || 30, 1), 365);
-  if (!company) return Response.json({ error: 'company is required' }, { status: 400 });
+
+  // 会社スコープはクレームで決定（クライアントの company は admin のときだけ採用）。
+  const requested = (searchParams.get('company') || '').trim();
+  let company: string;
+  if (claims.admin) {
+    company = requested || ''; // admin は任意の company を見られる
+    if (!company) return Response.json({ error: 'company is required' }, { status: 400 });
+  } else {
+    if (!claims.company) return Response.json({ error: 'forbidden' }, { status: 403 });
+    company = claims.company; // 担当社に強制（リクエストの company は無視）
+  }
 
   const since: Param[] = [
     { name: 'company', type: 'STRING', value: company },
