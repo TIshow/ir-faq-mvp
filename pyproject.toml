@@ -5,24 +5,24 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "cloud-sql-python-connector>=1.18.2",
-    "pg8000>=1.31.2",
-    "psycopg2-binary>=2.9.10",
-    "sqlalchemy>=2.0.41",
+    "cloud-sql-python-connector>=1.20.3",
+    "pg8000>=1.31.5",
+    "psycopg2-binary>=2.9.12",
+    "sqlalchemy>=2.0.51",
     # IR Agent (ADK)
-    "google-adk>=2.0.0",
-    "google-cloud-aiplatform>=1.60.0",
+    "google-adk>=2.3.0",
+    "google-cloud-aiplatform>=1.158.0",
     "google-cloud-discoveryengine>=0.13.0",
     "google-cloud-secret-manager>=2.20.0",
-    "fastapi>=0.115.0",
+    "fastapi>=0.138.0",
     "uvicorn>=0.30.0",
     "pydantic>=2.8.0",
-    "google-cloud-bigquery>=3.42.0",
+    "google-cloud-bigquery>=3.42.1",
 ]
 
 # 開発依存（CI用。本番イメージは uv sync --no-dev で除外）
 [dependency-groups]
-dev = ["ruff>=0.14.0"]
+dev = ["ruff>=0.15.19"]
 
 [tool.ruff]
 line-length = 100
