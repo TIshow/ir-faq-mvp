@@ -3,9 +3,9 @@
 // トークンの company / admin カスタムクレームを読み、API側で会社スコープを強制する。
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { GCP_PROJECT_ID } from '@/lib/gcp';
 
-const PROJECT = 'hallowed-trail-462613-v1';
-const app = getApps().length ? getApps()[0] : initializeApp({ projectId: PROJECT });
+const app = getApps().length ? getApps()[0] : initializeApp({ projectId: GCP_PROJECT_ID });
 
 export interface IrClaims {
   uid: string;
