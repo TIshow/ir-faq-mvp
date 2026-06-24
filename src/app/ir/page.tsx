@@ -1,6 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import { getActiveCompanies, companyShortName } from '@/config/companies';
 
 // /api/ir/metrics の戻り値（#46 1-2b）
@@ -14,31 +17,72 @@ interface Metrics {
 
 const DAYS_OPTIONS = [7, 30, 90];
 
-/** IR向けアウトカム・ダッシュボード（#46 1-2c）。投資家チャットとは別画面。
- *  ※認証は 1-2d で追加予定（現状は未認証）。 */
+/** IR向けアウトカム・ダッシュボード（#46 1-2c/1-2d）。
+ *  認証必須（未ログインは /ir/login へ）。admin は全社、IR担当は自社のみ。 */
 export default function IrDashboardPage() {
+  const router = useRouter();
   const companies = getActiveCompanies().filter((c) => c.ticker);
-  const [ticker, setTicker] = useState<string>(
-    companies.find((c) => c.id === 'harux')?.ticker ?? companies[0]?.ticker ?? '',
-  );
+
+  const [authReady, setAuthReady] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [claimCompany, setClaimCompany] = useState<string | undefined>(undefined);
+
+  const [ticker, setTicker] = useState<string>('');
   const [days, setDays] = useState<number>(30);
   const [data, setData] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 認証状態 → 未ログインは login へ。claims で admin/担当社を判定。
   useEffect(() => {
-    if (!ticker) return;
+    return onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        router.replace('/ir/login/');
+        return;
+      }
+      const res = await u.getIdTokenResult();
+      const admin = res.claims.admin === true;
+      const company = typeof res.claims.company === 'string' ? res.claims.company : undefined;
+      setIsAdmin(admin);
+      setClaimCompany(company);
+      setTicker(admin ? (companies[0]?.ticker ?? '') : (company ?? ''));
+      setUser(u);
+      setAuthReady(true);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const load = useCallback(async () => {
+    if (!user || !ticker) return;
     setLoading(true);
     setError(null);
-    fetch(`/api/ir/metrics/?company=${encodeURIComponent(ticker)}&days=${days}`)
-      .then((r) => r.json())
-      .then((d) => (d.error ? setError(d.error) : setData(d)))
-      .catch(() => setError('取得に失敗しました'))
-      .finally(() => setLoading(false));
-  }, [ticker, days]);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/ir/metrics/?company=${encodeURIComponent(ticker)}&days=${days}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const d = await res.json();
+      if (d.error) setError(d.error);
+      else setData(d);
+    } catch {
+      setError('取得に失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  }, [user, ticker, days]);
+
+  useEffect(() => {
+    if (authReady && user) load();
+  }, [authReady, user, ticker, days, load]);
+
+  if (!authReady) {
+    return <div className="mx-auto max-w-4xl px-5 py-8 text-sm text-zinc-500">認証確認中…</div>;
+  }
 
   const t = data?.totals;
   const maxTop = Math.max(1, ...(data?.top_questions ?? []).map((q) => q.count));
+  const lockedName = companyShortName(companies.find((c) => c.ticker === claimCompany)?.name ?? '') || claimCompany;
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-4xl px-5 py-8 text-zinc-200">
@@ -46,20 +90,25 @@ export default function IrDashboardPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-zinc-100">IR ダッシュボード</h1>
-          <p className="text-sm text-zinc-500">投資家からの質問トレンドと、未回答（IR要対応）の可視化</p>
+          <p className="text-sm text-zinc-500">
+            投資家の質問トレンドと、未回答（IR要対応）の可視化
+            {!isAdmin && lockedName ? `（${lockedName}）` : ''}
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <select
-            value={ticker}
-            onChange={(e) => setTicker(e.target.value)}
-            className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-200"
-          >
-            {companies.map((c) => (
-              <option key={c.id} value={c.ticker}>
-                {companyShortName(c.name)}（{c.ticker}）
-              </option>
-            ))}
-          </select>
+          {isAdmin && (
+            <select
+              value={ticker}
+              onChange={(e) => setTicker(e.target.value)}
+              className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-200"
+            >
+              {companies.map((c) => (
+                <option key={c.id} value={c.ticker}>
+                  {companyShortName(c.name)}（{c.ticker}）
+                </option>
+              ))}
+            </select>
+          )}
           <select
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
@@ -71,6 +120,12 @@ export default function IrDashboardPage() {
               </option>
             ))}
           </select>
+          <button
+            onClick={() => signOut(auth)}
+            className="rounded-lg border border-zinc-800 px-2.5 py-1.5 text-xs text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-200"
+          >
+            ログアウト
+          </button>
         </div>
       </div>
 
@@ -79,7 +134,6 @@ export default function IrDashboardPage() {
 
       {data && t && !loading && (
         <div className="mt-6 space-y-6">
-          {/* KPI */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Kpi label="総質問数" value={String(t.total)} />
             <Kpi label="回答率" value={`${t.answer_rate}%`} accent="emerald" />
@@ -87,10 +141,10 @@ export default function IrDashboardPage() {
             <Kpi label="拒否（助言/予測等）" value={String(t.refused)} />
           </div>
 
-          {/* エスカレーション一覧（痛み②の核） */}
           <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
             <h2 className="text-sm font-medium text-zinc-300">
-              未回答（IR要対応）<span className="ml-2 text-xs text-zinc-500">資料で答えられず IR窓口へ回った質問</span>
+              未回答（IR要対応）
+              <span className="ml-2 text-xs text-zinc-500">資料で答えられず IR窓口へ回った質問</span>
             </h2>
             {data.escalated_questions.length === 0 ? (
               <p className="mt-3 text-sm text-zinc-500">この期間の未回答はありません。</p>
@@ -106,7 +160,6 @@ export default function IrDashboardPage() {
             )}
           </section>
 
-          {/* 頻出質問 */}
           <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
             <h2 className="text-sm font-medium text-zinc-300">頻出質問トップ</h2>
             {data.top_questions.length === 0 ? (
@@ -132,7 +185,7 @@ export default function IrDashboardPage() {
           </section>
 
           <p className="text-xs text-zinc-600">
-            ※ 個人を特定する情報は記録していません（匿名・集計のみ）。認証は今後追加予定。
+            ※ 個人を特定する情報は記録していません（匿名・集計のみ）。
           </p>
         </div>
       )}
