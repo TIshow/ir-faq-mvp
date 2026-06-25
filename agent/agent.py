@@ -242,6 +242,29 @@ async def run_agent_stream(
             prose_parts.append(text)
             yield {"type": "prose_delta", "text": text}
 
+    # フォールバック: LLMが search_disclosures を呼ばず escalate 相当で終えた場合でも、
+    # IR承認済みFAQに答えがあれば拾う（ツール選択ミスの補償。FAQ回答を出典付きで提示）。
+    # 条件は「最終的に escalate になる」ケース全般（escalate_to_ir 呼出 or 接地ゼロ）。
+    if escalated or (not fact_cards and not citations):
+        try:
+
+            class _Ctx:
+                def __init__(self, c: dict[str, Any]):
+                    self.state = {"company": c}
+
+            ctx = _Ctx(
+                {"ticker": ticker, "name": name, "datastore_id": company.get("datastore_id")}
+            )
+            passages = search_disclosures(query, ctx).get("passages", [])
+            faqs = [p for p in passages if str(p.get("doc", "")).startswith("IR想定問答")]
+            if faqs:
+                fact_cards = []  # FAQ回答に切り替え（部分的に取得したカードは出さない）
+                citations = faqs
+                prose_parts = [str(faqs[0].get("text", ""))]
+                escalated = False
+        except Exception:
+            pass
+
     final = _compose("".join(prose_parts), fact_cards, citations, escalated, suggestions)
     log_interaction(
         ticker,
