@@ -45,6 +45,11 @@ FACTS_JSON_PATH = os.environ.get("FACTS_JSON_PATH", "")  # 空ならパッケー
 # --- 取得パラメータ ----------------------------------------------------------
 MAX_DISCLOSURE_RESULTS = int(os.environ.get("MAX_DISCLOSURE_RESULTS", "8"))
 
+# --- 回答生成モード ----------------------------------------------------------
+# 'synthesis' = Grounded Synthesis（retrieve→統合合成→接地・answerability判定）＝既定
+# 'legacy'    = ADK の agentic ツールループ（従来・ロールバック用。ANSWER_MODE=legacy）
+ANSWER_MODE = os.environ.get("ANSWER_MODE", "synthesis")
+
 # --- 分析ログ（痛み②: IRインテリジェンス。BigQuery）------------------------
 # 全Q&Aを匿名・集計用に記録（個人識別子は持たない）。ローカル/評価では既定OFF。
 ANALYTICS_ENABLED = os.environ.get("ANALYTICS_ENABLED", "").upper() in ("1", "TRUE", "YES")
