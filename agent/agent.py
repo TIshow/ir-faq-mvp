@@ -14,6 +14,7 @@ IR Agent 本体（ADK）＋ AgentResponse 合成 ＋ ストリーミング（マ
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -30,6 +31,7 @@ from .tools import escalate_to_ir, get_financial_facts, search_disclosures
 
 APP_NAME = "ir-agent"
 
+_log = logging.getLogger("ir-agent")
 _session_service = InMemorySessionService()
 _TOOLS = [get_financial_facts, search_disclosures, escalate_to_ir]
 
@@ -241,6 +243,29 @@ async def run_agent_stream(
         if text:
             prose_parts.append(text)
             yield {"type": "prose_delta", "text": text}
+
+    # フォールバック: LLMが search_disclosures を呼ばず escalate 相当で終えた場合でも、
+    # IR承認済みFAQに答えがあれば拾う（ツール選択ミスの補償。FAQ回答を出典付きで提示）。
+    # 条件は「最終的に escalate になる」ケース全般（escalate_to_ir 呼出 or 接地ゼロ）。
+    if escalated or (not fact_cards and not citations):
+        try:
+
+            class _Ctx:
+                def __init__(self, c: dict[str, Any]):
+                    self.state = {"company": c}
+
+            ctx = _Ctx(
+                {"ticker": ticker, "name": name, "datastore_id": company.get("datastore_id")}
+            )
+            passages = search_disclosures(query, ctx).get("passages", [])
+            faqs = [p for p in passages if str(p.get("doc", "")).startswith("IR想定問答")]
+            if faqs:
+                fact_cards = []  # FAQ回答に切り替え（部分的に取得したカードは出さない）
+                citations = faqs
+                prose_parts = [str(faqs[0].get("text", ""))]
+                escalated = False
+        except Exception as e:
+            _log.warning("FAQ フォールバック検索に失敗: %s", e)
 
     final = _compose("".join(prose_parts), fact_cards, citations, escalated, suggestions)
     log_interaction(
