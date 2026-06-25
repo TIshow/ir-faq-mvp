@@ -83,36 +83,15 @@ def _latest_period(periods: list[str]) -> str | None:
     return max(periods, key=keyf) if periods else None
 
 
-def get_financial_facts(
+def build_financial_facts(
+    company_id: Any,
     metric_keys: list[str],
     periods: list[str],
     consolidated: bool = True,
     basis: str = "actual",
-    tool_context: ToolContext = None,
-) -> dict[str, Any]:
-    """
-    対象企業（セッションで指定）の財務数値を取得する。営業利益率などの派生指標はコードで計算。
-    必ず開示済み・検証済みのファクトのみを返し、各値に出典を付ける。
-
-    Args:
-        metric_keys: 指標キー（例 ['operating_profit','revenue','operating_margin',
-            'segment.office.revenue']）。
-        periods: 期間ラベル（例 ['2025FY','2024FY']）。前年比は2期以上を渡す。
-        consolidated: 連結=True / 単体=False。
-        basis: 'actual'（実績） / 'forecast'（会社予想）。
-
-    Returns:
-        {'facts': [FactCard...]}。対象企業のデータが無ければ facts は空。
-    """
-    company = _company(tool_context)
-    ticker = company.get("ticker")
-    if not ticker:
-        return {"facts": [], "note": "対象企業が指定されていません"}
-
-    company_id = store.resolve_company_id(ticker)
-    if company_id is None:
-        return {"facts": [], "note": f"企業(ticker={ticker})のデータがありません"}
-
+) -> list[dict[str, Any]]:
+    """company_id・指標・期間から FactCard 群を構築（YoY・利益率はコード計算）。
+    ツール文脈に依存しない純関数。get_financial_facts（LLMツール）と合成パイプラインの両方が使う。"""
     requested = list(metric_keys)
     base_keys = [k for k in requested if k not in DERIVED_METRICS]
     derived_keys = [k for k in requested if k in DERIVED_METRICS]
@@ -167,7 +146,36 @@ def get_financial_facts(
                 }
             )
 
-    return {"facts": cards}
+    return cards
+
+
+def get_financial_facts(
+    metric_keys: list[str],
+    periods: list[str],
+    consolidated: bool = True,
+    basis: str = "actual",
+    tool_context: ToolContext = None,
+) -> dict[str, Any]:
+    """
+    対象企業（セッションで指定）の財務数値を取得する（LLMツール）。中身は build_financial_facts。
+
+    Args:
+        metric_keys: 指標キー（例 ['operating_profit','revenue','operating_margin']）。
+        periods: 期間ラベル（例 ['2025FY','2024FY']）。前年比は2期以上を渡す。
+        consolidated: 連結=True / 単体=False。
+        basis: 'actual'（実績） / 'forecast'（会社予想）。
+
+    Returns:
+        {'facts': [FactCard...]}。対象企業のデータが無ければ facts は空。
+    """
+    company = _company(tool_context)
+    ticker = company.get("ticker")
+    if not ticker:
+        return {"facts": [], "note": "対象企業が指定されていません"}
+    company_id = store.resolve_company_id(ticker)
+    if company_id is None:
+        return {"facts": [], "note": f"企業(ticker={ticker})のデータがありません"}
+    return {"facts": build_financial_facts(company_id, metric_keys, periods, consolidated, basis)}
 
 
 def _clean(text: str) -> str:
