@@ -33,6 +33,7 @@ export default function IrDashboardPage() {
   const [data, setData] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [faqs, setFaqs] = useState<{ id: string; question?: string; answer?: string }[]>([]);
 
   // 認証状態 → 未ログインは login へ。claims で admin/担当社を判定。
   useEffect(() => {
@@ -72,11 +73,25 @@ export default function IrDashboardPage() {
     }
   }, [user, ticker, days]);
 
-  useEffect(() => {
-    if (authReady && user) load();
-  }, [authReady, user, ticker, days, load]);
+  // 登録済みFAQ一覧の取得。
+  const loadFaqs = useCallback(async () => {
+    if (!user || !ticker) return;
+    const token = await user.getIdToken();
+    const res = await fetch(`/api/ir/faq/?company=${encodeURIComponent(ticker)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const d = await res.json();
+    if (!d.error) setFaqs(d.faqs ?? []);
+  }, [user, ticker]);
 
-  // 未回答にIRが回答 → FAQとして層2に登録（次回から自動回答）。
+  useEffect(() => {
+    if (authReady && user) {
+      load();
+      loadFaqs();
+    }
+  }, [authReady, user, ticker, days, load, loadFaqs]);
+
+  // 未回答にIRが回答／FAQ修正 → 層2に upsert（同一質問は上書き）。
   const submitFaq = useCallback(
     async (question: string, answer: string): Promise<boolean> => {
       if (!user) return false;
@@ -86,9 +101,25 @@ export default function IrDashboardPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ question, answer, company: ticker }),
       });
+      if (res.ok) loadFaqs();
       return res.ok;
     },
-    [user, ticker],
+    [user, ticker, loadFaqs],
+  );
+
+  // FAQ削除。
+  const deleteFaq = useCallback(
+    async (id: string): Promise<boolean> => {
+      if (!user) return false;
+      const token = await user.getIdToken();
+      const res = await fetch(
+        `/api/ir/faq/?id=${encodeURIComponent(id)}&company=${encodeURIComponent(ticker)}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (res.ok) loadFaqs();
+      return res.ok;
+    },
+    [user, ticker, loadFaqs],
   );
 
   if (!authReady) {
@@ -196,12 +227,105 @@ export default function IrDashboardPage() {
             )}
           </section>
 
+          {/* 登録済みFAQ（修正・削除） */}
+          <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+            <h2 className="text-sm font-medium text-zinc-300">
+              登録済みFAQ
+              <span className="ml-2 text-xs text-zinc-500">エージェントが自動回答に使うQ&A（{faqs.length}件）</span>
+            </h2>
+            {faqs.length === 0 ? (
+              <p className="mt-3 text-sm text-zinc-500">まだ登録されたFAQはありません。</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-zinc-800/70">
+                {faqs.map((f) => (
+                  <FaqRow
+                    key={f.id}
+                    faq={f}
+                    onSave={submitFaq}
+                    onDelete={() => deleteFaq(f.id)}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+
           <p className="text-xs text-zinc-600">
             ※ 個人を特定する情報は記録していません（匿名・集計のみ）。
           </p>
         </div>
       )}
     </div>
+  );
+}
+
+/** 登録済みFAQ1件＋修正/削除。修正は同じ質問で upsert（上書き）。 */
+function FaqRow({
+  faq,
+  onSave,
+  onDelete,
+}: {
+  faq: { id: string; question?: string; answer?: string };
+  onSave: (q: string, a: string) => Promise<boolean>;
+  onDelete: () => Promise<boolean>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [answer, setAnswer] = useState(faq.answer ?? '');
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    if (!faq.question || !answer.trim()) return;
+    setBusy(true);
+    const ok = await onSave(faq.question, answer.trim());
+    setBusy(false);
+    if (ok) setEditing(false);
+  };
+  const remove = async () => {
+    if (!confirm('このFAQを削除しますか？')) return;
+    setBusy(true);
+    await onDelete();
+  };
+
+  return (
+    <li className="py-2 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-zinc-200">{faq.question}</div>
+          {!editing && <div className="mt-0.5 text-xs text-zinc-500">{faq.answer}</div>}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            onClick={() => setEditing(!editing)}
+            className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300 transition hover:border-emerald-500/40 hover:text-zinc-100"
+          >
+            {editing ? '閉じる' : '修正'}
+          </button>
+          <button
+            onClick={remove}
+            disabled={busy}
+            className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-rose-300 transition hover:border-rose-500/40 disabled:opacity-40"
+          >
+            削除
+          </button>
+        </div>
+      </div>
+      {editing && (
+        <div className="mt-2">
+          <textarea
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            rows={3}
+            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:border-zinc-600 focus:outline-none"
+          />
+          <button
+            onClick={save}
+            disabled={busy || !answer.trim()}
+            className="mt-1.5 rounded-lg bg-emerald-500 px-3 py-1 text-xs font-medium text-zinc-950 transition hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-600"
+          >
+            {busy ? '保存中…' : '更新する'}
+          </button>
+        </div>
+      )}
+    </li>
   );
 }
 
