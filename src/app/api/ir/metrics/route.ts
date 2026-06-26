@@ -101,11 +101,21 @@ export async function GET(request: Request): Promise<Response> {
     }
     const total = counts.answered + counts.refused + counts.escalated;
 
-    const escalated = await bqQuery(
+    // 未回答（IR要対応）= 投資家が「IR窓口へ問い合わせる」を押したものだけ（自動エスカレは含めない）。
+    // 自動判定は曖昧で要対応一覧が肥大化するため、明示的な問い合わせ依頼のみを worklist に乗せる。
+    const IRREQ = `\`${PROJECT}.ir_analytics.ir_requests\``;
+    const irRows = await bqQuery(
       token,
-      `SELECT question, FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', ts) AS asked_at FROM ${TABLE} ${where} AND scope_status='escalated' ORDER BY ts DESC LIMIT 20`,
+      `SELECT question, FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', ts) AS asked_at FROM ${IRREQ} ${where} ORDER BY ts DESC LIMIT 50`,
       since,
     );
+    const irCountRows = await bqQuery(
+      token,
+      `SELECT COUNT(*) AS c FROM ${IRREQ} ${where}`,
+      since,
+    );
+    const irRequests = Number(irCountRows[0]?.c ?? 0);
+
     const top = await bqQuery(
       token,
       `SELECT question, COUNT(*) AS c FROM ${TABLE} ${where} GROUP BY question ORDER BY c DESC LIMIT 10`,
@@ -118,9 +128,11 @@ export async function GET(request: Request): Promise<Response> {
       totals: {
         ...counts,
         total,
+        ir_requests: irRequests,
         answer_rate: total ? Math.round((counts.answered / total) * 1000) / 10 : 0,
       },
-      escalated_questions: escalated.map((r) => ({ question: r.question, at: r.asked_at })),
+      // ユーザーが明示的に問い合わせを依頼した質問（IR要対応ワークリスト）
+      ir_requests_questions: irRows.map((r) => ({ question: r.question, at: r.asked_at })),
       top_questions: top.map((r) => ({ question: r.question, count: Number(r.c) })),
     });
   } catch (e) {

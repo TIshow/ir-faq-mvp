@@ -10,8 +10,8 @@ import { getActiveCompanies, companyShortName } from '@/config/companies';
 interface Metrics {
   company: string;
   days: number;
-  totals: { answered: number; refused: number; escalated: number; total: number; answer_rate: number };
-  escalated_questions: { question: string; at: string }[];
+  totals: { answered: number; refused: number; escalated: number; ir_requests: number; total: number; answer_rate: number };
+  ir_requests_questions: { question: string; at: string }[];
   top_questions: { question: string; count: number }[];
 }
 
@@ -183,20 +183,20 @@ export default function IrDashboardPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Kpi label="総質問数" value={String(t.total)} />
             <Kpi label="回答率" value={`${t.answer_rate}%`} accent="emerald" />
-            <Kpi label="エスカレーション" value={String(t.escalated)} accent="amber" />
+            <Kpi label="IR要対応（問い合わせ）" value={String(t.ir_requests)} accent="amber" />
             <Kpi label="拒否（助言/予測等）" value={String(t.refused)} />
           </div>
 
           <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
             <h2 className="text-sm font-medium text-zinc-300">
-              未回答（IR要対応）
-              <span className="ml-2 text-xs text-zinc-500">資料で答えられず IR窓口へ回った質問</span>
+              IR要対応（問い合わせ）
+              <span className="ml-2 text-xs text-zinc-500">投資家が「IR窓口へ問い合わせる」を押して依頼した質問</span>
             </h2>
-            {data.escalated_questions.length === 0 ? (
-              <p className="mt-3 text-sm text-zinc-500">この期間の未回答はありません。</p>
+            {data.ir_requests_questions.length === 0 ? (
+              <p className="mt-3 text-sm text-zinc-500">この期間の問い合わせはありません。</p>
             ) : (
               <ul className="mt-3 divide-y divide-zinc-800/70">
-                {data.escalated_questions.map((q, i) => (
+                {data.ir_requests_questions.map((q, i) => (
                   <EscalationRow key={i} question={q.question} at={q.at} onSubmit={submitFaq} />
                 ))}
               </ul>
