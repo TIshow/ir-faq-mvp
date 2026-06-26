@@ -1,15 +1,19 @@
 """
-IR Agent 本体（ADK）＋ AgentResponse 合成 ＋ ストリーミング（マルチテナント）。
+IR Agent 本体 ＋ AgentResponse 合成 ＋ ストリーミング（マルチテナント）。
+
+run_agent_stream は config.ANSWER_MODE で分岐する:
+  - 'synthesis'（既定・生成IR）→ synthesize.synthesize_stream（PLAN→WRITE をトークン逐次）
+  - 'legacy'（ロールバック）→ 以下の ADK ツールループ＋_compose 合成
 
 対象企業はハードコードしない。リクエストごとに company={ticker,name,datastore_id} を受け取り:
   - システムプロンプトと利用可能データのヒントを company から構築
   - セッション状態 state["company"] に seed → ツールがそこから対象企業を読む
   - セッションIDに ticker を含め、企業切替で状態が混ざらないようにする
 
-設計の肝（数値はLLMの文章を経由させない）:
-  - fact_cards は get_financial_facts のツール戻り値から「コードで」合成
-  - citations は search_disclosures のツール戻り値から合成
-  - scope_status は入口分類(scope) と escalate_to_ir 呼び出しから決める
+設計の肝（数値はLLMの文章を経由させない・両モード共通）:
+  - fact_cards はコードで合成（synthesis=build_financial_facts / legacy=get_financial_facts 戻り値）
+  - citations は search_disclosures の戻り値から合成
+  - scope_status は入口分類(scope)＋接地状況（synthesis）/escalate_to_ir 呼び出し（legacy）で決める
 """
 
 from __future__ import annotations
