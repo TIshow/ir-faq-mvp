@@ -151,7 +151,9 @@ def _facts_context(ticker: str) -> tuple[str, list[str], list[str]]:
         if latest and prev:
             rc, rp = A.get((k, latest)), A.get((k, prev))
             if rc and rp:
-                yoy = f"（前年比 {_yoy_pct(float(rc['value_numeric']), float(rp['value_numeric']))}）"
+                yoy = (
+                    f"（前年比 {_yoy_pct(float(rc['value_numeric']), float(rp['value_numeric']))}）"
+                )
         lines.append(f"- {metrics[k]} ({k}): {' '.join(cells)}{yoy}")
 
     # --- 営業利益率（コード計算）を全期分 ---
@@ -209,7 +211,9 @@ def _facts_context(ticker: str) -> tuple[str, list[str], list[str]]:
             if cells:
                 lines.append(f"- {metrics[k]} ({k}): {' '.join(cells)} 【会社予想】")
 
-    lines.append("\n## relevant_metrics に使える指標キー\n" + ", ".join(all_keys) + ", operating_margin")
+    lines.append(
+        "\n## relevant_metrics に使える指標キー\n" + ", ".join(all_keys) + ", operating_margin"
+    )
     return ("\n".join(lines), pa, pf)
 
 
