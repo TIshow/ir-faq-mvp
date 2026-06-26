@@ -37,6 +37,7 @@ src/                      フロント（Next.js）
   app/api/doc/route.ts    出典PDFのプロキシ配信（非公開GCSをSA権限で中継・許可バケットのみ）
   app/api/ir/metrics/route.ts  IRダッシュボードの集計API（BigQuery集計・Firebase認証＋企業スコープ強制）
   app/api/ir/faq/route.ts      FAQ CRUD（Discovery Engine へ冪等upsert/一覧/削除。複利ループの投入口）
+  app/api/ir/contact/route.ts  「IR窓口へ問い合わせる」記録（未認証）。押された質問のみ ir_requests へ＝IR要対応ワークリスト
   app/ir/page.tsx, app/ir/login/page.tsx  IR向け管理画面（質問トレンド/エスカレ/FAQ管理）＋ログイン（痛み②）
   lib/firebase.ts / firebase-admin.ts  Firebase Auth（マルチテナント。custom claims=company/admin。owner=全社アクセス）
   lib/gcp.ts              GCP_PROJECT_ID 等の集約（ハードコード排除）
@@ -54,7 +55,8 @@ agent/                    エージェント（Python / ADK）
   prompt.py               legacy モードのシステムプロンプト（鉄則6項）。synthesis のプロンプトは synthesize.py 内
   scope.py                入口スコープ分類（助言/予測/未開示の短絡拒否）
   suggest.py              次質問サジェスト（A-lite: 利用可能データから決定論生成）
-  analytics.py            Q&A永続ログ（痛み②: BigQuery へ匿名記録。ANALYTICS_ENABLED で切替）
+  analytics.py            Q&A永続ログ（痛み②: BigQuery interactions へ匿名記録。回答率/トレンド用。ANALYTICS_ENABLED で切替）
+                          ※IR要対応一覧は「自動エスカレ」でなく、ユーザーがCTAを押した ir_requests のみ（/api/ir/contact）
   store.py / facts_store.py / db.py  層1ストア（json=PoC / cloudsql=本番 を FACTS_BACKEND で切替）
   server.py               FastAPI（/chat の SSE, /health）
   config.py               環境設定（.env 読込）

@@ -1,11 +1,15 @@
-"""Grounded Synthesis（接地した統合合成）パイプライン。
+"""Grounded Synthesis / 生成IR パイプライン（金融コパイロット型）。
 
-従来の「LLMがツールを選ぶ agentic ループ」を、決定論的な retrieve → LLM合成 → 接地 に置換する
-（金融コパイロット型）。狙い:
-  - 横断質問の統合合成（数値＋定性＋FAQを1回答に）
+従来の「LLMがツールを選ぶ agentic ループ」を、決定論 retrieve → 統合分析 → 接地 に置換する。狙い:
+  - 横断質問の統合分析（数値＋定性＋FAQを1回答に＝生成IR）
   - ツール選択の脆さを排除（retrieve は常に全部・決定論）
   - answerability 判定（制約「数値で」「10年分」を満たせなければ正直にエスカレーション）
   - 数値の正確性は維持（LLMは『どの指標を見せるか』だけ選ぶ。値はコードが facts から埋める）
+
+回答は2フェーズで生成し、本文をトークン逐次ストリーミングする（synthesize_stream）:
+  1. PLAN  : answerability 判定＋カード指標/引用の選択（JSONモード＝eval関門の決定論性を守る）
+  2. WRITE : 生成IRの本文をプレーンテキストで generate_content_stream（トークン逐次）
+LLMには「実数＋前年比・利益率・構成比（コード計算済み）」のデータシートを渡し暗算させない。
 
 config.ANSWER_MODE == 'synthesis' のときに agent.run_agent_stream から呼ばれる。
 """
@@ -411,15 +415,6 @@ def synthesize_stream(query: str, company: dict[str, Any]):
             "scope_reason": None,
         },
     }
-
-
-def synthesize(query: str, company: dict[str, Any]) -> dict[str, Any]:
-    """非ストリーミング（eval 等）: synthesize_stream を drain して最終 AgentResponse を返す。"""
-    final: dict[str, Any] = {}
-    for ev in synthesize_stream(query, company):
-        if ev["type"] == "final":
-            final = ev["response"]
-    return final
 
 
 def _escalate(reason: str) -> dict[str, Any]:

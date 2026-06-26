@@ -84,6 +84,12 @@ FactCard = { metric, metricKey, period, value, valueNumeric, unit, yoy?, consoli
 3. **出口/接地** 数値カードはコードが生成（LLM非経由）。synthesis: can_answer=false / 接地ゼロ → エスカレ。legacy: `agent.py::_compose` で出典なしカード除去・scope_status 確定。
 4. **数値の最終防衛**: 散文の数値はLLMが書くが、その値は「コード計算済みデータシート」由来であり、隣の決定論カード＋出典でクロスチェックできる（重い出口ゲートは置かない設計判断）。
 
+## エスカレーションと「IR要対応」（痛み②の堀）
+2種類を**役割で分離**している（混同しない）:
+- **自動エスカレ** `scope_status='escalated'`: エージェントが答えられないと判断した状態。**CTA「IR窓口へ問い合わせる」の表示**と、`interactions` への記録（回答率/トレンド分析）に使う。**ダッシュボードの要対応一覧には入れない**（自動判定は曖昧で肥大化するため）。
+- **IR要対応** `ir_analytics.ir_requests`: **投資家がCTAを押したものだけ**。`/api/ir/contact`（未認証・企業は companies.ts で検証）が記録し、`/ir` の「IR要対応」一覧＝IRが実際に対応するワークリスト。
+- legacy の `escalate_to_ir`→`store.insert_escalation`（Cloud SQL escalations / facts_store の escalations.jsonl）は**現行ダッシュボードからは未参照**（ir_requests に置換済み）。legacy モードのロールバック用に存置。
+
 ## 評価（eval/eval_harness.py）
 - **数値はコードで決定論比較**（`numbers_match`）、定性は LLM-judge（フック）。
 - CI関門（ゼロ許容）: 数値一致率100% ＋ 助言/未開示の誤回答0件。
