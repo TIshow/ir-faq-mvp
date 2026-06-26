@@ -80,7 +80,11 @@ export const FactCardView: React.FC<{ fact: FactCard }> = ({ fact }) => {
   );
 };
 
-const ScopeNotice: React.FC<{ status: ScopeStatus; onContactIR?: () => void }> = ({ status, onContactIR }) => {
+const ScopeNotice: React.FC<{ status: ScopeStatus; contacted?: boolean; onContactIR?: () => void }> = ({
+  status,
+  contacted,
+  onContactIR,
+}) => {
   if (status === 'answered') return null;
   if (status === 'refused') {
     return (
@@ -92,12 +96,18 @@ const ScopeNotice: React.FC<{ status: ScopeStatus; onContactIR?: () => void }> =
   return (
     <div className="mt-3 border-t border-zinc-800 pt-3">
       <p className="mb-2 text-xs text-zinc-400">この質問は開示資料に見当たりませんでした。IR窓口にお取り次ぎできます。</p>
-      <button
-        onClick={onContactIR}
-        className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-zinc-950 transition hover:bg-emerald-400"
-      >
-        IR窓口へ問い合わせる
-      </button>
+      {contacted ? (
+        <span className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-medium text-emerald-400">
+          ✓ IR窓口へお取り次ぎしました
+        </span>
+      ) : (
+        <button
+          onClick={onContactIR}
+          className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-zinc-950 transition hover:bg-emerald-400"
+        >
+          IR窓口へ問い合わせる
+        </button>
+      )}
     </div>
   );
 };
@@ -105,9 +115,10 @@ const ScopeNotice: React.FC<{ status: ScopeStatus; onContactIR?: () => void }> =
 /** IR Agent の回答（散文＋数値カード＋出典＋scope分岐＋次の質問サジェスト） */
 export const AgentAnswer: React.FC<{
   response: AgentResponse;
+  irContacted?: boolean;
   onContactIR?: () => void;
   onSuggestion?: (q: string) => void;
-}> = ({ response, onContactIR, onSuggestion }) => {
+}> = ({ response, irContacted, onContactIR, onSuggestion }) => {
   const { answer_prose, fact_cards, citations, scope_status, suggestions } = response;
   return (
     <div>
@@ -130,7 +141,7 @@ export const AgentAnswer: React.FC<{
         </div>
       )}
 
-      <ScopeNotice status={scope_status} onContactIR={onContactIR} />
+      <ScopeNotice status={scope_status} contacted={irContacted} onContactIR={onContactIR} />
 
       {onSuggestion && suggestions && suggestions.length > 0 && (
         <div className="mt-3 border-t border-zinc-800 pt-3">

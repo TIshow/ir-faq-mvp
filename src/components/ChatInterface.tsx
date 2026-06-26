@@ -22,6 +22,8 @@ interface Message {
   timestamp: Date;
   response?: AgentResponse;
   isStreaming?: boolean;
+  question?: string; // assistant メッセージに紐づく元の質問（IR問い合わせ記録用）
+  irContacted?: boolean; // 「IR窓口へ問い合わせる」を押し済みか（二重送信防止）
 }
 
 interface ChatInterfaceProps {
@@ -52,7 +54,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
     const userMessage: Message = { id: Date.now().toString(), type: 'user', content: q, timestamp: new Date() };
     const assistantId = (Date.now() + 1).toString();
-    setMessages((prev) => [...prev, userMessage, { id: assistantId, type: 'assistant', content: '', timestamp: new Date(), isStreaming: true }]);
+    setMessages((prev) => [...prev, userMessage, { id: assistantId, type: 'assistant', content: '', timestamp: new Date(), isStreaming: true, question: q }]);
     setInputValue('');
     setIsLoading(true);
 
@@ -101,7 +103,28 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   };
 
   const clearChat = () => { setMessages([]); inputRef.current?.focus(); };
-  const handleContactIR = () => alert('IR窓口へのお取り次ぎを受け付けました。');
+
+  // 「IR窓口へ問い合わせる」を押したときだけ、その質問を IR要対応として記録する
+  // （自動エスカレでは記録しない＝要対応一覧の肥大化を防ぐ）。
+  const handleContactIR = async (messageId: string, question: string) => {
+    if (!selectedCompany || !question) return;
+    const msg = messages.find((m) => m.id === messageId);
+    if (msg?.irContacted) return; // 二重送信防止
+    patchMessage(messageId, { irContacted: true });
+    try {
+      const res = await fetch('/api/ir/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId: selectedCompany.id, question }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      alert('IR窓口へのお取り次ぎを受け付けました。担当者が確認します。');
+    } catch (e) {
+      console.error('contact IR failed:', e);
+      patchMessage(messageId, { irContacted: false }); // 失敗時は再送可能に戻す
+      alert('お取り次ぎの送信に失敗しました。しばらくしてから再度お試しください。');
+    }
+  };
 
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
@@ -165,7 +188,8 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                     {m.response ? (
                       <AgentAnswer
                         response={m.response}
-                        onContactIR={handleContactIR}
+                        irContacted={m.irContacted}
+                        onContactIR={() => handleContactIR(m.id, m.question ?? '')}
                         onSuggestion={(q) => send(q)}
                       />
                     ) : (
