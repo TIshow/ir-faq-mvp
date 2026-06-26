@@ -112,7 +112,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     if (msg?.irContacted) return; // 二重送信防止
     patchMessage(messageId, { irContacted: true });
     try {
-      const res = await fetch('/api/ir/contact', {
+      const res = await fetch('/api/ir/contact/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyId: selectedCompany.id, question }),
