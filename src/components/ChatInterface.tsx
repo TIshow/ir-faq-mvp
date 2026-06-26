@@ -23,7 +23,7 @@ interface Message {
   response?: AgentResponse;
   isStreaming?: boolean;
   question?: string; // assistant メッセージに紐づく元の質問（IR問い合わせ記録用）
-  irContacted?: boolean; // 「IR窓口へ問い合わせる」を押し済みか（二重送信防止）
+  irContactStatus?: 'sending' | 'sent' | 'error'; // 「IR窓口へ問い合わせる」の送信状態
 }
 
 interface ChatInterfaceProps {
@@ -105,12 +105,12 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const clearChat = () => { setMessages([]); inputRef.current?.focus(); };
 
   // 「IR窓口へ問い合わせる」を押したときだけ、その質問を IR要対応として記録する
-  // （自動エスカレでは記録しない＝要対応一覧の肥大化を防ぐ）。
+  // （自動エスカレでは記録しない＝要対応一覧の肥大化を防ぐ）。状態はメッセージ内インライン表示。
   const handleContactIR = async (messageId: string, question: string) => {
     if (!selectedCompany || !question) return;
     const msg = messages.find((m) => m.id === messageId);
-    if (msg?.irContacted) return; // 二重送信防止
-    patchMessage(messageId, { irContacted: true });
+    if (msg?.irContactStatus === 'sending' || msg?.irContactStatus === 'sent') return; // 二重送信防止
+    patchMessage(messageId, { irContactStatus: 'sending' });
     try {
       const res = await fetch('/api/ir/contact/', {
         method: 'POST',
@@ -118,11 +118,10 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         body: JSON.stringify({ companyId: selectedCompany.id, question }),
       });
       if (!res.ok) throw new Error(String(res.status));
-      alert('IR窓口へのお取り次ぎを受け付けました。担当者が確認します。');
+      patchMessage(messageId, { irContactStatus: 'sent' });
     } catch (e) {
       console.error('contact IR failed:', e);
-      patchMessage(messageId, { irContacted: false }); // 失敗時は再送可能に戻す
-      alert('お取り次ぎの送信に失敗しました。しばらくしてから再度お試しください。');
+      patchMessage(messageId, { irContactStatus: 'error' }); // 再送可能（ボタンに戻す）
     }
   };
 
@@ -188,7 +187,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                     {m.response ? (
                       <AgentAnswer
                         response={m.response}
-                        irContacted={m.irContacted}
+                        irContactStatus={m.irContactStatus}
                         onContactIR={() => handleContactIR(m.id, m.question ?? '')}
                         onSuggestion={(q) => send(q)}
                       />

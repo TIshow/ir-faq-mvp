@@ -80,11 +80,13 @@ export const FactCardView: React.FC<{ fact: FactCard }> = ({ fact }) => {
   );
 };
 
-const ScopeNotice: React.FC<{ status: ScopeStatus; contacted?: boolean; onContactIR?: () => void }> = ({
-  status,
-  contacted,
-  onContactIR,
-}) => {
+type ContactStatus = 'sending' | 'sent' | 'error' | undefined;
+
+const ScopeNotice: React.FC<{
+  status: ScopeStatus;
+  contactStatus?: ContactStatus;
+  onContactIR?: () => void;
+}> = ({ status, contactStatus, onContactIR }) => {
   if (status === 'answered') return null;
   if (status === 'refused') {
     return (
@@ -93,20 +95,43 @@ const ScopeNotice: React.FC<{ status: ScopeStatus; contacted?: boolean; onContac
       </div>
     );
   }
+
+  if (contactStatus === 'sent') {
+    // 完了: 落ち着いた成功カード（非ブロッキング・文脈内インライン）
+    return (
+      <div className="mt-3 border-t border-zinc-800 pt-3">
+        <div className="flex items-start gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5">
+          <span className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-zinc-950">
+            ✓
+          </span>
+          <div className="text-xs leading-relaxed">
+            <p className="font-medium text-emerald-300">IR窓口へお取り次ぎしました</p>
+            <p className="text-zinc-400">担当者が内容を確認します。</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-3 border-t border-zinc-800 pt-3">
       <p className="mb-2 text-xs text-zinc-400">この質問は開示資料に見当たりませんでした。IR窓口にお取り次ぎできます。</p>
-      {contacted ? (
-        <span className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-medium text-emerald-400">
-          ✓ IR窓口へお取り次ぎしました
-        </span>
-      ) : (
-        <button
-          onClick={onContactIR}
-          className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-zinc-950 transition hover:bg-emerald-400"
-        >
-          IR窓口へ問い合わせる
-        </button>
+      <button
+        onClick={onContactIR}
+        disabled={contactStatus === 'sending'}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-zinc-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-70"
+      >
+        {contactStatus === 'sending' ? (
+          <>
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-950/30 border-t-zinc-950" />
+            送信中…
+          </>
+        ) : (
+          'IR窓口へ問い合わせる'
+        )}
+      </button>
+      {contactStatus === 'error' && (
+        <p className="mt-1.5 text-xs text-rose-400">送信に失敗しました。もう一度お試しください。</p>
       )}
     </div>
   );
@@ -115,10 +140,10 @@ const ScopeNotice: React.FC<{ status: ScopeStatus; contacted?: boolean; onContac
 /** IR Agent の回答（散文＋数値カード＋出典＋scope分岐＋次の質問サジェスト） */
 export const AgentAnswer: React.FC<{
   response: AgentResponse;
-  irContacted?: boolean;
+  irContactStatus?: 'sending' | 'sent' | 'error';
   onContactIR?: () => void;
   onSuggestion?: (q: string) => void;
-}> = ({ response, irContacted, onContactIR, onSuggestion }) => {
+}> = ({ response, irContactStatus, onContactIR, onSuggestion }) => {
   const { answer_prose, fact_cards, citations, scope_status, suggestions } = response;
   return (
     <div>
@@ -141,7 +166,7 @@ export const AgentAnswer: React.FC<{
         </div>
       )}
 
-      <ScopeNotice status={scope_status} contacted={irContacted} onContactIR={onContactIR} />
+      <ScopeNotice status={scope_status} contactStatus={irContactStatus} onContactIR={onContactIR} />
 
       {onSuggestion && suggestions && suggestions.length > 0 && (
         <div className="mt-3 border-t border-zinc-800 pt-3">
