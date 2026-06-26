@@ -196,23 +196,25 @@ async def run_agent_stream(
         yield {"type": "final", "response": _refusal_response(decision, suggestions)}
         return
 
-    # Grounded Synthesis モード（retrieve→統合合成→接地）。既定は legacy。
+    # Grounded Synthesis / 生成IR モード（retrieve→統合分析→接地）。本文はトークン逐次ストリーミング。
     if config.ANSWER_MODE == "synthesis":
-        from .synthesize import synthesize
+        from .synthesize import synthesize_stream
 
-        resp = synthesize(query, company)
-        resp["suggestions"] = suggestions
-        log_interaction(
-            ticker,
-            query,
-            resp["scope_status"],
-            resp.get("scope_reason"),
-            len(resp["fact_cards"]),
-            len(resp["citations"]),
-        )
-        if resp.get("answer_prose"):
-            yield {"type": "prose_delta", "text": resp["answer_prose"]}
-        yield {"type": "final", "response": resp}
+        for ev in synthesize_stream(query, company):
+            if ev["type"] == "prose_delta":
+                yield ev
+            elif ev["type"] == "final":
+                resp = ev["response"]
+                resp["suggestions"] = suggestions
+                log_interaction(
+                    ticker,
+                    query,
+                    resp["scope_status"],
+                    resp.get("scope_reason"),
+                    len(resp["fact_cards"]),
+                    len(resp["citations"]),
+                )
+                yield {"type": "final", "response": resp}
         return
 
     # 企業ごとにセッションを分離し、状態に企業コンテキストを seed
