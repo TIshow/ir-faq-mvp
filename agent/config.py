@@ -45,6 +45,11 @@ FACTS_JSON_PATH = os.environ.get("FACTS_JSON_PATH", "")  # 空ならパッケー
 # --- 取得パラメータ ----------------------------------------------------------
 MAX_DISCLOSURE_RESULTS = int(os.environ.get("MAX_DISCLOSURE_RESULTS", "8"))
 
+# 数値カードの最大表示枚数。広い質問（「業績全般」）で指標×期間が増殖し usability が
+# 落ちるのを防ぐ。超過時のみ「各指標を最新実績1枚（YoYバッジ付き）に畳む＋ヘッドライン
+# 優先で truncate」する（synthesize._reduce_cards）。狭い質問は無傷＝eval関門に影響なし。
+MAX_FACT_CARDS = int(os.environ.get("MAX_FACT_CARDS", "8"))
+
 # --- 回答生成モード ----------------------------------------------------------
 # 'synthesis' = Grounded Synthesis（retrieve→統合合成→接地・answerability判定）＝既定
 # 'legacy'    = ADK の agentic ツールループ（従来・ロールバック用。ANSWER_MODE=legacy）
