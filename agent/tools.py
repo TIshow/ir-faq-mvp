@@ -30,6 +30,14 @@ DERIVED_METRICS: dict[str, tuple[str, str, str]] = {
 }
 
 
+class CompanyCtx:
+    """search_disclosures を ADK の外から直接呼ぶときに企業コンテキストを渡す最小スタンドイン
+    （ADK ToolContext 代替）。synthesis と legacy のFAQフォールバックで共用。"""
+
+    def __init__(self, company: dict[str, Any]):
+        self.state = {"company": company}
+
+
 def _company(tool_context: ToolContext | None) -> dict[str, Any]:
     """セッション状態から対象企業 {ticker, name, datastore_id} を取得。"""
     state = getattr(tool_context, "state", None) or {}

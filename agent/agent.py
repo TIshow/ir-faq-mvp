@@ -31,7 +31,7 @@ from . import config, prompt
 from .analytics import log_interaction
 from .scope import classify_scope
 from .suggest import build_suggestions
-from .tools import escalate_to_ir, get_financial_facts, search_disclosures
+from .tools import CompanyCtx, escalate_to_ir, get_financial_facts, search_disclosures
 
 APP_NAME = "ir-agent"
 
@@ -279,12 +279,7 @@ async def run_agent_stream(
     # 条件は「最終的に escalate になる」ケース全般（escalate_to_ir 呼出 or 接地ゼロ）。
     if escalated or (not fact_cards and not citations):
         try:
-
-            class _Ctx:
-                def __init__(self, c: dict[str, Any]):
-                    self.state = {"company": c}
-
-            ctx = _Ctx(
+            ctx = CompanyCtx(
                 {"ticker": ticker, "name": name, "datastore_id": company.get("datastore_id")}
             )
             passages = search_disclosures(query, ctx).get("passages", [])
