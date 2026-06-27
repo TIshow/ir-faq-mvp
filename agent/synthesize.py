@@ -21,11 +21,16 @@ import logging
 import re
 from typing import Any
 
+from google.genai import types
+
 from . import config, store
-from .tools import build_financial_facts, search_disclosures
+from .tools import CompanyCtx, build_financial_facts, search_disclosures
 
 _log = logging.getLogger("ir-agent.synth")
 _client = None
+
+# 接地できないときの正直なフォールバック文（エスカレ理由が空の場合に使う）
+_NO_ANSWER = "開示資料では確認できませんでした。"
 
 
 def _genai_client():
@@ -37,13 +42,6 @@ def _genai_client():
             vertexai=True, project=config.PROJECT_ID, location=config.VERTEX_LOCATION
         )
     return _client
-
-
-class _Ctx:
-    """search_disclosures に企業コンテキストを渡すための最小オブジェクト。"""
-
-    def __init__(self, company: dict[str, Any]):
-        self.state = {"company": company}
 
 
 # 生成IRは2フェーズ: PLAN（判定・指標選択＝JSON。eval関門の決定論性を守るため構造化出力）→
@@ -308,7 +306,7 @@ def _retrieve(query: str, company: dict[str, Any], ticker: str):
     """決定論 retrieve: 層1データシート＋層2検索パッセージ。(facts_ctx, pa, pf, passages, passages_ctx)。"""
     facts_ctx, pa, pf = _facts_context(ticker)
     try:
-        passages = search_disclosures(query, _Ctx(company)).get("passages", [])
+        passages = search_disclosures(query, CompanyCtx(company)).get("passages", [])
     except Exception as e:
         _log.warning("retrieve(search) 失敗: %s", e)
         passages = []
@@ -335,8 +333,6 @@ def _contextualize(name: str, history: list[dict[str, str]], query: str) -> str:
         company_name=name, history="\n".join(lines) or "（なし）", query=query
     )
     try:
-        from google.genai import types
-
         resp = _genai_client().models.generate_content(
             model=config.MODEL_NAME,
             contents=[prompt],
@@ -355,8 +351,6 @@ def _contextualize(name: str, history: list[dict[str, str]], query: str) -> str:
 
 def _plan(name: str, query: str, facts_ctx: str, passages_ctx: str) -> dict[str, Any]:
     """PLAN: answerability 判定＋カード指標・引用の選択（構造化JSON・eval関門の決定論性を守る）。"""
-    from google.genai import types
-
     prompt = PLAN_PROMPT.format(
         company_name=name, query=query, facts_context=facts_ctx, passages_context=passages_ctx
     )
@@ -394,8 +388,6 @@ def _ground(ticker, pa, pf, rel_metrics, used, passages):
 
 def _write_stream(name, query, facts_ctx, passages_ctx, focus_metrics):
     """WRITE: 生成IRの本文をプレーンテキストでストリーミング生成。チャンクの text を yield。"""
-    from google.genai import types
-
     prompt = WRITE_PROMPT.format(
         company_name=name,
         query=query,
@@ -449,13 +441,13 @@ def synthesize_stream(
     escalate_reason = str(data.get("escalate_reason") or "").strip()
 
     if not can_answer:
-        yield from _escalate_stream(escalate_reason or "開示資料では確認できませんでした。")
+        yield from _escalate_stream(escalate_reason or _NO_ANSWER)
         return
 
     # GROUND（決定論）。接地ゼロ＝実質未回答 → エスカレ
     fact_cards, citations = _ground(ticker, pa, pf, rel_metrics, used, passages)
     if not fact_cards and not citations:
-        yield from _escalate_stream(escalate_reason or "開示資料では確認できませんでした。")
+        yield from _escalate_stream(escalate_reason or _NO_ANSWER)
         return
 
     # WRITE（本文をストリーミング）
