@@ -12,24 +12,27 @@ IR Agent の設計詳細。背景・方針は CLAUDE.md、現状/再開手順は
    │  → SSE をそのままプロキシ (AGENT_URL)
    ▼
 [ir-agent]  Cloud Run / Python + FastAPI（既定: Grounded Synthesis / 生成IR）
-   │  run_agent_stream(query, company)
+   │  run_agent_stream(query, company, history)   ※history=直近の会話（短期メモリ・任意）
    ├─ [1] 入口スコープ分類 scope.classify_scope（助言/予測/未開示を短絡拒否）
    ├─ [2] config.ANSWER_MODE で分岐（既定 'synthesis'）
    │
-   │  ── synthesis（既定・agent/synthesize.py）= 生成IR ──────────────
+   │  ── synthesis（既定・agent/synthesize.py）= 生成IR（本文ストリーミング）─────
+   │   ├─ CONTEXTUALIZE（短期メモリ）: history があれば、フォロー質問（「なんで？」等）を
+   │   │     会話履歴で**自己完結クエリに書き換え**（condense question）。無ければ素通り＝従来同一
    │   ├─ RETRIEVE（決定論・常に両層）:
    │   │     - 層1 全実値＋前年比/利益率/構成比を**コード計算**したデータシート（_facts_context）
    │   │     - 層2 search_disclosures（Discovery Engine: PDF + FAQ、引用付き）
-   │   ├─ SYNTHESIZE+ANSWERABILITY（LLM 1回・構造化JSON）:
-   │   │     {can_answer, answer_prose(生成IR), relevant_metrics, used_citations, escalate_reason}
-   │   └─ GROUND（決定論）: relevant_metrics→build_financial_facts でカードの数値を埋める。
-   │         can_answer=false / 接地ゼロ → 正直にエスカレ
+   │   ├─ PLAN（LLM・構造化JSON＝eval決定論性を守る）:
+   │   │     {can_answer, relevant_metrics, used_citations, escalate_reason}
+   │   ├─ GROUND（決定論）: relevant_metrics→build_financial_facts でカードを接地。
+   │   │     can_answer=false / 接地ゼロ → 正直にエスカレ（ここで終了）
+   │   └─ WRITE（LLM・プレーンテキスト・ストリーム）: 生成IR本文をトークン逐次生成
    │
    │  ── legacy（ANSWER_MODE=legacy・ロールバック用）= ADKツールループ ──
    │   └─ ADK Runner（LLM がツール選択）: get_financial_facts / search_disclosures / escalate_to_ir
    │       → _compose で合成
    ▼
-   SSE で {prose_delta...} → {final: AgentResponse}
+   SSE で {prose_delta...（本文を逐次）} → {final: AgentResponse}
 ```
 
 > **生成IRの肝**: 数値カード（fact_cards）はどちらのモードも**コードが層1から生成**（LLM非経由＝決定論）。
@@ -46,11 +49,14 @@ IR Agent の設計詳細。背景・方針は CLAUDE.md、現状/再開手順は
 `config.ANSWER_MODE` で切替（既定 `synthesis`）。回答契約・カードの決定論性はどちらも同じ。
 
 ### synthesis（既定）= Grounded Synthesis / 生成IR（`agent/synthesize.py`）
-狙い: ①ツール選択の脆さを排除（retrieve は常に全部・決定論）②横断質問の統合分析（生成IR）③answerability 判定で正直にエスカレ ④数値の正確性維持。
-- **RETRIEVE**: `_facts_context(ticker)` が層1の全実値に加え**前年比・営業利益率・セグメント構成比をコードで計算**した「分析用データシート」を作る（LLMに暗算させない＝算数事故を構造的に防止）。あわせて `search_disclosures` で層2を取得。
-- **SYNTHESIZE+ANSWERABILITY**: LLM を1回呼び構造化JSON `{can_answer, answer_prose, relevant_metrics, used_citations, escalate_reason}` を得る。プロンプトは「IRアナリストとして数値＋定性を統合し背景・ドライバー・含意まで分析」「FAQ逐語禁止」「新たな割り算をしない＝計算済み値を使う」。
-- **GROUND**: `relevant_metrics` から `build_financial_facts` がカードの数値を**コードで**埋める。`can_answer=false` または接地ゼロ（カードも引用も無い）なら正直にエスカレ。
-- can_answer の最優先規則: **FAQ/開示抜粋が質問に直接答えるなら、構造化数値に無い指標(例ROE)でも answered**（used_citations で接地）。
+狙い: ①ツール選択の脆さを排除（retrieve は常に全部・決定論）②横断質問の統合分析（生成IR）③answerability 判定で正直にエスカレ ④数値の正確性維持 ⑤本文ストリーミングで体感速度。
+回答は**2フェーズ**で生成し、本文をトークン逐次で流す（`synthesize_stream`）:
+- **CONTEXTUALIZE（短期メモリ・`_contextualize`）**: `history`（直近の会話）があれば、フォロー質問（「なんで？」「前期は？」）を会話履歴で**自己完結クエリに書き換え**（condense question）てから retrieve/plan へ。履歴が無ければ LLM を呼ばず素通り＝**eval は従来と完全に同一**。履歴は質問の解釈のみに使い、数値の根拠にはしない（決定論維持）。
+- **RETRIEVE**: `_facts_context(ticker)` が層1の全実値に加え**前年比・営業利益率・セグメント構成比をコードで計算**した「分析用データシート」を作る（LLMに暗算させない）。あわせて `search_disclosures` で層2を取得。
+- **PLAN（answerability・JSONモード）**: LLM が `{can_answer, relevant_metrics, used_citations, escalate_reason}` を返す（構造化出力＝eval決定論性を守る）。`can_answer=false` ならここで即エスカレ（本文生成なし＝速い）。プロンプトは「FAQ逐語禁止」「新たな割り算をしない＝計算済み値を使う」。最優先規則: **FAQ/開示抜粋が質問に直接答えるなら、構造化数値に無い指標(例ROE)でも answered**。
+- **GROUND**: `relevant_metrics` から `build_financial_facts` がカードの数値を**コードで**埋める（過多は `_reduce_cards` で抑制）。カードも引用も無い（接地ゼロ）なら正直にエスカレ。
+- **WRITE（本文・プレーンテキスト・ストリーム）**: `generate_content_stream` で生成IR本文をトークン逐次生成。数値は提供データシートの範囲のみ（カード＋出典でクロスチェック）。
+- カードの抜粋番号 `[0]` 等は内部参照用（`used_citations` 選択）。本文に漏れたら `_strip_refs` で除去。
 
 ### legacy（`ANSWER_MODE=legacy`）= ADKツールループ（ロールバック用）
 企業別 Agent を構築し、LLM が `get_financial_facts`/`search_disclosures`/`escalate_to_ir` を逐次選択。`_compose` で合成。ツール選択ミス補償のため「escalate前に search_disclosures フォールバック」を持つ。

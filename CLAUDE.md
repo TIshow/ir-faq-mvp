@@ -27,7 +27,7 @@
 ```
 - フロントとエージェントが**別言語・別責務なので2サービス**（Next.js=画面、Python ADK=頭脳）。
 - 回答契約 `AgentResponse = { answer_prose, fact_cards[], citations[], scope_status, scope_reason, suggestions[] }`（`src/lib/agent-types.ts` と Python 側で一致）。
-- **回答生成＝Grounded Synthesis / 生成IR（既定 `ANSWER_MODE=synthesis`、`agent/synthesize.py`）**: ツール選択をLLMに委ねず、retrieve（層1の全実値＋層2検索）を**決定論で常時実行** → LLMが1回で統合分析（生成IR）＋answerability判定（答えられなければ正直にエスカレ）→ 数値カードはコードが接地。LLMには「実数＋前年比・利益率・構成比（コード計算済み）」のデータシートを渡す。旧来のADKツールループは `ANSWER_MODE=legacy` で残置（ロールバック用）。
+- **回答生成＝Grounded Synthesis / 生成IR（既定 `ANSWER_MODE=synthesis`、`agent/synthesize.py`）**: ツール選択をLLMに委ねず retrieve（層1の全実値＋層2検索）を**決定論で常時実行**。2フェーズで生成し本文をトークン逐次ストリーミング: **CONTEXTUALIZE**（短期メモリ：会話履歴があればフォロー質問を自己完結クエリに書き換え）→ retrieve → **PLAN**（answerability判定＋カード指標選択・JSON）→ GROUND（数値カードはコードが接地）→ **WRITE**（生成IR本文を逐次）。LLMには「実数＋前年比・利益率・構成比（コード計算済み）」のデータシートを渡す。会話履歴はフロントが同梱しサーバはステートレス。旧来のADKツールループは `ANSWER_MODE=legacy` で残置（ロールバック用）。
 
 ## 3. リポジトリ構成
 ```
