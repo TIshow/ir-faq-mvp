@@ -52,6 +52,16 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     if (!q || isLoading) return;
     if (!selectedCompany) { alert('銘柄を選択してから質問してください。'); return; }
 
+    // 短期メモリ: 直近の会話履歴を同梱（サーバはステートレス＝毎回受け取って使い捨て）。
+    // フォロー質問（「なんで？」等）をエージェント側で自己完結クエリに書き換えるのに使う。
+    const history = messages
+      .filter((m) => (m.type === 'user' && m.content) || (m.type === 'assistant' && m.response?.answer_prose))
+      .slice(-6) // 直近3往復程度に制限（プロンプト肥大・レイテンシ対策）
+      .map((m) => ({
+        role: m.type,
+        content: m.type === 'assistant' ? (m.response?.answer_prose ?? '').slice(0, 600) : m.content,
+      }));
+
     const userMessage: Message = { id: Date.now().toString(), type: 'user', content: q, timestamp: new Date() };
     const assistantId = (Date.now() + 1).toString();
     setMessages((prev) => [...prev, userMessage, { id: assistantId, type: 'assistant', content: '', timestamp: new Date(), isStreaming: true, question: q }]);
@@ -62,7 +72,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       const res = await fetch('/api/chat/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: q, companyId: selectedCompany.id, sessionId: currentSessionId }),
+        body: JSON.stringify({ message: q, companyId: selectedCompany.id, sessionId: currentSessionId, history }),
       });
       if (!res.ok || !res.body) throw new Error('Chat request failed');
 

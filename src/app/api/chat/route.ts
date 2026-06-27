@@ -11,7 +11,7 @@ const AGENT_URL = process.env.AGENT_URL || 'http://localhost:8080';
  * 旧 enhanced-rag-service / Firestore 配線は廃止（セッション/記憶はエージェント側）。
  */
 export async function POST(request: NextRequest) {
-  const { message, companyId, sessionId } = await request.json();
+  const { message, companyId, sessionId, history } = await request.json();
 
   if (!message || message.trim() === '') {
     return Response.json({ error: 'Message is required' }, { status: 400 });
@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
         companyName: company.name,
         datastoreId: company.datastoreId,
         sessionId: sessionId || 's1',
+        // 短期メモリ: 直近の会話履歴（フォロー質問の書き換え用）。サーバはステートレス。
+        history: Array.isArray(history) ? history : [],
       }),
     });
   } catch (e) {
