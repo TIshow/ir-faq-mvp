@@ -23,6 +23,11 @@ from .agent import run_agent_stream
 app = FastAPI(title="IR Agent")
 
 
+class Turn(BaseModel):
+    role: str  # 'user' | 'assistant'
+    content: str
+
+
 class ChatRequest(BaseModel):
     message: str
     # 企業コンテキスト（フロントの companies.ts が唯一の正・ハードコードしない）
@@ -31,6 +36,8 @@ class ChatRequest(BaseModel):
     datastoreId: str | None = None
     sessionId: str = "s1"
     userId: str = "anon"
+    # 短期メモリ: 直近の会話履歴（フォロー質問の書き換え用）。サーバはステートレス。
+    history: list[Turn] = []
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:
@@ -50,10 +57,16 @@ async def chat(req: ChatRequest) -> StreamingResponse:
         "datastore_id": req.datastoreId,
     }
 
+    history = [{"role": t.role, "content": t.content} for t in req.history]
+
     async def gen():
         try:
             async for chunk in run_agent_stream(
-                req.message, company, user_id=req.userId, session_id=req.sessionId
+                req.message,
+                company,
+                user_id=req.userId,
+                session_id=req.sessionId,
+                history=history,
             ):
                 if chunk["type"] == "prose_delta":
                     yield _sse("delta", {"text": chunk["text"]})

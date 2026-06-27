@@ -181,10 +181,15 @@ def _refusal_response(decision, suggestions: list[str]) -> dict[str, Any]:
 # 実行
 # --------------------------------------------------------------------------- #
 async def run_agent_stream(
-    query: str, company: dict[str, Any], user_id: str = "anon", session_id: str = "s1"
+    query: str,
+    company: dict[str, Any],
+    user_id: str = "anon",
+    session_id: str = "s1",
+    history: list[dict[str, str]] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     company = {"ticker","name","datastore_id"}。
+    history = [{"role","content"}...]（短期メモリ。フォロー質問の書き換え用。synthesis のみ使用）。
     yield: {"type":"prose_delta","text":...} / {"type":"final","response": AgentResponse}
     """
     ticker = str(company.get("ticker") or "")
@@ -204,7 +209,7 @@ async def run_agent_stream(
     if config.ANSWER_MODE == "synthesis":
         from .synthesize import synthesize_stream
 
-        for ev in synthesize_stream(query, company):
+        for ev in synthesize_stream(query, company, history=history or []):
             if ev["type"] == "prose_delta":
                 yield ev
             elif ev["type"] == "final":
