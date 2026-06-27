@@ -84,11 +84,14 @@ type ContactStatus = 'sending' | 'sent' | 'error' | undefined;
 
 const ScopeNotice: React.FC<{
   status: ScopeStatus;
+  reason?: string | null;
   contactStatus?: ContactStatus;
   onContactIR?: () => void;
-}> = ({ status, contactStatus, onContactIR }) => {
+}> = ({ status, reason, contactStatus, onContactIR }) => {
   if (status === 'answered') return null;
   if (status === 'refused') {
+    // 誹謗中傷の拒否は本文(answer_prose)で丁重に断っており、助言/未開示の注記は出さない。
+    if (reason === 'inappropriate') return null;
     return (
       <div className="mt-2 text-xs text-zinc-500">
         ※ 投資判断の助言や未開示情報にはお答えできません。開示済みの事実についてお尋ねください。
@@ -144,7 +147,7 @@ export const AgentAnswer: React.FC<{
   onContactIR?: () => void;
   onSuggestion?: (q: string) => void;
 }> = ({ response, irContactStatus, onContactIR, onSuggestion }) => {
-  const { answer_prose, fact_cards, citations, scope_status, suggestions } = response;
+  const { answer_prose, fact_cards, citations, scope_status, scope_reason, suggestions } = response;
   return (
     <div>
       {answer_prose && <Markdown>{answer_prose}</Markdown>}
@@ -166,7 +169,12 @@ export const AgentAnswer: React.FC<{
         </div>
       )}
 
-      <ScopeNotice status={scope_status} contactStatus={irContactStatus} onContactIR={onContactIR} />
+      <ScopeNotice
+        status={scope_status}
+        reason={scope_reason}
+        contactStatus={irContactStatus}
+        onContactIR={onContactIR}
+      />
 
       {onSuggestion && suggestions && suggestions.length > 0 && (
         <div className="mt-3 border-t border-zinc-800 pt-3">
