@@ -296,8 +296,24 @@ def _facts_context(ticker: str) -> tuple[str, list[str], list[str]]:
             if cells:
                 lines.append(f"- {metrics[k]} ({k}): {' '.join(cells)} 【会社予想】")
 
+    # 派生指標（カード化可能・コード計算）も選択肢として明示する。
+    derived_adv: list[str] = []
+    if "operating_profit" in all_keys and "revenue" in all_keys:
+        derived_adv.append("operating_margin")
+    if "gross_profit" in all_keys and "revenue" in all_keys:
+        derived_adv.append("gross_margin")
+    if "net_income" in all_keys and "revenue" in all_keys:
+        derived_adv.append("net_margin")
+    for seg, mm in segs.items():
+        if "revenue" in mm:
+            derived_adv.append(f"segment.{seg}.revenue_contribution")  # 売上構成比
+        if "revenue" in mm and "operating_profit" in mm:
+            derived_adv.append(f"segment.{seg}.operating_margin")  # セグメント営業利益率
+            derived_adv.append(f"segment.{seg}.profit_contribution")  # 営業利益寄与度
+
     lines.append(
-        "\n## relevant_metrics に使える指標キー\n" + ", ".join(all_keys) + ", operating_margin"
+        "\n## relevant_metrics に使える指標キー（派生指標も選択可＝利益率・構成比・寄与度をカード化）\n"
+        + ", ".join(all_keys + derived_adv)
     )
     return ("\n".join(lines), pa, pf)
 

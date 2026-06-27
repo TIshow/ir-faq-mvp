@@ -22,12 +22,49 @@ from google.adk.tools import ToolContext
 
 from . import config, store
 
-# DB に無く、構成要素から計算する派生指標: key -> (分子, 分母, 表示名)
+# DB に無く、構成要素から計算する派生指標（同一期の比率）: key -> (分子, 分母, 表示名)
 DERIVED_METRICS: dict[str, tuple[str, str, str]] = {
     "operating_margin": ("operating_profit", "revenue", "営業利益率"),
     "gross_margin": ("gross_profit", "revenue", "売上総利益率"),
     "net_margin": ("net_income", "revenue", "当期純利益率"),
 }
+
+# セグメント派生指標（企業ごとに事業が違うのでキーをパターンで動的解決する）:
+#   segment.<事業>.operating_margin     = セグメント営業利益 / セグメント売上
+#   segment.<事業>.revenue_contribution = セグメント売上 / 全社売上（構成比）
+#   segment.<事業>.profit_contribution  = セグメント営業利益 / 全社営業利益（寄与度）
+_SEG_DERIVED_RE = re.compile(
+    r"^(segment\.[^.]+)\.(operating_margin|revenue_contribution|profit_contribution)$"
+)
+
+
+def _derived_def(key: str) -> tuple[str, str, str | None] | None:
+    """派生指標キー → (分子キー, 分母キー, 固定表示名 or None)。非派生なら None。"""
+    if key in DERIVED_METRICS:
+        return DERIVED_METRICS[key]
+    m = _SEG_DERIVED_RE.match(key)
+    if not m:
+        return None
+    seg, kind = m.group(1), m.group(2)
+    if kind == "operating_margin":
+        return (f"{seg}.operating_profit", f"{seg}.revenue", None)
+    if kind == "revenue_contribution":
+        return (f"{seg}.revenue", "revenue", None)
+    return (f"{seg}.operating_profit", "operating_profit", None)  # profit_contribution
+
+
+def _derived_label(key: str, num_row: dict[str, Any]) -> str:
+    """派生カードの表示名。固定名が無いセグメント派生は分子の事業名から組む。"""
+    base = str(num_row.get("metric_label_ja", "")).split("（")[0] or str(
+        num_row.get("metric_key", "")
+    )
+    if key.endswith(".operating_margin"):
+        return f"{base} 営業利益率"
+    if key.endswith(".revenue_contribution"):
+        return f"{base} 売上構成比"
+    if key.endswith(".profit_contribution"):
+        return f"{base} 営業利益構成比"
+    return key
 
 
 class CompanyCtx:
@@ -101,12 +138,12 @@ def build_financial_facts(
     """company_id・指標・期間から FactCard 群を構築（YoY・利益率はコード計算）。
     ツール文脈に依存しない純関数。get_financial_facts（LLMツール）と合成パイプラインの両方が使う。"""
     requested = list(metric_keys)
-    base_keys = [k for k in requested if k not in DERIVED_METRICS]
-    derived_keys = [k for k in requested if k in DERIVED_METRICS]
+    base_keys = [k for k in requested if _derived_def(k) is None]
+    derived_keys = [k for k in requested if _derived_def(k) is not None]
 
     needed = set(base_keys)
     for dk in derived_keys:
-        num, den, _ = DERIVED_METRICS[dk]
+        num, den, _ = _derived_def(dk)
         needed.update([num, den])
 
     rows = store.query_facts(company_id, sorted(needed), periods, consolidated, basis)
@@ -132,20 +169,20 @@ def build_financial_facts(
             cards.append(_to_card(row, yoy))
 
     for dk in derived_keys:
-        num_k, den_k, label = DERIVED_METRICS[dk]
+        num_k, den_k, static_label = _derived_def(dk)
         for p in periods:
             num_row = by_kp.get((num_k, p))
             den_row = by_kp.get((den_k, p))
             if not num_row or not den_row or float(den_row["value_numeric"]) == 0:
                 continue
-            margin = float(num_row["value_numeric"]) / float(den_row["value_numeric"]) * 100.0
+            ratio = float(num_row["value_numeric"]) / float(den_row["value_numeric"]) * 100.0
             cards.append(
                 {
-                    "metric": label,
+                    "metric": static_label or _derived_label(dk, num_row),
                     "metricKey": dk,
                     "period": p,
-                    "value": _fmt_value(margin, "%"),
-                    "valueNumeric": round(margin, 4),
+                    "value": _fmt_value(ratio, "%"),
+                    "valueNumeric": round(ratio, 4),
                     "unit": "%",
                     "yoy": None,
                     "consolidated": consolidated,

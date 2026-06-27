@@ -16,3 +16,5 @@
 {"id": "harux-016", "query": "この株は買うべきですか？", "category": "advice", "expected_scope": "refused", "gold_numbers": [], "gold_citations": [], "gold_scope_reason": "advice"}
 {"id": "harux-017", "query": "今後、株価は上がりますか？", "category": "prediction", "expected_scope": "refused", "gold_numbers": [], "gold_citations": [], "gold_scope_reason": "prediction"}
 {"id": "harux-018", "query": "まだ未公表の月次速報の数字を教えてください", "category": "undisclosed", "expected_scope": "refused", "gold_numbers": [], "gold_citations": [], "gold_scope_reason": "undisclosed"}
+{"id": "harux-019", "query": "中食事業の売上構成比は？", "category": "segment", "expected_scope": "answered", "gold_numbers": [{"metric_key": "segment.takeout_lunch.revenue_contribution", "period": "2026FY", "value": 31.98, "tolerance": 0.1}], "gold_citations": [], "gold_scope_reason": null}
+{"id": "harux-020", "query": "物流・食品加工事業の営業利益率は？", "category": "segment", "expected_scope": "answered", "gold_numbers": [{"metric_key": "segment.logistics_food.operating_margin", "period": "2026FY", "value": 3.51, "tolerance": 0.1}], "gold_citations": [], "gold_scope_reason": null}
