@@ -11,7 +11,7 @@ interface Metrics {
   company: string;
   days: number;
   totals: { answered: number; refused: number; escalated: number; ir_requests: number; total: number; answer_rate: number };
-  ir_requests_questions: { question: string; at: string }[];
+  ir_requests_questions: { question: string; at: string; count: number }[];
   top_questions: { question: string; count: number }[];
 }
 
@@ -107,6 +107,22 @@ export default function IrDashboardPage() {
     [user, ticker, loadFaqs],
   );
 
+  // IR要対応を「解決済み」にする（質問単位で worklist から外す。同一質問の重複もまとめて消える）。
+  const resolveRequest = useCallback(
+    async (question: string): Promise<boolean> => {
+      if (!user) return false;
+      const token = await user.getIdToken();
+      const res = await fetch('/api/ir/resolve/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ question, company: ticker }),
+      });
+      if (res.ok) load();
+      return res.ok;
+    },
+    [user, ticker, load],
+  );
+
   // FAQ削除。
   const deleteFaq = useCallback(
     async (id: string): Promise<boolean> => {
@@ -197,7 +213,14 @@ export default function IrDashboardPage() {
             ) : (
               <ul className="mt-3 divide-y divide-zinc-800/70">
                 {data.ir_requests_questions.map((q, i) => (
-                  <EscalationRow key={i} question={q.question} at={q.at} onSubmit={submitFaq} />
+                  <EscalationRow
+                    key={i}
+                    question={q.question}
+                    at={q.at}
+                    count={q.count}
+                    onSubmit={submitFaq}
+                    onResolve={resolveRequest}
+                  />
                 ))}
               </ul>
             )}
@@ -329,19 +352,24 @@ function FaqRow({
   );
 }
 
-/** 未回答1件＋回答フォーム。回答するとFAQ登録→次回から自動回答。 */
+/** 未回答1件＋回答フォーム。回答するとFAQ登録→次回から自動回答。削除で worklist から外す。 */
 function EscalationRow({
   question,
   at,
+  count,
   onSubmit,
+  onResolve,
 }: {
   question: string;
   at: string;
+  count: number;
   onSubmit: (q: string, a: string) => Promise<boolean>;
+  onResolve: (q: string) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
   const [answer, setAnswer] = useState('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
+  const [resolving, setResolving] = useState(false);
 
   const save = async () => {
     if (!answer.trim()) return;
@@ -349,11 +377,26 @@ function EscalationRow({
     setStatus((await onSubmit(question, answer.trim())) ? 'done' : 'error');
   };
 
+  const resolve = async () => {
+    if (!confirm('この問い合わせを解決済みにして一覧から削除しますか？（同じ質問の重複もまとめて消えます）'))
+      return;
+    setResolving(true);
+    const ok = await onResolve(question);
+    if (!ok) setResolving(false); // 失敗時のみ戻す（成功時は一覧が再取得され消える）
+  };
+
   if (status === 'done') {
     return (
       <li className="py-2 text-sm">
         <span className="text-zinc-400 line-through">{question}</span>
         <span className="ml-2 text-xs text-emerald-400">✓ FAQ登録済み（次回から自動回答）</span>
+        <button
+          onClick={resolve}
+          disabled={resolving}
+          className="ml-2 rounded border border-zinc-700 px-2 py-0.5 text-xs text-rose-300 transition hover:border-rose-500/40 disabled:opacity-40"
+        >
+          一覧から削除
+        </button>
       </li>
     );
   }
@@ -361,7 +404,14 @@ function EscalationRow({
   return (
     <li className="py-2 text-sm">
       <div className="flex items-start justify-between gap-3">
-        <span className="text-zinc-200">{question}</span>
+        <span className="text-zinc-200">
+          {question}
+          {count > 1 && (
+            <span className="ml-2 rounded-full bg-amber-500/15 px-1.5 py-0.5 align-middle text-[11px] font-medium text-amber-400">
+              ×{count}
+            </span>
+          )}
+        </span>
         <div className="flex shrink-0 items-center gap-2">
           <span className="font-mono text-xs text-zinc-500">{at}</span>
           <button
@@ -369,6 +419,13 @@ function EscalationRow({
             className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300 transition hover:border-emerald-500/40 hover:text-zinc-100"
           >
             {open ? '閉じる' : '回答する'}
+          </button>
+          <button
+            onClick={resolve}
+            disabled={resolving}
+            className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-rose-300 transition hover:border-rose-500/40 disabled:opacity-40"
+          >
+            {resolving ? '…' : '削除'}
           </button>
         </div>
       </div>

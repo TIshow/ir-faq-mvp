@@ -102,19 +102,26 @@ export async function GET(request: Request): Promise<Response> {
     const total = counts.answered + counts.refused + counts.escalated;
 
     // 未回答（IR要対応）= 投資家が「IR窓口へ問い合わせる」を押したものだけ（自動エスカレは含めない）。
-    // 自動判定は曖昧で要対応一覧が肥大化するため、明示的な問い合わせ依頼のみを worklist に乗せる。
+    // 同一質問はグループ化（件数）し、ir_resolved で解決済みにした質問は除外する
+    // （同じ問い合わせが多数来ても、一つ解決すれば worklist から消せる）。
     const IRREQ = `\`${PROJECT}.ir_analytics.ir_requests\``;
+    const IRRES = `\`${PROJECT}.ir_analytics.ir_resolved\``;
+    // 解決済み判定: その質問の解決マーカー(resolved_at)が問い合わせ(ts)以降にあれば対応済みとして除外。
     const irRows = await bqQuery(
       token,
-      `SELECT question, FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', ts) AS asked_at FROM ${IRREQ} ${where} ORDER BY ts DESC LIMIT 50`,
+      `SELECT r.question AS question, COUNT(*) AS c,
+              FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', MAX(r.ts)) AS asked_at
+       FROM ${IRREQ} r
+       WHERE r.company_ticker=@company
+         AND r.ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)
+         AND NOT EXISTS (
+           SELECT 1 FROM ${IRRES} x
+           WHERE x.company_ticker=r.company_ticker AND x.question=r.question AND x.resolved_at >= r.ts
+         )
+       GROUP BY r.question ORDER BY MAX(r.ts) DESC LIMIT 50`,
       since,
     );
-    const irCountRows = await bqQuery(
-      token,
-      `SELECT COUNT(*) AS c FROM ${IRREQ} ${where}`,
-      since,
-    );
-    const irRequests = Number(irCountRows[0]?.c ?? 0);
+    const irRequests = irRows.length; // 要対応＝未解決のユニーク質問数
 
     const top = await bqQuery(
       token,
@@ -131,8 +138,12 @@ export async function GET(request: Request): Promise<Response> {
         ir_requests: irRequests,
         answer_rate: total ? Math.round((counts.answered / total) * 1000) / 10 : 0,
       },
-      // ユーザーが明示的に問い合わせを依頼した質問（IR要対応ワークリスト）
-      ir_requests_questions: irRows.map((r) => ({ question: r.question, at: r.asked_at })),
+      // ユーザーが明示的に問い合わせを依頼した質問（IR要対応ワークリスト・同一質問はグループ化）
+      ir_requests_questions: irRows.map((r) => ({
+        question: r.question,
+        at: r.asked_at,
+        count: Number(r.c),
+      })),
       top_questions: top.map((r) => ({ question: r.question, count: Number(r.c) })),
     });
   } catch (e) {
