@@ -43,14 +43,28 @@ _UNDISCLOSED = re.compile(
 # 「会社予想」を聞くのは許可（予測ではなく開示事実）
 _COMPANY_FORECAST_OK = re.compile(r"(会社予想|会社の予想|今期予想|通期予想|業績予想)")
 
-# 誹謗中傷・脅迫・暴言（チャットUI特有のリスク）。明白で誤検出の少ない語に限定する
-# （「ゴミ処理事業」等の正当用法を避けるため bare な一般語は使わず、罵倒の形のみ）。
+# 誹謗中傷・脅迫・暴言（チャットUI特有のリスク）。明白で誤検出の少ない語に限定する。
 # 不満を含むだけの正当な質問（「なぜ業績が落ちた？」等）はここで止めず通常回答に委ねる。
-_ABUSE = re.compile(
-    r"(死ね|タヒね|殺す|ころす|殺害|潰れろ|倒産しろ|消えろ|くたばれ|"
-    r"クソ株|くそ株|ゴミ株|クソ会社|ゴミ会社|クソ銘柄|詐欺会社|詐欺企業|"
-    r"無能|馬鹿|バカ|アホ|あほ|カス|クズ|ボケ|ふざけるな|ふざけんな)"
+_THREAT_ABUSE = re.compile(
+    r"(死ね|しね|シネ|タヒね|殺す|ころす|殺害|潰れろ|倒産しろ|消えろ|くたばれ)"
 )
+_ENTITY_ABUSE = re.compile(
+    r"(クソ株|くそ株|ゴミ株|ごみ株|クソ会社|くそ会社|ゴミ会社|ごみ会社|"
+    r"クソ銘柄|くそ銘柄|ゴミ銘柄|ごみ銘柄|詐欺会社|詐欺企業|ふざけるな|ふざけんな)"
+)
+_ABUSE_TARGET = r"(社長|経営陣|役員|会社|この会社|IR|IR室|銘柄|株)"
+_SHORT_INSULT = r"(無能|馬鹿|バカ(?![ァ-ヶ])|アホ(?![ァ-ヶ])|あほ|カス(?![ァ-ヶ])|クズ|ボケ|クソ|ゴミ(?!処理))"
+_TARGETED_ABUSE = re.compile(
+    rf"({_ABUSE_TARGET}.{{0,12}}{_SHORT_INSULT}|{_SHORT_INSULT}.{{0,12}}{_ABUSE_TARGET})"
+)
+
+
+def _is_abuse(query: str) -> bool:
+    return bool(
+        _THREAT_ABUSE.search(query)
+        or _ENTITY_ABUSE.search(query)
+        or _TARGETED_ABUSE.search(query)
+    )
 
 
 def classify_scope(query: str) -> ScopeDecision:
@@ -58,7 +72,7 @@ def classify_scope(query: str) -> ScopeDecision:
     q = query.strip()
 
     # 誹謗中傷・脅迫は最優先で短絡（refused＝CTAを出さない→IR要対応に転送されない）。
-    if _ABUSE.search(q):
+    if _is_abuse(q):
         return ScopeDecision(
             "refused",
             "inappropriate",
