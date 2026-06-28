@@ -123,9 +123,13 @@ export async function GET(request: Request): Promise<Response> {
     );
     const irRequests = irRows.length; // 要対応＝未解決のユニーク質問数
 
+    // 頻出質問: 誹謗中傷(inappropriate)はマスク済み(question='[不適切な内容]')のため集計から除外
+    // （荒らしが多いとトップに出てしまうのを防ぐ）。scope_reason は NULL を取りうるので COALESCE。
     const top = await bqQuery(
       token,
-      `SELECT question, COUNT(*) AS c FROM ${TABLE} ${where} GROUP BY question ORDER BY c DESC LIMIT 10`,
+      `SELECT question, COUNT(*) AS c FROM ${TABLE} ${where}
+         AND COALESCE(scope_reason, '') != 'inappropriate'
+       GROUP BY question ORDER BY c DESC LIMIT 10`,
       since,
     );
 

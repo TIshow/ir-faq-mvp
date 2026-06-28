@@ -44,10 +44,12 @@ def log_interaction(
     try:
         client = _get_client()
         table = f"{config.PROJECT_ID}.{config.BQ_DATASET}.{config.BQ_TABLE}"
+        # 誹謗中傷はマスクして保存（IRダッシュボードの頻出質問・集計に罵倒/名誉毀損を出さない）。
+        q = "[不適切な内容]" if scope_reason == "inappropriate" else (question or "")[:1000]
         row = {
             "ts": datetime.now(UTC).isoformat(),  # 日付パーティション列
             "company_ticker": company_ticker or "",
-            "question": (question or "")[:1000],
+            "question": q,
             "scope_status": scope_status or "",
             "scope_reason": scope_reason or None,
             "fact_card_count": int(fact_card_count),

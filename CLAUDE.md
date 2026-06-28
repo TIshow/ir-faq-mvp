@@ -109,6 +109,7 @@ gcloud run services update ir-frontend --region us-central1 \
 - **企業をハードコードしない**。新企業は `companies.ts` に追加し、対応する Discovery Engine データストアを用意。
 - **モデルは交換可能に保つ**。`MODEL_NAME`（env / config）で切替。現状 `gemini-2.5-flash`（このプロジェクトで `gemini-3-*` は未開放）。
 - コミットは小さくPRで。main 直 push しない（PR→squash merge 運用）。
+- **PR作成後はマージせず一旦停止し、ユーザーのレビュー/承認を待ってからマージする**（merge の手前で必ず確認を取る）。
 - 秘密情報はコミットしない（`.env*` は gitignore、`agent/.env.example` のみ追跡）。
 
 ## 7. 現状サマリ（2026-06-26）
