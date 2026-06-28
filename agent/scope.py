@@ -53,7 +53,7 @@ _ENTITY_ABUSE = re.compile(
     r"クソ銘柄|くそ銘柄|ゴミ銘柄|ごみ銘柄|詐欺会社|詐欺企業|ふざけるな|ふざけんな)"
 )
 _ABUSE_TARGET = r"(社長|経営陣|役員|会社|この会社|IR|IR室|銘柄|株)"
-_SHORT_INSULT = r"(無能|馬鹿|バカ(?![ァ-ヶ])|アホ(?![ァ-ヶ])|あほ|カス(?![ァ-ヶ])|クズ|ボケ|クソ|ゴミ(?!処理))"
+_SHORT_INSULT = r"(無能|馬鹿|バカ(?![ァ-ヶ])|アホ(?![ァ-ヶ])|あほ|カス(?![ァ-ヶ])|クズ|ボケ|クソ)"
 _TARGETED_ABUSE = re.compile(
     rf"({_ABUSE_TARGET}.{{0,12}}{_SHORT_INSULT}|{_SHORT_INSULT}.{{0,12}}{_ABUSE_TARGET})"
 )
@@ -61,9 +61,7 @@ _TARGETED_ABUSE = re.compile(
 
 def _is_abuse(query: str) -> bool:
     return bool(
-        _THREAT_ABUSE.search(query)
-        or _ENTITY_ABUSE.search(query)
-        or _TARGETED_ABUSE.search(query)
+        _THREAT_ABUSE.search(query) or _ENTITY_ABUSE.search(query) or _TARGETED_ABUSE.search(query)
     )
 
 
