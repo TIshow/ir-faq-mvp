@@ -130,7 +130,8 @@ export async function GET(request: Request): Promise<Response> {
       pageToken = data.nextPageToken;
     } while (pageToken && ++pages < MAX_PAGES);
     if (pageToken) {
-      console.warn(`[api/ir/faq] FAQ一覧が上限ページに到達（一部未取得の可能性）company=${ticker}`);
+      // datastore(ds) は companies.ts 由来の定数を使う（ユーザー入力 ticker を直接ログしない＝log injection回避）。
+      console.warn(`[api/ir/faq] FAQ一覧が上限ページに到達（一部未取得の可能性）datastore=${ds}`);
     }
     return Response.json({ company: ticker, faqs });
   } catch (e) {
