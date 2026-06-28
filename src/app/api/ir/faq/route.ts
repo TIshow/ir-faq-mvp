@@ -102,19 +102,36 @@ export async function GET(request: Request): Promise<Response> {
 
   try {
     const token = await accessToken();
-    const res = await fetch(`${branch(ds)}?pageSize=200`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const data = (await res.json()) as {
-      error?: { message: string };
-      documents?: { id: string; structData?: { question?: string; answer?: string } }[];
-    };
-    if (!res.ok || data.error) {
-      return Response.json({ error: 'FAQ一覧の取得に失敗しました' }, { status: 502 });
+    // datastore は FAQ(structData) と PDF/開示資料が同居するため、documents.list を
+    // nextPageToken で**全ページ巡回**し、id が faq-<ticker>- のFAQだけを集める。
+    // （1ページ目だけだと、総ドキュメント数が pageSize を超えたときに後続FAQが欠落する）
+    const faqs: { id: string; question?: string; answer?: string }[] = [];
+    const MAX_PAGES = 25; // 安全上限（200×25=5000件）。超過時は警告ログ。
+    let pageToken: string | undefined;
+    let pages = 0;
+    do {
+      const url = new URL(branch(ds));
+      url.searchParams.set('pageSize', '200');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+      const data = (await res.json()) as {
+        error?: { message: string };
+        documents?: { id: string; structData?: { question?: string; answer?: string } }[];
+        nextPageToken?: string;
+      };
+      if (!res.ok || data.error) {
+        return Response.json({ error: 'FAQ一覧の取得に失敗しました' }, { status: 502 });
+      }
+      for (const d of data.documents ?? []) {
+        if (d.id?.startsWith(`faq-${ticker}-`) && d.structData?.answer) {
+          faqs.push({ id: d.id, question: d.structData?.question, answer: d.structData?.answer });
+        }
+      }
+      pageToken = data.nextPageToken;
+    } while (pageToken && ++pages < MAX_PAGES);
+    if (pageToken) {
+      console.warn(`[api/ir/faq] FAQ一覧が上限ページに到達（一部未取得の可能性）company=${ticker}`);
     }
-    const faqs = (data.documents ?? [])
-      .filter((d) => d.structData?.answer)
-      .map((d) => ({ id: d.id, question: d.structData?.question, answer: d.structData?.answer }));
     return Response.json({ company: ticker, faqs });
   } catch (e) {
     console.error('[api/ir/faq] GET error:', e);
