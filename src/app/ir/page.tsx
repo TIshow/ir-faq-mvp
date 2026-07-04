@@ -12,7 +12,7 @@ interface Metrics {
   days: number;
   totals: { answered: number; refused: number; escalated: number; ir_requests: number; total: number; answer_rate: number };
   ir_requests_questions: { question: string; at: string; count: number }[];
-  top_questions: { question: string; count: number }[];
+  top_topics: { topic: string; count: number }[];
 }
 
 const DAYS_OPTIONS = [7, 30, 90];
@@ -143,7 +143,7 @@ export default function IrDashboardPage() {
   }
 
   const t = data?.totals;
-  const maxTop = Math.max(1, ...(data?.top_questions ?? []).map((q) => q.count));
+  const maxTop = Math.max(1, ...(data?.top_topics ?? []).map((q) => q.count));
   const lockedName = companyShortName(companies.find((c) => c.ticker === claimCompany)?.name ?? '') || claimCompany;
 
   return (
@@ -227,15 +227,20 @@ export default function IrDashboardPage() {
           </section>
 
           <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-            <h2 className="text-sm font-medium text-zinc-300">頻出質問トップ</h2>
-            {data.top_questions.length === 0 ? (
+            <h2 className="text-sm font-medium text-zinc-300">
+              話題トレンド
+              <span className="ml-2 text-xs text-zinc-500">
+                投資家の関心を話題ごとに集計（プライバシー保護のため質問の原文は表示しません）
+              </span>
+            </h2>
+            {data.top_topics.length === 0 ? (
               <p className="mt-3 text-sm text-zinc-500">データがありません。</p>
             ) : (
               <ul className="mt-3 space-y-2">
-                {data.top_questions.map((q, i) => (
+                {data.top_topics.map((q, i) => (
                   <li key={i} className="text-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="truncate text-zinc-200">{q.question}</span>
+                      <span className="truncate text-zinc-200">{q.topic}</span>
                       <span className="shrink-0 font-mono text-xs text-zinc-500">{q.count}件</span>
                     </div>
                     <div className="mt-1 h-1.5 w-full rounded-full bg-zinc-800">

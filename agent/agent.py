@@ -28,7 +28,7 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from . import config, prompt
-from .analytics import log_interaction
+from .analytics import log_interaction, topic_for_refusal
 from .scope import classify_scope
 from .suggest import build_suggestions
 from .tools import CompanyCtx, escalate_to_ir, get_financial_facts, search_disclosures
@@ -200,7 +200,15 @@ async def run_agent_stream(
 
     decision = classify_scope(query)
     if decision.status != "answered":
-        log_interaction(ticker, query, decision.status, decision.reason, 0, 0)
+        # 入口拒否の話題は scope_reason から決定論マッピング（LLM不使用）。本文は記録しない。
+        log_interaction(
+            ticker,
+            decision.status,
+            decision.reason,
+            0,
+            0,
+            topic=topic_for_refusal(decision.reason),
+        )
         yield {"type": "prose_delta", "text": decision.message or ""}
         yield {"type": "final", "response": _refusal_response(decision, suggestions)}
         return
@@ -214,14 +222,16 @@ async def run_agent_stream(
                 yield ev
             elif ev["type"] == "final":
                 resp = ev["response"]
+                # topic は内部フィールド（AgentResponse契約外）＝記録してからフロントへは出さない
+                topic = resp.pop("topic", None)
                 resp["suggestions"] = suggestions
                 log_interaction(
                     ticker,
-                    query,
                     resp["scope_status"],
                     resp.get("scope_reason"),
                     len(resp["fact_cards"]),
                     len(resp["citations"]),
+                    topic=topic,
                 )
                 yield {"type": "final", "response": resp}
         return
@@ -295,7 +305,6 @@ async def run_agent_stream(
     final = _compose("".join(prose_parts), fact_cards, citations, escalated, suggestions)
     log_interaction(
         ticker,
-        query,
         final["scope_status"],
         final.get("scope_reason"),
         len(final["fact_cards"]),
