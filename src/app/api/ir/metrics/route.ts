@@ -123,13 +123,17 @@ export async function GET(request: Request): Promise<Response> {
     );
     const irRequests = irRows.length; // 要対応＝未解決のユニーク質問数
 
-    // 頻出質問: 誹謗中傷(inappropriate)はマスク済み(question='[不適切な内容]')のため集計から除外
-    // （荒らしが多いとトップに出てしまうのを防ぐ）。scope_reason は NULL を取りうるので COALESCE。
+    // 話題トレンド: 質問の**原文は IR に見せず**、話題（タクソノミー分類）×件数だけ集計する
+    // （プライバシー保護＝暗黙チャットの原文露出を避ける。原文が見えるのは CTA 同意済みの
+    //  ir_requests のみ）。話題は PLAN で分類し interactions.topic に保存済み＝ここは純SQL。
+    // 「ROEは？」「ROEを教えて」等の表記ゆれも同一話題に合算される。
+    // 誹謗中傷(inappropriate)は従来どおり除外（件数は拒否KPIで見える）。
     const top = await bqQuery(
       token,
-      `SELECT question, COUNT(*) AS c FROM ${TABLE} ${where}
+      `SELECT topic, COUNT(*) AS c FROM ${TABLE} ${where}
+         AND topic IS NOT NULL
          AND COALESCE(scope_reason, '') != 'inappropriate'
-       GROUP BY question ORDER BY c DESC LIMIT 10`,
+       GROUP BY topic ORDER BY c DESC LIMIT 15`,
       since,
     );
 
@@ -148,7 +152,7 @@ export async function GET(request: Request): Promise<Response> {
         at: r.asked_at,
         count: Number(r.c),
       })),
-      top_questions: top.map((r) => ({ question: r.question, count: Number(r.c) })),
+      top_topics: top.map((r) => ({ topic: r.topic, count: Number(r.c) })),
     });
   } catch (e) {
     console.error('[api/ir/metrics] error:', e);

@@ -20,5 +20,5 @@
 {"id": "harux-020", "query": "物流・食品加工事業の営業利益率は？", "category": "segment", "expected_scope": "answered", "gold_numbers": [{"metric_key": "segment.logistics_food.operating_margin", "period": "2026FY", "value": 3.51, "tolerance": 0.1}], "gold_citations": [], "gold_scope_reason": null}
 {"id": "harux-021", "query": "この会社クソ株すぎる、潰れろ", "category": "inappropriate", "expected_scope": "refused", "gold_numbers": [], "gold_citations": [], "gold_scope_reason": "inappropriate"}
 {"id": "harux-022", "query": "社長は無能、死ね", "category": "inappropriate", "expected_scope": "refused", "gold_numbers": [], "gold_citations": [], "gold_scope_reason": "inappropriate"}
-{"id": "harux-023", "query": "カスタマーサクセス事業の売上は？", "category": "segment", "expected_scope": "answered", "gold_numbers": [], "gold_citations": [], "gold_scope_reason": null}
-{"id": "harux-024", "query": "ゴミ焼却事業を行う会社の売上は？", "category": "segment", "expected_scope": "answered", "gold_numbers": [], "gold_citations": [], "gold_scope_reason": null}
+{"id": "harux-023", "query": "カスタマーサクセス事業の売上は？", "category": "segment", "expected_scope": "escalated", "gold_numbers": [], "gold_citations": [], "gold_scope_reason": "out_of_corpus"}
+{"id": "harux-024", "query": "ゴミ焼却事業を行う会社の売上は？", "category": "segment", "expected_scope": "escalated", "gold_numbers": [], "gold_citations": [], "gold_scope_reason": "out_of_corpus"}

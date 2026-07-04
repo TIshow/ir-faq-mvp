@@ -20,6 +20,48 @@ from . import config
 _log = logging.getLogger("ir-agent.analytics")
 _client = None  # 遅延生成した BigQuery クライアントのキャッシュ
 
+# --- 話題タクソノミー（v1・全社共通＝マルチテナント）--------------------------
+# ダッシュボードの「話題トレンド」用。質問の原文は IR に見せず、話題×件数だけ集計する
+# （プライバシー保護）。LLM は生成せず**この中から選ぶだけ**＝ラベルが揺れず GROUP BY topic
+# が決定論になる（relevant_metrics で指標キーを選ばせるのと同じパターン）。
+TOPICS: list[str] = [
+    "業績・決算（全社）",
+    "セグメント・事業別",
+    "会社予想・ガイダンス",
+    "配当・株主還元",
+    "株主優待",
+    "財務体質（資産・負債・CF）",
+    "資本効率（ROE・ROIC）",
+    "成長戦略・中計",
+    "事業内容・ビジネスモデル",
+    "市場環境・競合",
+    "ESG・サステナビリティ",
+    "ガバナンス・経営体制",
+    "用語・使い方",
+    "その他",
+]
+TOPIC_FALLBACK = "その他"
+
+# 拒否（助言/予測/未開示/不適切）は LLM を通らないため scope_reason から決定論マッピング
+# （LLM の選択肢には含めない）。
+_REFUSAL_TOPICS: dict[str, str] = {
+    "advice": "対象外（助言・予測・未開示）",
+    "prediction": "対象外（助言・予測・未開示）",
+    "undisclosed": "対象外（助言・予測・未開示）",
+    "inappropriate": "不適切",
+}
+
+
+def topic_for_refusal(scope_reason: str | None) -> str:
+    """入口拒否の話題ラベル（決定論・LLM不使用）。"""
+    return _REFUSAL_TOPICS.get(scope_reason or "", TOPIC_FALLBACK)
+
+
+def normalize_topic(topic: str | None) -> str:
+    """LLM が返した話題をタクソノミーに正規化（未知ラベルは「その他」に落とす）。"""
+    t = (topic or "").strip()
+    return t if t in TOPICS else TOPIC_FALLBACK
+
 
 def _get_client():
     global _client
@@ -37,8 +79,10 @@ def log_interaction(
     scope_reason: str | None,
     fact_card_count: int,
     citation_count: int,
+    topic: str | None = None,
 ) -> None:
-    """1件の Q&A を BigQuery に記録（匿名・best-effort）。失敗しても例外を投げない。"""
+    """1件の Q&A を BigQuery に記録（匿名・best-effort）。失敗しても例外を投げない。
+    topic はダッシュボードの話題トレンド用（PLAN で分類 or 拒否は topic_for_refusal）。"""
     if not config.ANALYTICS_ENABLED:
         return
     try:
@@ -54,6 +98,7 @@ def log_interaction(
             "scope_reason": scope_reason or None,
             "fact_card_count": int(fact_card_count),
             "citation_count": int(citation_count),
+            "topic": topic or None,
         }
         errors = client.insert_rows_json(table, [row])
         if errors:

@@ -24,6 +24,7 @@ from typing import Any
 from google.genai import types
 
 from . import config, store
+from .analytics import TOPICS, normalize_topic
 from .tools import CompanyCtx, build_financial_facts, search_disclosures
 
 _log = logging.getLogger("ir-agent.synth")
@@ -80,7 +81,8 @@ PLAN_PROMPT = """あなたは {company_name} の開示情報を案内するIRア
   "can_answer": true/false,
   "relevant_metrics": ["カード表示する metric_key。定性のみ・該当無しなら空配列"],
   "used_citations": [使った抜粋の番号(整数)],
-  "escalate_reason": "can_answer=false の時の正直な理由（true の時は空文字）"
+  "escalate_reason": "can_answer=false の時の正直な理由（true の時は空文字）",
+  "topic": "質問の話題。次から1つだけ選ぶ（新しい語を作らない）: {topics}"
 }}
 
 注: 抜粋の番号 [0][1]… は内部参照用。escalate_reason には書かない（資料に触れるなら資料名で）。
@@ -366,9 +368,14 @@ def _contextualize(name: str, history: list[dict[str, str]], query: str) -> str:
 
 
 def _plan(name: str, query: str, facts_ctx: str, passages_ctx: str) -> dict[str, Any]:
-    """PLAN: answerability 判定＋カード指標・引用の選択（構造化JSON・eval関門の決定論性を守る）。"""
+    """PLAN: answerability 判定＋カード指標・引用の選択＋話題分類（構造化JSON）。
+    話題は既存のPLAN呼び出しに相乗り＝追加のLLMコール・コストゼロ（タクソノミーから選択のみ）。"""
     prompt = PLAN_PROMPT.format(
-        company_name=name, query=query, facts_context=facts_ctx, passages_context=passages_ctx
+        company_name=name,
+        query=query,
+        facts_context=facts_ctx,
+        passages_context=passages_ctx,
+        topics=" | ".join(TOPICS),
     )
     resp = _genai_client().models.generate_content(
         model=config.MODEL_NAME,
@@ -422,9 +429,9 @@ def _write_stream(name, query, facts_ctx, passages_ctx, focus_metrics):
             yield t
 
 
-def _escalate_stream(reason: str):
+def _escalate_stream(reason: str, topic: str | None = None):
     """エスカレ応答を stream プロトコルで返す（短文を1回 prose_delta → final）。"""
-    resp = _escalate(reason)
+    resp = _escalate(reason, topic)
     yield {"type": "prose_delta", "text": resp["answer_prose"]}
     yield {"type": "final", "response": resp}
 
@@ -455,15 +462,17 @@ def synthesize_stream(
     rel_metrics = [m for m in (data.get("relevant_metrics") or []) if isinstance(m, str)]
     used = [i for i in (data.get("used_citations") or []) if isinstance(i, int)]
     escalate_reason = str(data.get("escalate_reason") or "").strip()
+    # 話題分類（PLAN相乗り）。未知ラベルは「その他」に正規化＝集計の決定論性を守る。
+    topic = normalize_topic(str(data.get("topic") or ""))
 
     if not can_answer:
-        yield from _escalate_stream(escalate_reason or _NO_ANSWER)
+        yield from _escalate_stream(escalate_reason or _NO_ANSWER, topic)
         return
 
     # GROUND（決定論）。接地ゼロ＝実質未回答 → エスカレ
     fact_cards, citations = _ground(ticker, pa, pf, rel_metrics, used, passages)
     if not fact_cards and not citations:
-        yield from _escalate_stream(escalate_reason or _NO_ANSWER)
+        yield from _escalate_stream(escalate_reason or _NO_ANSWER, topic)
         return
 
     # WRITE（本文をストリーミング）
@@ -487,11 +496,13 @@ def synthesize_stream(
             "citations": citations,
             "scope_status": "answered",
             "scope_reason": None,
+            # 内部フィールド（AgentResponse契約外）: agent.py が pop して analytics に記録する
+            "topic": topic,
         },
     }
 
 
-def _escalate(reason: str) -> dict[str, Any]:
+def _escalate(reason: str, topic: str | None = None) -> dict[str, Any]:
     msg = f"{_strip_refs(reason)} 恐れ入りますが、IR窓口へお問い合わせください。"
     return {
         "answer_prose": msg,
@@ -499,4 +510,6 @@ def _escalate(reason: str) -> dict[str, Any]:
         "citations": [],
         "scope_status": "escalated",
         "scope_reason": "out_of_corpus",
+        # 内部フィールド（AgentResponse契約外）: agent.py が pop して analytics に記録する
+        "topic": topic,
     }
