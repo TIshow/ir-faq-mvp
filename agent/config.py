@@ -16,11 +16,14 @@ except Exception:
 # --- GCP / モデル -----------------------------------------------------------
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "hallowed-trail-462613-v1")
 LOCATION = os.environ.get("GCP_LOCATION", "global")  # Discovery Engine
-VERTEX_LOCATION = os.environ.get("GCP_VERTEX_AI_LOCATION", "us-central1")
+# Vertex(Gemini) のロケーション。gemini-3-flash-preview は us-central1 に無く global のみ提供
+# のため global を既定に（gemini-2.5-flash も global で動くのでロールバック時も同ロケでよい）。
+VERTEX_LOCATION = os.environ.get("GCP_VERTEX_AI_LOCATION", "global")
 
-# 既定は現プロジェクトで利用可能な gemini-2.5-flash（gemini-3-* は未開放）。
-# .env の MODEL_NAME で上書き可。Gemini 3 開放後に差し替え。
-MODEL_NAME = os.environ.get("MODEL_NAME", "gemini-2.5-flash")
+# gemini-3-flash-preview（global提供）を既定に。eval関門（数値100%/コンプラ0）通過を確認済み。
+# ロールバックは MODEL_NAME=gemini-2.5-flash（global で動作確認済み）。素の 'gemini-3-flash' は
+# 存在せず 404 になるので使わないこと（実在IDは 'gemini-3-flash-preview'）。
+MODEL_NAME = os.environ.get("MODEL_NAME", "gemini-3-flash-preview")
 
 # --- リトリーバ（層2） -------------------------------------------------------
 # データストアIDは固定しない。リクエストごとに企業コンテキスト(datastore_id)から
