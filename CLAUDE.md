@@ -23,7 +23,7 @@
                   ├ 層1: get_financial_facts → 構造化ファクト（PoC=JSON / 本番=Cloud SQL）※YoY・利益率はコード計算
                   ├ 層2: search_disclosures → Discovery Engine データストア（PDF＋FAQ）
                   ├ escalate_to_ir → 質問ログ（痛み②: IRインテリジェンス）
-                  └ LLM: Vertex AI Gemini（現 gemini-2.5-flash）
+                  └ LLM: Vertex AI Gemini（現 gemini-3-flash-preview @ global）
 ```
 - フロントとエージェントが**別言語・別責務なので2サービス**（Next.js=画面、Python ADK=頭脳）。
 - 回答契約 `AgentResponse = { answer_prose, fact_cards[], citations[], scope_status, scope_reason, suggestions[] }`（`src/lib/agent-types.ts` と Python 側で一致）。
@@ -107,7 +107,7 @@ gcloud run services update ir-frontend --region us-central1 \
 ## 6. 規約・注意
 - **数値を捏造しない**。層1に実データが無ければ数値は返さず層2/エスカレーションへ。
 - **企業をハードコードしない**。新企業は `companies.ts` に追加し、対応する Discovery Engine データストアを用意。
-- **モデルは交換可能に保つ**。`MODEL_NAME`（env / config）で切替。現状 `gemini-2.5-flash`（このプロジェクトで `gemini-3-*` は未開放）。
+- **モデルは交換可能に保つ**。`MODEL_NAME`（env / config）で切替。現状 `gemini-3-flash-preview`（**global 提供**＝`GCP_VERTEX_AI_LOCATION=global`。us-central1 には無い。素の `gemini-3-flash` は404）。切替は必ず eval関門（数値100%/コンプラ0）で検証。ロールバックは `MODEL_NAME=gemini-2.5-flash`。
 - コミットは小さくPRで。main 直 push しない（PR→squash merge 運用）。
 - **PR作成後はマージせず一旦停止し、ユーザーのレビュー/承認を待ってからマージする**（merge の手前で必ず確認を取る）。
 - 秘密情報はコミットしない（`.env*` は gitignore、`agent/.env.example` のみ追跡）。
