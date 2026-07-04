@@ -200,10 +200,9 @@ async def run_agent_stream(
 
     decision = classify_scope(query)
     if decision.status != "answered":
-        # 入口拒否の話題は scope_reason から決定論マッピング（LLM不使用）
+        # 入口拒否の話題は scope_reason から決定論マッピング（LLM不使用）。本文は記録しない。
         log_interaction(
             ticker,
-            query,
             decision.status,
             decision.reason,
             0,
@@ -228,7 +227,6 @@ async def run_agent_stream(
                 resp["suggestions"] = suggestions
                 log_interaction(
                     ticker,
-                    query,
                     resp["scope_status"],
                     resp.get("scope_reason"),
                     len(resp["fact_cards"]),
@@ -307,7 +305,6 @@ async def run_agent_stream(
     final = _compose("".join(prose_parts), fact_cards, citations, escalated, suggestions)
     log_interaction(
         ticker,
-        query,
         final["scope_status"],
         final.get("scope_reason"),
         len(final["fact_cards"]),

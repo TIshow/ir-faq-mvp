@@ -248,9 +248,10 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             </svg>
           </button>
         </form>
-        {/* 透明性の明示: 会話は匿名記録・統計利用（原文がIRに渡るのは「IR窓口へ問い合わせる」を押した時のみ） */}
+        {/* 透明性の明示: 本文は保存しない（話題等のメタデータのみ匿名記録）。
+            本文がIRに送られるのは「IR窓口へ問い合わせる」を押した時のみ。 */}
         <p className="mt-2 px-1 text-center text-[11px] leading-relaxed text-zinc-600">
-          ※ 会話は匿名で記録され、IR活動の改善のため統計的に利用されます。
+          ※ 会話の本文は保存されません。話題・回答状況などの統計のみ匿名で記録し、IR活動の改善に利用します。
         </p>
       </div>
     </div>

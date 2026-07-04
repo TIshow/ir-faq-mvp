@@ -1,7 +1,8 @@
 """Q&Aインタラクションの永続ログ（痛み②: IRインテリジェンスの土台）。
 
-全Q&Aを BigQuery に**匿名・集計用**で記録する（回答率/エスカレーション/頻出論点の分析用）。
-個人識別子は持たない（プライバシー・バイ・デザイン）。
+全Q&Aの**メタデータのみ**を BigQuery に匿名で記録する（回答率/エスカレーション/話題トレンド用）。
+個人識別子も**質問の本文も持たない**（プライバシー・バイ・デザイン。本文が保存されるのは
+ユーザーが「IR窓口へ問い合わせる」で明示同意した ir_requests のみ）。
 
 原則:
 - **best-effort**：記録失敗はチャット応答を壊さない（例外は握り潰してログのみ）。
@@ -74,26 +75,25 @@ def _get_client():
 
 def log_interaction(
     company_ticker: str,
-    question: str,
     scope_status: str,
     scope_reason: str | None,
     fact_card_count: int,
     citation_count: int,
     topic: str | None = None,
 ) -> None:
-    """1件の Q&A を BigQuery に記録（匿名・best-effort）。失敗しても例外を投げない。
-    topic はダッシュボードの話題トレンド用（PLAN で分類 or 拒否は topic_for_refusal）。"""
+    """1件の Q&A の**メタデータのみ**を BigQuery に記録（匿名・best-effort）。
+
+    質問の本文（原文）は保存しない（プライバシー・バイ・デザイン）。カウントに必要なのは
+    話題（topic）・回答状況（scope）・接地度（カード/引用数）だけ。原文が保存されるのは
+    ユーザーが CTA で明示同意した ir_requests（/api/ir/contact）のみ。失敗しても例外を投げない。"""
     if not config.ANALYTICS_ENABLED:
         return
     try:
         client = _get_client()
         table = f"{config.PROJECT_ID}.{config.BQ_DATASET}.{config.BQ_TABLE}"
-        # 誹謗中傷はマスクして保存（IRダッシュボードの頻出質問・集計に罵倒/名誉毀損を出さない）。
-        q = "[不適切な内容]" if scope_reason == "inappropriate" else (question or "")[:1000]
         row = {
             "ts": datetime.now(UTC).isoformat(),  # 日付パーティション列
             "company_ticker": company_ticker or "",
-            "question": q,
             "scope_status": scope_status or "",
             "scope_reason": scope_reason or None,
             "fact_card_count": int(fact_card_count),

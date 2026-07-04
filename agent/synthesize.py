@@ -360,7 +360,10 @@ def _contextualize(name: str, history: list[dict[str, str]], query: str) -> str:
         # 失敗・空・極端に長い場合は元の質問にフォールバック（安全側）。
         if rewritten and len(rewritten) <= 300:
             if rewritten != query:
-                _log.info("contextualize: %r → %r", query, rewritten)
+                # 本文はログに残さない（Cloud Logging にも会話内容を保持しない方針）
+                _log.info(
+                    "contextualize: フォロー質問を書き換え（%d→%d文字）", len(query), len(rewritten)
+                )
             return rewritten
     except Exception as e:
         _log.warning("contextualize 失敗（元の質問で続行）: %s", e)
