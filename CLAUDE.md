@@ -112,14 +112,15 @@ gcloud run services update ir-frontend --region us-central1 \
 - **PR作成後はマージせず一旦停止し、ユーザーのレビュー/承認を待ってからマージする**（merge の手前で必ず確認を取る）。
 - 秘密情報はコミットしない（`.env*` は gitignore、`agent/.env.example` のみ追跡）。
 
-## 7. 現状サマリ（2026-06-26）
+## 7. 現状サマリ（2026-07-04）
 - ✅ 全GCPで実稼働（Vercel廃止）。マルチテナント切替・ガードレール・**層2の実FAQ/PDF回答（出典付き）**・モダンなダークUI（Markdown描画）。
-- ✅ **層1（数値）はハークスレイ(7561)を旗艦に深掘り点灯**＝FY25/26実績＋3セグメント＋FY27会社予想（EDINET有報XBRLから決定論抽出、31件）。ヴィス(5071)も10件。
-- ✅ **生成IR（既定 `ANSWER_MODE=synthesis`）**: 「業績を分析して」で表＋セグメント分析＋会社予想の洞察まで生成。数値はコード計算済みデータシート由来でLLM非経由＝決定論。eval関門（数値100%/コンプラ0）維持。
-- ✅ **痛み②の堀**: escalation→FAQ複利ループ（冪等upsert）＋IR向けダッシュボード（BigQuery集計）＋Firebase認証（マルチテナント・owner全社）。
-- ⚠️ フィル/ピアズの層1数値・ヴィスのYoY/セグメントは未投入。生成IRのカード過多抑制・層2本文数値の実在照合は今後。
-- 詳細・残課題・再開手順は **`docs/HANDOFF.md`** と GitHub Issue #3。
+- ✅ **層1（数値）はハークスレイ(7561)を旗艦に深掘り点灯**＝FY25/26実績＋3セグメント＋FY27会社予想（EDINET有報XBRLから決定論抽出、31件）。ヴィス(5071)も10件。**派生指標**（全社/セグメント利益率・売上構成比・利益寄与度）もコード計算でカード化。
+- ✅ **生成IR（既定 `ANSWER_MODE=synthesis`）**: 表＋セグメント分析＋会社予想の洞察まで生成。本文ストリーミング＋短期メモリ（フォロー質問対応）。カード過多は上限8枚に自動抑制。数値はコード計算済みデータシート由来でLLM非経由＝決定論。eval関門（数値100%/コンプラ0）維持。LLMは **gemini-3-flash-preview（global）**。
+- ✅ **痛み②の堀**: escalation→FAQ複利ループ（冪等upsert）＋IRダッシュボード＝**話題トレンド**（話題×件数・原文非表示）＋**IR要対応**（CTA同意分のみ・×Nグループ化・削除可）＋Firebase認証（owner全社）。
+- ✅ **信頼・プライバシー**: 誹謗中傷の入口ガード（拒否・CTA非表示・記録マスク）。会話の**本文はどこにも保存しない**（メタデータのみ。チャットUIに明示）。
+- ⚠️ 未了: フィル/ピアズの層1・ヴィスのYoY/セグメント・層2本文数値の実在照合・ir-agent非公開化(#88)・BQ東京(#89)。gemini-3のレイテンシ（先頭〜18s）要観察＝重ければ `MODEL_NAME=gemini-2.5-flash` へ即戻し。
+- 詳細・残課題は **`docs/HANDOFF.md`**、戦略は **Issue #77**（尖らせ方=#85-87／インフラ=#88-92）。
 ```
-GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#64 マージ済）
-GCP project: hallowed-trail-462613-v1 / region us-central1
+GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#93 マージ済）
+GCP project: hallowed-trail-462613-v1 / region us-central1（Vertexはglobal）
 ```

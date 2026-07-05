@@ -54,7 +54,8 @@ IR Agent の設計詳細。背景・方針は CLAUDE.md、現状/再開手順は
 - **CONTEXTUALIZE（短期メモリ・`_contextualize`）**: `history`（直近の会話）があれば、フォロー質問（「なんで？」「前期は？」）を会話履歴で**自己完結クエリに書き換え**（condense question）てから retrieve/plan へ。履歴が無ければ LLM を呼ばず素通り＝**eval は従来と完全に同一**。履歴は質問の解釈のみに使い、数値の根拠にはしない（決定論維持）。
 - **RETRIEVE**: `_facts_context(ticker)` が層1の全実値に加え**前年比・営業利益率・セグメント構成比をコードで計算**した「分析用データシート」を作る（LLMに暗算させない）。あわせて `search_disclosures` で層2を取得。
 - **PLAN（answerability・JSONモード）**: LLM が `{can_answer, relevant_metrics, used_citations, escalate_reason}` を返す（構造化出力＝eval決定論性を守る）。`can_answer=false` ならここで即エスカレ（本文生成なし＝速い）。プロンプトは「FAQ逐語禁止」「新たな割り算をしない＝計算済み値を使う」。最優先規則: **FAQ/開示抜粋が質問に直接答えるなら、構造化数値に無い指標(例ROE)でも answered**。
-- **GROUND**: `relevant_metrics` から `build_financial_facts` がカードの数値を**コードで**埋める（過多は `_reduce_cards` で抑制）。カードも引用も無い（接地ゼロ）なら正直にエスカレ。
+- **GROUND**: `relevant_metrics` から `build_financial_facts` がカードの数値を**コードで**埋める（過多は `_reduce_cards` で抑制。派生指標＝全社/セグメント利益率・売上構成比・利益寄与度もコード計算でカード化可）。カードも引用も無い（接地ゼロ）なら正直にエスカレ。
+- **話題分類（PLAN相乗り）**: PLAN の出力に `topic` を含め、質問を固定タクソノミー（agent/analytics.py の TOPICS・14分類）へ分類（追加LLMコールなし）。`topic` は AgentResponse 契約外の内部フィールドで、agent.py が pop して分析記録にのみ使う。
 - **WRITE（本文・プレーンテキスト・ストリーム）**: `generate_content_stream` で生成IR本文をトークン逐次生成。数値は提供データシートの範囲のみ（カード＋出典でクロスチェック）。
 - カードの抜粋番号 `[0]` 等は内部参照用（`used_citations` 選択）。本文に漏れたら `_strip_refs` で除去。
 
@@ -69,7 +70,7 @@ AgentResponse = {
   fact_cards: FactCard[]        // 層1由来の数値（出典付き・コード生成＝LLM非経由）。出典なしカードは描画しない
   citations: Citation[]         // 層2由来の出典（doc/page/url/quote）
   scope_status: 'answered' | 'refused' | 'escalated'
-  scope_reason?: 'advice' | 'prediction' | 'undisclosed' | 'out_of_corpus' | 'unknown'
+  scope_reason?: 'advice' | 'prediction' | 'undisclosed' | 'inappropriate' | 'out_of_corpus' | 'unknown'
   suggestions: string[]         // 次質問サジェスト（A-lite: 利用可能データから決定論生成。拒否時も行き止まりにしない）
 }
 FactCard = { metric, metricKey, period, value, valueNumeric, unit, yoy?, consolidated, basis:'actual'|'forecast', source: Citation }
@@ -85,7 +86,7 @@ FactCard = { metric, metricKey, period, value, valueNumeric, unit, yoy?, consoli
 - データが無い企業は捏造せず「データなし」＋エスカレーション（クロス企業漏れなし）。
 
 ## ガードレール（多層防御）
-1. **入口** `scope.py`: 明白な 助言/予測/未開示 を正規表現で短絡拒否（LLM呼ばず）。「会社予想」は通す（両モード共通）。
+1. **入口** `scope.py`: 明白な 助言/予測/未開示/**不適切（誹謗中傷・脅迫）** を正規表現で短絡拒否（LLM呼ばず）。「会社予想」は通す（両モード共通）。不適切は refused＝CTA非表示＝IR要対応に転送されず、分析記録もマスク・集計除外（IR室を守る）。
 2. **生成** プロンプト鉄則: 開示事実のみ・**新たな数値計算をしない（計算済み値を使う）**・出典必須・助言/予測しない・未開示言及せず・不明はIR案内。synthesis は `synthesize.py` 内、legacy は `prompt.py`（鉄則6項）。
 3. **出口/接地** 数値カードはコードが生成（LLM非経由）。synthesis: can_answer=false / 接地ゼロ → エスカレ。legacy: `agent.py::_compose` で出典なしカード除去・scope_status 確定。
 4. **数値の最終防衛**: 散文の数値はLLMが書くが、その値は「コード計算済みデータシート」由来であり、隣の決定論カード＋出典でクロスチェックできる（重い出口ゲートは置かない設計判断）。
@@ -93,7 +94,8 @@ FactCard = { metric, metricKey, period, value, valueNumeric, unit, yoy?, consoli
 ## エスカレーションと「IR要対応」（痛み②の堀）
 2種類を**役割で分離**している（混同しない）:
 - **自動エスカレ** `scope_status='escalated'`: エージェントが答えられないと判断した状態。**CTA「IR窓口へ問い合わせる」の表示**と、`interactions` への記録（回答率/トレンド分析）に使う。**ダッシュボードの要対応一覧には入れない**（自動判定は曖昧で肥大化するため）。
-- **IR要対応** `ir_analytics.ir_requests`: **投資家がCTAを押したものだけ**。`/api/ir/contact`（未認証・企業は companies.ts で検証）が記録し、`/ir` の「IR要対応」一覧＝IRが実際に対応するワークリスト。
+- **IR要対応** `ir_analytics.ir_requests`: **投資家がCTAを押したものだけ**。`/api/ir/contact`（未認証・企業は companies.ts で検証）が記録し、`/ir` の「IR要対応」一覧＝IRが実際に対応するワークリスト。一覧は**同一質問をグループ化（×N）**し、`/api/ir/resolve`（要認証）が `ir_analytics.ir_resolved` に解決マーカーを入れると一覧から消える（BQはstreaming buffer中の行をDELETEできないため、削除でなくマーカー方式）。
+- **分析記録は本文レス**: `interactions` は質問の**本文を保存しない**（ts/企業/scope/カード・引用数/話題のみ＝メタデータ）。原文が残るのはCTA同意済みの `ir_requests` だけ。ダッシュボードの「話題トレンド」は `GROUP BY topic` の純SQL（原文非表示・表記ゆれは話題単位で自然合算）。
 - legacy の `escalate_to_ir`→`store.insert_escalation`（Cloud SQL escalations / facts_store の escalations.jsonl）は**現行ダッシュボードからは未参照**（ir_requests に置換済み）。legacy モードのロールバック用に存置。
 
 ## 評価（eval/eval_harness.py）
@@ -115,4 +117,4 @@ FactCard = { metric, metricKey, period, value, valueNumeric, unit, yoy?, consoli
 - Discovery Engine データストアが **chunking config** のため、検索リクエストに `extractive_content_spec` を入れると **400**。**snippet_spec のみ**にする（`tools.py` 済）。
 - FAQ(faq.csv)は **structData{question,answer}** として取り込まれる。`search_disclosures` は structData を最優先で読む。
 - ローカルで discoveryengine API を叩くには ADC に quota project 設定が必要（`gcloud auth application-default set-quota-project`）。Cloud Run 上はランタイムSAなので不要。
-- `gemini-3-*` はこのプロジェクト未開放（404）。`gemini-2.5-flash` を使用。
+- モデルは `gemini-3-flash-preview`（**global 提供**。`us-central1` には無い）。素の `gemini-3-flash` というIDは存在せず404。ロールバックは `MODEL_NAME=gemini-2.5-flash`（globalでも動作確認済み）。切替は必ず eval関門で検証。
