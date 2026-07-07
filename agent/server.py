@@ -75,6 +75,8 @@ async def chat(req: ChatRequest) -> StreamingResponse:
             ):
                 if chunk["type"] == "prose_delta":
                     yield _sse("delta", {"text": chunk["text"]})
+                elif chunk["type"] == "status":  # A1: 進行段階の実況（search/plan/write）
+                    yield _sse("status", {"stage": chunk["stage"]})
                 elif chunk["type"] == "final":
                     yield _sse("final", chunk["response"])
         except Exception as e:  # 失敗も前進: ユーザーに丁寧なエラー＋ログ
