@@ -24,6 +24,13 @@ const AUDIENCES: { key: Audience; label: string }[] = [
   { key: 'advanced', label: '上級者' },
 ];
 
+/** A1: 進行段階の実況ラベル（SSE 'status' イベント）。実際のパイプライン工程に対応。 */
+const STAGE_LABELS: Record<string, string> = {
+  search: '🔍 開示資料を検索しています…',
+  plan: '📊 数値を照合し、回答方針を判定しています…',
+  write: '✍️ 分析をまとめています…',
+};
+
 /** B3: ストリーミング中の本文。完成した行だけ Markdown 描画し、書きかけの最終行は
  * プレーンで出す（表や**太字**が閉じる前の崩れた中間状態を見せない＝ガタつき防止）。
  * B1: 末尾に点滅キャレットで"書かれていく"感を出す。 */
@@ -51,6 +58,7 @@ interface Message {
   isStreaming?: boolean;
   question?: string; // assistant メッセージに紐づく元の質問（IR問い合わせ記録用）
   irContactStatus?: 'sending' | 'sent' | 'error'; // 「IR窓口へ問い合わせる」の送信状態
+  stage?: string; // A1: 進行段階（search/plan/write）。本文が届き始めたら不要
 }
 
 interface ChatInterfaceProps {
@@ -136,6 +144,9 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           if (event === 'delta') {
             prose += JSON.parse(data).text ?? '';
             patchMessage(assistantId, { content: prose });
+          } else if (event === 'status') {
+            // A1: 進行段階の実況（search→plan→write）
+            patchMessage(assistantId, { stage: JSON.parse(data).stage });
           } else if (event === 'final') {
             const response = JSON.parse(data) as AgentResponse;
             patchMessage(assistantId, { response, content: response.answer_prose, isStreaming: false });
@@ -266,7 +277,9 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                         <StreamingProse text={m.content} streaming={!!m.isStreaming} />
                       ) : (
                         <span className="flex items-center gap-2 text-zinc-400">
-                          考え中
+                          <span key={m.stage ?? 'thinking'} className="animate-fade-slide-in">
+                            {STAGE_LABELS[m.stage ?? ''] ?? '考え中'}
+                          </span>
                           {m.isStreaming && (
                             <span className="inline-flex gap-1">
                               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.3s]" />

@@ -588,10 +588,15 @@ def synthesize_stream(
     ticker = str(company.get("ticker") or "")
     name = company.get("name") or "対象企業"
 
+    # A1: 進行段階をフロントへ実況（search→plan→write）。待ち時間を"作業が見える"体験にする。
+    yield {"type": "status", "stage": "search"}
+
     # 短期メモリ: 履歴があればフォロー質問を自己完結クエリに書き換えてから retrieve/plan に渡す。
     query = _contextualize(name, history or [], query)
 
     facts_ctx, pa, pf, passages, passages_ctx = _retrieve(query, company, ticker)
+
+    yield {"type": "status", "stage": "plan"}
 
     # PLAN（判定）
     try:
@@ -619,6 +624,7 @@ def synthesize_stream(
         return
 
     # WRITE（本文をストリーミング）
+    yield {"type": "status", "stage": "write"}
     parts: list[str] = []
     try:
         for t in _write_stream(name, query, facts_ctx, passages_ctx, rel_metrics, audience):

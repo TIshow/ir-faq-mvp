@@ -220,7 +220,7 @@ async def run_agent_stream(
         from .synthesize import synthesize_stream
 
         for ev in synthesize_stream(query, company, history=history or [], audience=audience):
-            if ev["type"] == "prose_delta":
+            if ev["type"] in ("prose_delta", "status"):
                 yield ev
             elif ev["type"] == "final":
                 resp = ev["response"]
