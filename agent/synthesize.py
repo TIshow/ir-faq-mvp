@@ -242,6 +242,13 @@ AUDIENCE_STYLES: dict[str, str] = {
 DEFAULT_AUDIENCE = "intermediate"
 
 
+def normalize_audience(audience: str | None) -> str:
+    """読者レベルを正規化（未知値は既定=中級者へ）。有効値の唯一の正は AUDIENCE_STYLES。
+    normalize_topic と同じ「境界で丸める」パターン（HTTP境界の server.py が使う）。"""
+    a = (audience or "").strip()
+    return a if a in AUDIENCE_STYLES else DEFAULT_AUDIENCE
+
+
 # 短期メモリ: フォロー質問（「なんで？」「それは？」「前期は？」等）を、会話履歴を使って
 # **自己完結した質問に書き換える**（condense question）。検索・判定が文脈なしで成立するようにする。
 CONTEXTUALIZE_PROMPT = """次は {company_name} のIRに関する会話です。会話履歴を踏まえ、最新の質問を

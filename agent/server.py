@@ -19,6 +19,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .agent import run_agent_stream
+from .synthesize import normalize_audience
 
 app = FastAPI(title="IR Agent")
 
@@ -60,9 +61,7 @@ async def chat(req: ChatRequest) -> StreamingResponse:
     }
 
     history = [{"role": t.role, "content": t.content} for t in req.history]
-    audience = (
-        req.audience if req.audience in ("beginner", "intermediate", "advanced") else "intermediate"
-    )
+    audience = normalize_audience(req.audience)  # 有効値の正は synthesize.AUDIENCE_STYLES
 
     async def gen():
         try:
