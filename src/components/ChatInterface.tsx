@@ -15,6 +15,14 @@ const GUIDED_ENTRIES = [
   '中期経営計画の進捗',
 ];
 
+// 読者レベル（回答の"翻訳度"だけが変わる。専門性・正確性は同じ）
+type Audience = 'beginner' | 'intermediate' | 'advanced';
+const AUDIENCES: { key: Audience; label: string }[] = [
+  { key: 'beginner', label: '初心者' },
+  { key: 'intermediate', label: '中級者' },
+  { key: 'advanced', label: '上級者' },
+];
+
 interface Message {
   id: string;
   type: 'user' | 'assistant';
@@ -35,6 +43,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId] = useState<string | undefined>(sessionId);
+  const [audience, setAudience] = useState<Audience>('intermediate');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { selectedCompany } = useCompany();
@@ -43,6 +52,16 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const chips = selectedCompany?.guidedQuestions ?? GUIDED_ENTRIES;
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  // 読者レベルはブラウザに記憶（次回訪問時も同じ設定で）
+  useEffect(() => {
+    const saved = localStorage.getItem('ir-audience');
+    if (saved === 'beginner' || saved === 'intermediate' || saved === 'advanced') setAudience(saved);
+  }, []);
+  const changeAudience = (a: Audience) => {
+    setAudience(a);
+    try { localStorage.setItem('ir-audience', a); } catch { /* private mode 等は無視 */ }
+  };
 
   const patchMessage = (id: string, patch: Partial<Message>) =>
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
@@ -72,7 +91,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       const res = await fetch('/api/chat/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: q, companyId: selectedCompany.id, sessionId: currentSessionId, history }),
+        body: JSON.stringify({ message: q, companyId: selectedCompany.id, sessionId: currentSessionId, history, audience }),
       });
       if (!res.ok || !res.body) throw new Error('Chat request failed');
 
@@ -147,14 +166,36 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             </>
           ) : '銘柄を選択してください'}
         </span>
-        {messages.length > 0 && (
-          <button
-            onClick={clearChat}
-            className="shrink-0 rounded-lg border border-zinc-800 px-2.5 py-1 text-xs text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-200"
+        <div className="flex shrink-0 items-center gap-2">
+          {/* 読者レベル: 説明のかみ砕き方だけが変わる（専門性は同じ） */}
+          <div
+            className="flex items-center rounded-full border border-zinc-800/80 bg-zinc-900/60 p-0.5 backdrop-blur-sm"
+            title="説明のかみ砕き方が変わります（内容の専門性は同じです）"
           >
-            新しいチャット
-          </button>
-        )}
+            {AUDIENCES.map((a) => (
+              <button
+                key={a.key}
+                onClick={() => changeAudience(a.key)}
+                aria-pressed={audience === a.key}
+                className={`rounded-full px-2.5 py-1 text-[11px] transition-all duration-200 ${
+                  audience === a.key
+                    ? 'bg-emerald-500 font-medium text-zinc-950 shadow-[0_0_14px_rgba(16,185,129,0.35)]'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+          {messages.length > 0 && (
+            <button
+              onClick={clearChat}
+              className="shrink-0 rounded-lg border border-zinc-800 px-2.5 py-1 text-xs text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-200"
+            >
+              新しいチャット
+            </button>
+          )}
+        </div>
       </div>
 
       {/* メッセージ */}
@@ -177,7 +218,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                   key={entry}
                   onClick={() => (selectedCompany ? send(entry) : inputRef.current?.focus())}
                   disabled={!selectedCompany || isLoading}
-                  className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1.5 text-sm text-zinc-300 transition hover:border-emerald-500/40 hover:bg-zinc-800/80 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1.5 text-sm text-zinc-300 backdrop-blur-sm transition-all duration-200 hover:-translate-y-px hover:border-emerald-500/50 hover:bg-emerald-500/10 hover:text-emerald-200 hover:shadow-[0_0_18px_rgba(16,185,129,0.15)] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {entry}
                 </button>
@@ -187,13 +228,13 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         ) : (
           <div className="space-y-4 py-2">
             {messages.map((m) => (
-              <div key={m.id} className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div key={m.id} className={`animate-fade-slide-in flex ${m.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {m.type === 'user' ? (
-                  <div className="max-w-[85%] rounded-2xl rounded-br-md bg-emerald-500 px-4 py-2.5 text-sm font-medium text-zinc-950">
+                  <div className="max-w-[85%] rounded-2xl rounded-br-md bg-emerald-500 px-4 py-2.5 text-sm font-medium text-zinc-950 shadow-[0_4px_20px_rgba(16,185,129,0.22)]">
                     {m.content}
                   </div>
                 ) : (
-                  <div className="max-w-[90%] rounded-2xl rounded-bl-md border border-zinc-800 bg-zinc-900/70 px-4 py-3 text-sm leading-relaxed text-zinc-200">
+                  <div className="max-w-[90%] rounded-2xl rounded-bl-md border border-zinc-800/70 bg-zinc-900/60 px-4 py-3 text-sm leading-relaxed text-zinc-200 backdrop-blur-sm">
                     {m.response ? (
                       <AgentAnswer
                         response={m.response}
@@ -226,7 +267,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       <div className="px-4 pb-5 pt-1">
         <form
           onSubmit={(e) => { e.preventDefault(); send(inputValue); }}
-          className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-1.5 pl-4 transition focus-within:border-zinc-600"
+          className="flex items-center gap-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-1.5 pl-4 backdrop-blur-md transition-all duration-300 focus-within:border-emerald-500/40 focus-within:shadow-[0_0_28px_rgba(16,185,129,0.10)]"
         >
           <input
             ref={inputRef}

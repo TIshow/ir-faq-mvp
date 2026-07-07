@@ -30,6 +30,12 @@ export const Markdown: React.FC<{ children: string }> = ({ children }) => (
         h1: ({ children }) => <h3 className="mb-1 mt-3 text-base font-semibold text-zinc-100">{children}</h3>,
         h2: ({ children }) => <h3 className="mb-1 mt-3 text-sm font-semibold text-zinc-100">{children}</h3>,
         h3: ({ children }) => <h4 className="mb-1 mt-2 text-sm font-semibold text-zinc-200">{children}</h4>,
+        // 生成IRの「💡 注目ポイント」節（#### 見出し）: やわらかい強調カード風に
+        h4: ({ children }) => (
+          <h4 className="mb-1.5 mt-4 flex items-center gap-1.5 border-t border-zinc-800/70 pt-3 text-sm font-semibold text-emerald-300">
+            {children}
+          </h4>
+        ),
         blockquote: ({ children }) => (
           <blockquote className="my-2 border-l-2 border-zinc-700 pl-3 text-zinc-400">{children}</blockquote>
         ),

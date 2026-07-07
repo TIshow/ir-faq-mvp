@@ -41,3 +41,32 @@ button:disabled,
 [role="button"][aria-disabled="true"] {
   cursor: not-allowed;
 }
+
+/* --- UIX: なめらかな出現・背景の流れ（reduced-motion 尊重） --- */
+@keyframes fade-slide-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-slide-in {
+  animation: fade-slide-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* 背景レイヤ: 2枚並べたSVG/パターンを -50% まで平行移動してシームレスにループ */
+@keyframes bg-drift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@keyframes bg-drift-reverse {
+  from { transform: translateX(-50%); }
+  to   { transform: translateX(0); }
+}
+.animate-bg-drift { animation: bg-drift 90s linear infinite; }
+.animate-bg-drift-slow { animation: bg-drift-reverse 160s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-slide-in,
+  .animate-bg-drift,
+  .animate-bg-drift-slow {
+    animation: none;
+  }
+}

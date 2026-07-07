@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import UTC, datetime
 
 from . import config
@@ -100,8 +101,16 @@ def log_interaction(
             "citation_count": int(citation_count),
             "topic": topic or None,
         }
+        # 挿入は fire-and-forget（応答の final イベントを BQ 往復で待たせない。best-effort は不変）
+        threading.Thread(target=_insert_row, args=(client, table, row), daemon=True).start()
+    except Exception as e:  # 記録失敗はチャットを壊さない
+        _log.warning("analytics log skipped: %s", e)
+
+
+def _insert_row(client, table: str, row: dict) -> None:
+    try:
         errors = client.insert_rows_json(table, [row])
         if errors:
             _log.warning("analytics insert errors: %s", errors)
-    except Exception as e:  # 記録失敗はチャットを壊さない
+    except Exception as e:
         _log.warning("analytics log skipped: %s", e)
