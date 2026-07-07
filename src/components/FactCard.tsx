@@ -47,8 +47,11 @@ export const FactCardView: React.FC<{ fact: FactCard }> = ({ fact }) => {
   return (
     <div
       className={[
-        'min-w-[150px] rounded-xl bg-zinc-950/60 p-3',
-        isForecast ? 'border border-dashed border-amber-500/40' : 'border border-zinc-800',
+        'min-w-[150px] rounded-xl bg-zinc-950/60 p-3 backdrop-blur-[2px]',
+        'transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]',
+        isForecast
+          ? 'border border-dashed border-amber-500/40 hover:border-amber-400/60'
+          : 'border border-zinc-800 hover:border-zinc-600',
       ].join(' ')}
     >
       <div className="flex items-center justify-between gap-2">
@@ -184,7 +187,7 @@ export const AgentAnswer: React.FC<{
               <button
                 key={i}
                 onClick={() => onSuggestion(s)}
-                className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3 py-1 text-xs text-zinc-300 transition hover:border-emerald-500/40 hover:bg-zinc-800/80 hover:text-zinc-100"
+                className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1.5 text-xs text-zinc-300 transition-all duration-200 hover:-translate-y-px hover:border-emerald-500/50 hover:bg-emerald-500/10 hover:text-emerald-200 hover:shadow-[0_0_16px_rgba(16,185,129,0.15)] active:translate-y-0"
               >
                 {s}
               </button>

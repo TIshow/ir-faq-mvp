@@ -19,6 +19,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .agent import run_agent_stream
+from .synthesize import normalize_audience
 
 app = FastAPI(title="IR Agent")
 
@@ -38,6 +39,8 @@ class ChatRequest(BaseModel):
     userId: str = "anon"
     # 短期メモリ: 直近の会話履歴（フォロー質問の書き換え用）。サーバはステートレス。
     history: list[Turn] = []
+    # 読者レベル（説明の翻訳度のみ調整。既定=中級者。未知値は中級者へ丸める）
+    audience: str = "intermediate"
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:
@@ -58,6 +61,7 @@ async def chat(req: ChatRequest) -> StreamingResponse:
     }
 
     history = [{"role": t.role, "content": t.content} for t in req.history]
+    audience = normalize_audience(req.audience)  # 有効値の正は synthesize.AUDIENCE_STYLES
 
     async def gen():
         try:
@@ -67,6 +71,7 @@ async def chat(req: ChatRequest) -> StreamingResponse:
                 user_id=req.userId,
                 session_id=req.sessionId,
                 history=history,
+                audience=audience,
             ):
                 if chunk["type"] == "prose_delta":
                     yield _sse("delta", {"text": chunk["text"]})

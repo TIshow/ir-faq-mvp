@@ -186,10 +186,12 @@ async def run_agent_stream(
     user_id: str = "anon",
     session_id: str = "s1",
     history: list[dict[str, str]] | None = None,
+    audience: str = "intermediate",
 ) -> AsyncIterator[dict[str, Any]]:
     """
     company = {"ticker","name","datastore_id"}。
     history = [{"role","content"}...]（短期メモリ。フォロー質問の書き換え用。synthesis のみ使用）。
+    audience = 'beginner'|'intermediate'|'advanced'（説明の翻訳度のみ。synthesis のみ使用）。
     yield: {"type":"prose_delta","text":...} / {"type":"final","response": AgentResponse}
     """
     ticker = str(company.get("ticker") or "")
@@ -217,7 +219,7 @@ async def run_agent_stream(
     if config.ANSWER_MODE == "synthesis":
         from .synthesize import synthesize_stream
 
-        for ev in synthesize_stream(query, company, history=history or []):
+        for ev in synthesize_stream(query, company, history=history or [], audience=audience):
             if ev["type"] == "prose_delta":
                 yield ev
             elif ev["type"] == "final":
