@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AgentResponse, Citation, FactCard, ScopeStatus } from '@/lib/agent-types';
 import { Markdown } from '@/components/Markdown';
 
@@ -37,8 +37,34 @@ export const CitationLink: React.FC<{ citation: Citation; compact?: boolean }> =
   );
 };
 
+/** C1: 数値のカウントアップ。表示のみの演出で、最終フレームは必ずサーバ整形済みの
+ * 正確な文字列（fact.value）に着地させる＝決定論の見た目を一切変えない。
+ * prefers-reduced-motion では即座に最終値を表示。 */
+function useCountUp(target: number, unit: string, finalText: string, duration = 700): string {
+  const [display, setDisplay] = useState(finalText);
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let raf = 0;
+    const t0 = performance.now();
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3); // easeOutCubic
+    const fmt = (v: number) =>
+      unit === '%' ? `${v.toFixed(1)}%` : `${Math.round(v).toLocaleString('ja-JP')}${unit}`;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - t0) / duration);
+      setDisplay(p >= 1 ? finalText : fmt(target * ease(p)));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return display;
+}
+
 /** 数値カード（層1由来）。出典の無いカードは描画しない。予想は点線枠＋会社予想バッジ。 */
 export const FactCardView: React.FC<{ fact: FactCard }> = ({ fact }) => {
+  // Hooks は早期 return より前に無条件で呼ぶ（rules-of-hooks）
+  const animatedValue = useCountUp(fact.valueNumeric, fact.unit, fact.value);
   if (!fact.source || !fact.source.doc) return null;
   const isForecast = fact.basis === 'forecast';
   const up = fact.yoy?.startsWith('+');
@@ -61,12 +87,15 @@ export const FactCardView: React.FC<{ fact: FactCard }> = ({ fact }) => {
         )}
       </div>
 
-      <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-zinc-100">{fact.value}</div>
+      <div className="mt-1 font-mono text-xl font-semibold tracking-tight text-zinc-100">{animatedValue}</div>
 
       <div className="mt-1 flex items-center gap-2">
         <span className="font-mono text-[11px] text-zinc-500">{fact.period}</span>
         {fact.yoy && (
-          <span className={`font-mono text-[11px] font-semibold ${up ? 'text-emerald-400' : down ? 'text-rose-400' : 'text-zinc-400'}`}>
+          <span
+            style={{ animationDelay: '550ms' }}
+            className={`animate-pop-in font-mono text-[11px] font-semibold ${up ? 'text-emerald-400' : down ? 'text-rose-400' : 'text-zinc-400'}`}
+          >
             {up ? '▲' : down ? '▼' : ''}{fact.yoy} YoY
           </span>
         )}
@@ -158,13 +187,19 @@ export const AgentAnswer: React.FC<{
       {fact_cards && fact_cards.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {fact_cards.map((f, i) => (
-            <FactCardView key={`${f.metricKey}-${f.period}-${i}`} fact={f} />
+            <div
+              key={`${f.metricKey}-${f.period}-${i}`}
+              className="animate-fade-slide-in"
+              style={{ animationDelay: `${i * 70}ms` }}
+            >
+              <FactCardView fact={f} />
+            </div>
           ))}
         </div>
       )}
 
       {citations && citations.length > 0 && (
-        <div className="mt-3 border-t border-zinc-800 pt-3">
+        <div className="animate-fade-slide-in mt-3 border-t border-zinc-800 pt-3" style={{ animationDelay: '220ms' }}>
           <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500">参考資料</p>
           <div className="flex flex-col gap-1">
             {citations.map((c, i) => (<CitationLink key={i} citation={c} />))}
@@ -180,14 +215,15 @@ export const AgentAnswer: React.FC<{
       />
 
       {onSuggestion && suggestions && suggestions.length > 0 && (
-        <div className="mt-3 border-t border-zinc-800 pt-3">
+        <div className="animate-fade-slide-in mt-3 border-t border-zinc-800 pt-3" style={{ animationDelay: '340ms' }}>
           <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500">次に聞いてみる</p>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((s, i) => (
               <button
                 key={i}
+                style={{ animationDelay: `${420 + i * 60}ms` }}
                 onClick={() => onSuggestion(s)}
-                className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1.5 text-xs text-zinc-300 transition-all duration-200 hover:-translate-y-px hover:border-emerald-500/50 hover:bg-emerald-500/10 hover:text-emerald-200 hover:shadow-[0_0_16px_rgba(16,185,129,0.15)] active:translate-y-0"
+                className="animate-fade-slide-in rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1.5 text-xs text-zinc-300 transition-all duration-200 hover:-translate-y-px hover:border-emerald-500/50 hover:bg-emerald-500/10 hover:text-emerald-200 hover:shadow-[0_0_16px_rgba(16,185,129,0.15)] active:translate-y-0"
               >
                 {s}
               </button>

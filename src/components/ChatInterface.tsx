@@ -5,6 +5,7 @@ import { useCompany } from '@/contexts/CompanyContext';
 import { companyShortName } from '@/config/companies';
 import { AgentResponse } from '@/lib/agent-types';
 import { AgentAnswer } from '@/components/FactCard';
+import { Markdown } from '@/components/Markdown';
 
 // ガイド付き入口（企業はピッカーで選択するため企業名は含めない＝スコープ安全）
 const GUIDED_ENTRIES = [
@@ -22,6 +23,24 @@ const AUDIENCES: { key: Audience; label: string }[] = [
   { key: 'intermediate', label: '中級者' },
   { key: 'advanced', label: '上級者' },
 ];
+
+/** B3: ストリーミング中の本文。完成した行だけ Markdown 描画し、書きかけの最終行は
+ * プレーンで出す（表や**太字**が閉じる前の崩れた中間状態を見せない＝ガタつき防止）。
+ * B1: 末尾に点滅キャレットで"書かれていく"感を出す。 */
+function StreamingProse({ text, streaming }: { text: string; streaming: boolean }) {
+  const nl = text.lastIndexOf('\n');
+  const done = nl >= 0 ? text.slice(0, nl + 1) : '';
+  const rest = nl >= 0 ? text.slice(nl + 1) : text;
+  return (
+    <span>
+      {done && <Markdown>{done}</Markdown>}
+      {rest && <span className="text-sm leading-relaxed text-zinc-200">{rest}</span>}
+      {streaming && (
+        <span className="animate-caret ml-0.5 inline-block h-4 w-[2px] translate-y-[3px] rounded-sm bg-emerald-400" />
+      )}
+    </span>
+  );
+}
 
 interface Message {
   id: string;
@@ -243,16 +262,20 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                         onSuggestion={(q) => send(q)}
                       />
                     ) : (
-                      <span className="flex items-center gap-2 text-zinc-400">
-                        {m.content || '考え中'}
-                        {m.isStreaming && (
-                          <span className="inline-flex gap-1">
-                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.3s]" />
-                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.15s]" />
-                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500" />
-                          </span>
-                        )}
-                      </span>
+                      m.content ? (
+                        <StreamingProse text={m.content} streaming={!!m.isStreaming} />
+                      ) : (
+                        <span className="flex items-center gap-2 text-zinc-400">
+                          考え中
+                          {m.isStreaming && (
+                            <span className="inline-flex gap-1">
+                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.3s]" />
+                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.15s]" />
+                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500" />
+                            </span>
+                          )}
+                        </span>
+                      )
                     )}
                   </div>
                 )}
