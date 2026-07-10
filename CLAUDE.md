@@ -120,7 +120,8 @@ gcloud run services update ir-frontend --region us-central1 \
 - ✅ **痛み②の堀**: escalation→FAQ複利ループ（冪等upsert）＋IRダッシュボード＝**話題トレンド**（話題×件数・原文非表示）＋**IR要対応**（CTA同意分のみ・×Nグループ化・削除可）＋Firebase認証（owner全社）。
 - ✅ **信頼・プライバシー**: 誹謗中傷の入口ガード（拒否・CTA非表示・記録マスク）。会話の**本文はどこにも保存しない**（メタデータのみ。チャットUIに明示）。
 - ✅ **UIX**: 背景に薄く流れるチャート＋幾何学ドット（reduced-motion停止）、ふわっと出現・ガラス質感・ホバー浮遊。読者レベルはlocalStorage永続。
-- ⚠️ 未了: フィル/ピアズの層1・ヴィスのYoY/セグメント・層2本文数値の実在照合・ir-agent非公開化(#88)・BQ東京(#89)。gemini-3 は thinking 最小化で先頭〜12s に短縮（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` へ即戻し）。
+- ✅ **セキュリティ #88 完了**: ir-agent は非公開（invoker=フロントSAのみ）。フロントがIDトークンで呼ぶ（`src/lib/agent-auth.ts`・localhostはスキップ）＋ `/api/chat` にIP単位レート制限（既定10回/分・`CHAT_RATE_LIMIT_PER_MIN`）。投資家UXは無変化（ログイン不要のまま）。
+- ⚠️ 未了: フィル/ピアズの層1・ヴィスのYoY/セグメント・層2本文数値の実在照合・BQ東京(#89)。gemini-3 は thinking 最小化で先頭〜12s に短縮（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` へ即戻し）。
 - 詳細・残課題は **`docs/HANDOFF.md`**、戦略は **Issue #77**（尖らせ方=#85-87／インフラ=#88-92）。
 ```
 GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#95 マージ済）
