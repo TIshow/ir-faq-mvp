@@ -10,19 +10,18 @@
 import { GoogleAuth, IdTokenClient } from 'google-auth-library';
 
 const auth = new GoogleAuth();
-let idClient: IdTokenClient | null = null;
+// Promise をメモ化（同時リクエストでもクライアント生成は一度だけ）
+let idClient: Promise<IdTokenClient> | null = null;
 
 export async function agentAuthHeader(agentUrl: string): Promise<string | null> {
   if (!agentUrl.startsWith('https://')) return null; // ローカル開発（http://localhost:8080）
   try {
+    idClient ??= auth.getIdTokenClient(agentUrl);
     // IdTokenClient はトークンをキャッシュし期限前に自動更新する（毎回の発行コスト無し）
-    idClient ??= await auth.getIdTokenClient(agentUrl);
-    const headers = await idClient.getRequestHeaders();
-    // google-auth-library のバージョン差異（v9=plain object / v10=Headers）を吸収
-    if (headers instanceof Headers) return headers.get('authorization');
-    const h = headers as Record<string, string>;
-    return h.Authorization ?? h.authorization ?? null;
+    const headers = await (await idClient).getRequestHeaders();
+    return headers.get('authorization');
   } catch (e) {
+    idClient = null; // 失敗した Promise を掴み続けない（次回リクエストで再試行）
     console.warn('agent-auth: IDトークン取得に失敗（未認証で続行）:', e instanceof Error ? e.message : e);
     return null;
   }
