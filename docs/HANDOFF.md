@@ -12,7 +12,7 @@
 | 種別 | 名前 / ID | URL・備考 |
 |---|---|---|
 | フロント | Cloud Run **ir-frontend** | https://ir-frontend-255752121803.us-central1.run.app （公開） |
-| エージェント | Cloud Run **ir-agent** | https://ir-agent-eyqs2m6yva-uc.a.run.app （公開=allUsers・**本番前に非公開化**） |
+| エージェント | Cloud Run **ir-agent** | https://ir-agent-eyqs2m6yva-uc.a.run.app （**非公開=#88完了**: invoker=フロントSAのみ。フロントが `src/lib/agent-auth.ts` のIDトークンで呼ぶ。直叩きは403） |
 | LLM | Vertex AI **gemini-3-flash-preview**（`GCP_VERTEX_AI_LOCATION=global`） | 素の `gemini-3-flash` は存在せず404。us-central1 にも無い。ロールバック=`MODEL_NAME=gemini-2.5-flash`（globalで動作可）。※先頭トークン〜18s（2.5比で悪化・要観察） |
 | 検索アプリ | Discovery Engine engine **ir-bot-mvp-app_1750418304373** | vis/phil/peers の3データストアを束ねる |
 | データストア | **vis-ir-data_1752223995110** / **philcompany-ir-data_1752224320775** / **peers-ir-data_1752651535271** / **harux-ir-data**（旗艦・engine外で自前 default_search で検索） | GENERIC・CONTENT_REQUIRED。コンソールは「AI Applications」 |
@@ -27,7 +27,7 @@
 | CI/CD | GitHub Actions（`.github/workflows/ci.yml`・`security.yml`）＋ **main ブランチ保護**＋ Dependabot | frontend(型/lint/build)＋agent(ruff/format/eval)＋gitleaks＋CodeQL。緑必須・PR経由 |
 | Firestore / 旧フロント / Vercel | (default) / ir-bot-mvp / — | 未使用 / **削除済み** / **削除済み**（全GCP集約） |
 
-GitHub: https://github.com/TIshow/ir-faq-mvp （main、PR #1〜#93 マージ済）。Issue: #3 経緯と残課題 / #42 FAQサジェスト(A本実装) / #46 IRインテリジェンス epic / #67 派生指標Phase2(CAGR・ROE/ROIC=B1データ投入待ち) / **#77 戦略（足りないもの・moat・残タスクTier）** / #85-87 尖らせ方(MCPエンドポイント・話題フォロー・フェデレーション) / **#88-92 インフラ（#88 ir-agent非公開化=最優先、#89 BQ東京=データ空の今が好機、#90 SA分離、#91 モデル世代管理、#92 小規模ハードニング）**。
+GitHub: https://github.com/TIshow/ir-faq-mvp （main、PR #1〜#93 マージ済）。Issue: #3 経緯と残課題 / #42 FAQサジェスト(A本実装) / #46 IRインテリジェンス epic / #67 派生指標Phase2(CAGR・ROE/ROIC=B1データ投入待ち) / **#77 戦略（足りないもの・moat・残タスクTier）** / #85-87 尖らせ方(MCPエンドポイント・話題フォロー・フェデレーション) / **#88-92 インフラ（#88 ir-agent非公開化=✅完了、#89 BQ東京=データ空の今が好機、#90 SA分離、#91 モデル世代管理、#92 小規模ハードニング）** / **#97 Tier A（ハークスレイ実トラフィックで複利ループ1周）** / **#98 B1（層1縦深化: 多年度+BS/CF→ROE/ROIC解禁）**。
 
 ## 3. 今の挙動（ブラウザで確認可能）
 フロント URL を開く → 企業選択 → 質問:
@@ -91,7 +91,7 @@ curl -s -N -X POST https://ir-frontend-255752121803.us-central1.run.app/api/chat
 - **2-2 ガードレールのゴールデン拡充**（助言/予測/未開示の混同行列・過剰拒否も測定）。
 
 ### Tier 3 — 運用・セキュリティ・スケール
-- **3-1 ir-agent 非公開化**（現状 allUsers）＝ **Issue #88（最優先）**。あわせて #89 BQ東京（データ空の今が好機）・#90 SA分離・#91 モデル世代管理・#92 小規模ハードニング。
+- ~~3-1 ir-agent 非公開化~~＝**#88 ✅完了**（IDトークン認証＋invoker=フロントSAのみ＋レート制限10回/分。直叩き403を本番確認済み）。残り: #89 BQ東京（データ空の今が好機）・#90 SA分離・#91 モデル世代管理・#92 小規模ハードニング。
 - **3-2 429クォータ対策**（リトライ/バックオフ）。 **3-3 CI自動デプロイ**（main→Cloud Run）。
 - **3-4 層1取り込み自動化**（provisioningスクリプト／XBRL自動更新）＝発行体増加時のみ。今は手動でOK。
 - **3-5 フィル/ピアズの層1投入**（`scripts/extract_facts_xbrl.py` で各社XBRLから）＝旗艦が固まった後。
@@ -100,7 +100,7 @@ curl -s -N -X POST https://ir-frontend-255752121803.us-central1.run.app/api/chat
 - **4-1 提案を「工数削減」でなく「企業価値・投資家エンゲージメント」で**（内向き象限＝解約予備軍の回避）。
 - **4-2 ハークスレイをケーススタディ化**（反応・before/after）。 **4-3 課金/契約モデル**（発行体課金・データ分離を売りに）。
 
-> 推奨スタート: セキュリティは **#88（ir-agent非公開化）→ #89（BQ東京・データが空の今だけ移行ゼロ）**。機能は **B1（層1の多年度＋BS/CF投入→CAGR/ROE/ROIC解禁 #67）**。事業は **Tier A（FAQ投入→ハークスレイで複利ループを1周）**＝堀は実利用でしか育たない（#77）。gemini-3 は thinking 最小化で先頭〜12s に改善（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` に即戻す）。
+> 推奨スタート: セキュリティは ~~#88~~✅完了 → **#89（BQ東京・データが空の今だけ移行ゼロ）**。事業は **#97（Tier A: FAQ投入→ハークスレイで複利ループを1周）**＝堀は実利用でしか育たない（#77）。機能は **#98（B1: 層1の多年度＋BS/CF投入→CAGR/ROE/ROIC解禁。#67が下流）**。gemini-3 は thinking 最小化で先頭〜12s に改善（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` に即戻す）。
 
 ## 6. よく使う調査コマンド
 ```bash
