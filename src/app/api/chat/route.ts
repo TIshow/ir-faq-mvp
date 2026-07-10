@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getCompanyById } from '@/config/companies';
 import { agentAuthHeader } from '@/lib/agent-auth';
+import { allowRequest, clientIp } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,14 @@ const AGENT_URL = process.env.AGENT_URL || 'http://localhost:8080';
  * 旧 enhanced-rag-service / Firestore 配線は廃止（セッション/記憶はエージェント側）。
  */
 export async function POST(request: NextRequest) {
+  // #88: 生成コスト連打の抑止（IP単位の簡易レート制限）
+  if (!allowRequest(clientIp(request.headers))) {
+    return Response.json(
+      { error: 'リクエストが多すぎます。少し時間をおいてお試しください。' },
+      { status: 429 },
+    );
+  }
+
   const { message, companyId, sessionId, history, audience } = await request.json();
 
   if (!message || message.trim() === '') {
