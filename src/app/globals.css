@@ -1,31 +1,55 @@
 @import "tailwindcss";
 
+/* ============================================================
+   IR Agent — クリーム×インク×グリーンポップ テーマ
+   （claude.ai/design「IR Agent UIX Options」Turn3 準拠）
+   ============================================================ */
 :root {
-  --background: #0a0b0d;
-  --foreground: #e4e4e7;
+  --background: #faf6ee; /* クリーム */
+  --foreground: #26231d; /* インク */
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  /* パレット（デザイントークン） */
+  --color-cream: #faf6ee;
+  --color-paper: #ffffff;
+  --color-ink: #26231d;
+  --color-ink-soft: #57534a;
+  --color-mute: #9b958a;
+  --color-line: #e8e2d6;
+  --color-pop: #22c06a; /* グリーン（ブランド・増加） */
+  --color-pop-deep: #1a7a46;
+  --color-pop-soft: #7be8ac;
+  --color-sun: #ffd666; /* イエロー（マーカー・会社予想） */
+  --color-sun-deep: #c79a2e;
+  --color-sun-line: #e5b454;
+  --color-coral: #ff8a66; /* コーラル（減少・注意） */
+  --color-coral-deep: #c2502f;
+
+  /* フォント */
+  --font-sans: var(--font-noto-sans);
+  --font-round: var(--font-zen-maru);
+  --font-num: var(--font-outfit);
+  --font-mono: var(--font-plex-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-noto-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* モダンなスクロールバー（ダーク） */
+/* スクロールバー（クリームに馴染む淡色） */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #3f3f46 transparent;
+  scrollbar-color: #d8d2c4 transparent;
 }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 9999px; }
+*::-webkit-scrollbar-thumb { background: #d8d2c4; border-radius: 9999px; }
 *::-webkit-scrollbar-track { background: transparent; }
 
 /* クリック可能要素はポインタカーソルに（Tailwind v4 Preflight は button に既定で付けない）。
@@ -42,7 +66,17 @@ button:disabled,
   cursor: not-allowed;
 }
 
-/* --- UIX: なめらかな出現・背景の流れ（reduced-motion 尊重） --- */
+/* --- マーカー強調（ポップエディトリアルの署名。太字の下に蛍光を敷く） --- */
+.mk {
+  background: linear-gradient(transparent 62%, #ffd666 62%);
+  padding: 0 2px;
+}
+.mk-green {
+  background: linear-gradient(transparent 62%, rgba(34, 192, 106, 0.35) 62%);
+  padding: 0 2px;
+}
+
+/* --- UIX: なめらかな出現（reduced-motion 尊重） --- */
 @keyframes fade-slide-in {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -50,18 +84,6 @@ button:disabled,
 .animate-fade-slide-in {
   animation: fade-slide-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-
-/* 背景レイヤ: 2枚並べたSVG/パターンを -50% まで平行移動してシームレスにループ */
-@keyframes bg-drift {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
-}
-@keyframes bg-drift-reverse {
-  from { transform: translateX(-50%); }
-  to   { transform: translateX(0); }
-}
-.animate-bg-drift { animation: bg-drift 90s linear infinite; }
-.animate-bg-drift-slow { animation: bg-drift-reverse 160s linear infinite; }
 
 /* ストリーミング中のキャレット（"書かれていく"感） */
 @keyframes caret-blink {
@@ -78,12 +100,21 @@ button:disabled,
 }
 .animate-pop-in { animation: pop-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
+/* 棒グラフの"育つ"出現（transform-origin: bottom で下から伸びる） */
+@keyframes bar-grow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+.animate-bar-grow {
+  transform-origin: bottom;
+  animation: bar-grow 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-slide-in,
-  .animate-bg-drift,
-  .animate-bg-drift-slow,
   .animate-caret,
-  .animate-pop-in {
+  .animate-pop-in,
+  .animate-bar-grow {
     animation: none;
   }
 }
