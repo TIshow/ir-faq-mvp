@@ -4,6 +4,40 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * CJK強調の取りこぼし救済プラグイン。
+ * CommonMark仕様では「」等の約物に隣接する **…** が強調として成立しないことがある
+ * （例: 「配当性向30%」を → 閉じ**の直前が」・直後がかな だと不成立）。
+ * パース後のASTを走査し、テキストノードに残った **…** を strong ノードへ変換する。
+ * 生HTMLは一切生成しない（XSS安全性は不変）。コード/インラインコードは対象外
+ * （mdast では code ノードの中身は children でなく value のため自然に触れない）。
+ */
+const CJK_STRONG_RE = /\*\*([^*\n]+?)\*\*/g;
+
+function remarkCjkStrong() {
+  const transform = (node: any): void => {
+    if (!Array.isArray(node.children)) return;
+    node.children = node.children.flatMap((child: any) => {
+      transform(child);
+      if (child.type !== 'text' || !child.value?.includes('**')) return [child];
+      const parts: any[] = [];
+      let last = 0;
+      CJK_STRONG_RE.lastIndex = 0;
+      for (let m = CJK_STRONG_RE.exec(child.value); m; m = CJK_STRONG_RE.exec(child.value)) {
+        if (m.index > last) parts.push({ type: 'text', value: child.value.slice(last, m.index) });
+        parts.push({ type: 'strong', children: [{ type: 'text', value: m[1] }] });
+        last = m.index + m[0].length;
+      }
+      if (parts.length === 0) return [child];
+      if (last < child.value.length) parts.push({ type: 'text', value: child.value.slice(last) });
+      return parts;
+    });
+  };
+  return transform;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 /**
  * LLMの散文（Markdown）をポップエディトリアル調で描画する。
  * - 太字（**…**）はマーカー強調（黄色の蛍光を下に敷く）＝キー数値が誌面のように目立つ
@@ -13,7 +47,7 @@ import remarkGfm from 'remark-gfm';
 export const Markdown: React.FC<{ children: string }> = ({ children }) => (
   <div className="text-[13px] leading-[1.95] text-ink-soft">
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkCjkStrong]}
       components={{
         p: ({ children }) => <p className="mb-2.5 last:mb-0">{children}</p>,
         ul: ({ children }) => <ul className="my-2 ml-1 list-disc space-y-1 pl-4 marker:text-mute">{children}</ul>,
