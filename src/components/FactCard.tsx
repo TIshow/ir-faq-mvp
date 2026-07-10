@@ -141,7 +141,7 @@ const TrendCard: React.FC<{ series: FactCard[] }> = ({ series }) => {
                 {splitValue(f).num}
               </div>
               <div
-                className={`animate-bar-grow rounded-t-full ${
+                className={`animate-bar-grow mx-auto w-full max-w-[96px] rounded-t-full ${
                   isForecast ? 'border-2 border-dashed border-sun-line bg-sun/15' : isHero ? 'bg-pop' : 'bg-line'
                 }`}
                 style={{ height: h, animationDelay: `${150 + i * 120}ms` }}

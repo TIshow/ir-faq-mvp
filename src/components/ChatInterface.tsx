@@ -41,9 +41,9 @@ function StreamingProse({ text, streaming }: { text: string; streaming: boolean 
   return (
     <span>
       {done && <Markdown>{done}</Markdown>}
-      {rest && <span className="text-sm leading-relaxed text-zinc-200">{rest}</span>}
+      {rest && <span className="text-[13px] leading-[1.95] text-ink-soft">{rest}</span>}
       {streaming && (
-        <span className="animate-caret ml-0.5 inline-block h-4 w-[2px] translate-y-[3px] rounded-sm bg-emerald-400" />
+        <span className="animate-caret ml-0.5 inline-block h-4 w-[2px] translate-y-[3px] rounded-sm bg-pop" />
       )}
     </span>
   );
@@ -185,21 +185,22 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   };
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
+    <div className="mx-auto flex h-full w-full max-w-3xl flex-col lg:max-w-4xl">
       {/* コンテキストバー */}
       <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-        <span className="flex items-center gap-2 truncate text-sm text-zinc-500">
+        {/* 企業名はヘッダーのピッカーにも出るため、狭い画面ではラベルを隠して潰れを防ぐ */}
+        <span className="hidden items-center gap-2 truncate text-sm text-mute sm:flex">
           {selectedCompany ? (
             <>
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span className="truncate text-zinc-400">{companyShortName(selectedCompany.name)} のIR情報</span>
+              <span className="h-2 w-2 rounded-full bg-pop" />
+              <span className="truncate font-medium text-ink-soft">{companyShortName(selectedCompany.name)} のIR情報</span>
             </>
           ) : '銘柄を選択してください'}
         </span>
         <div className="flex shrink-0 items-center gap-2">
           {/* 読者レベル: 説明のかみ砕き方だけが変わる（専門性は同じ） */}
           <div
-            className="flex items-center rounded-full border border-zinc-800/80 bg-zinc-900/60 p-0.5 backdrop-blur-sm"
+            className="flex items-center rounded-full bg-paper p-0.5 shadow-[0_4px_14px_rgba(38,35,29,0.08)]"
             title="説明のかみ砕き方が変わります（内容の専門性は同じです）"
           >
             {AUDIENCES.map((a) => (
@@ -207,10 +208,10 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                 key={a.key}
                 onClick={() => changeAudience(a.key)}
                 aria-pressed={audience === a.key}
-                className={`rounded-full px-2.5 py-1 text-[11px] transition-all duration-200 ${
+                className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition-all duration-200 ${
                   audience === a.key
-                    ? 'bg-emerald-500 font-medium text-zinc-950 shadow-[0_0_14px_rgba(16,185,129,0.35)]'
-                    : 'text-zinc-500 hover:text-zinc-300'
+                    ? 'bg-ink text-cream'
+                    : 'text-mute hover:text-ink'
                 }`}
               >
                 {a.label}
@@ -220,7 +221,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           {messages.length > 0 && (
             <button
               onClick={clearChat}
-              className="shrink-0 rounded-lg border border-zinc-800 px-2.5 py-1 text-xs text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-200"
+              className="shrink-0 rounded-full border-[1.5px] border-line bg-paper px-3 py-1 text-xs font-bold text-ink-soft transition hover:border-ink hover:text-ink"
             >
               新しいチャット
             </button>
@@ -232,14 +233,14 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-2 text-center">
-            <h2 className="text-2xl font-semibold tracking-tight text-zinc-100">
+            <h2 className="font-round text-[26px] font-black leading-snug tracking-tight text-ink">
               {selectedCompany ? (
                 <>
-                  <span className="text-emerald-400">{companyShortName(selectedCompany.name)}</span> について聞く
+                  <span className="mk-green">{companyShortName(selectedCompany.name)}</span> について聞く
                 </>
               ) : '銘柄を選んで質問しよう'}
             </h2>
-            <p className="mt-2 text-sm text-zinc-500">
+            <p className="mt-2.5 text-sm font-medium text-ink-soft">
               開示済みのIR情報を、出典付きでお答えします。
             </p>
             <div className="mt-6 flex max-w-xl flex-wrap justify-center gap-2">
@@ -248,7 +249,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                   key={entry}
                   onClick={() => (selectedCompany ? send(entry) : inputRef.current?.focus())}
                   disabled={!selectedCompany || isLoading}
-                  className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3.5 py-1.5 text-sm text-zinc-300 backdrop-blur-sm transition-all duration-200 hover:-translate-y-px hover:border-emerald-500/50 hover:bg-emerald-500/10 hover:text-emerald-200 hover:shadow-[0_0_18px_rgba(16,185,129,0.15)] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-full border-[1.5px] border-ink bg-paper px-4 py-2 text-[13px] font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {entry}
                 </button>
@@ -260,11 +261,11 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             {messages.map((m) => (
               <div key={m.id} className={`animate-fade-slide-in flex ${m.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {m.type === 'user' ? (
-                  <div className="max-w-[85%] rounded-2xl rounded-br-md bg-emerald-500 px-4 py-2.5 text-sm font-medium text-zinc-950 shadow-[0_4px_20px_rgba(16,185,129,0.22)]">
+                  <div className="max-w-[85%] rounded-[20px] rounded-br-md bg-ink px-4 py-2.5 text-[13px] font-medium leading-relaxed text-cream">
                     {m.content}
                   </div>
                 ) : (
-                  <div className="max-w-[90%] rounded-2xl rounded-bl-md border border-zinc-800/70 bg-zinc-900/60 px-4 py-3 text-sm leading-relaxed text-zinc-200 backdrop-blur-sm">
+                  <div className="w-full max-w-[95%]">
                     {m.response ? (
                       <AgentAnswer
                         response={m.response}
@@ -274,17 +275,19 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                       />
                     ) : (
                       m.content ? (
-                        <StreamingProse text={m.content} streaming={!!m.isStreaming} />
+                        <div className="rounded-3xl bg-paper p-5 shadow-[0_10px_30px_rgba(38,35,29,0.09)]">
+                          <StreamingProse text={m.content} streaming={!!m.isStreaming} />
+                        </div>
                       ) : (
-                        <span className="flex items-center gap-2 text-zinc-400">
+                        <span className="inline-flex items-center gap-2 rounded-full bg-paper px-4 py-2.5 text-[12.5px] font-bold text-ink-soft shadow-[0_6px_18px_rgba(38,35,29,0.08)]">
                           <span key={m.stage ?? 'thinking'} className="animate-fade-slide-in">
                             {STAGE_LABELS[m.stage ?? ''] ?? '考え中'}
                           </span>
                           {m.isStreaming && (
                             <span className="inline-flex gap-1">
-                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.3s]" />
-                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 [animation-delay:-0.15s]" />
-                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500" />
+                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-pop [animation-delay:-0.3s]" />
+                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-pop [animation-delay:-0.15s]" />
+                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-pop" />
                             </span>
                           )}
                         </span>
@@ -303,7 +306,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       <div className="px-4 pb-5 pt-1">
         <form
           onSubmit={(e) => { e.preventDefault(); send(inputValue); }}
-          className="flex items-center gap-2 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-1.5 pl-4 backdrop-blur-md transition-all duration-300 focus-within:border-emerald-500/40 focus-within:shadow-[0_0_28px_rgba(16,185,129,0.10)]"
+          className="flex items-center gap-2 rounded-full bg-paper p-2 pl-5 shadow-[0_8px_24px_rgba(38,35,29,0.10)] transition-shadow duration-300 focus-within:shadow-[0_10px_30px_rgba(38,35,29,0.16)]"
         >
           <input
             ref={inputRef}
@@ -312,22 +315,22 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             onChange={(e) => setInputValue(e.target.value)}
             placeholder={selectedCompany ? `${companyShortName(selectedCompany.name)}について質問する…` : '銘柄を選択してください'}
             disabled={isLoading || !selectedCompany}
-            className="flex-1 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:cursor-not-allowed"
+            className="flex-1 bg-transparent text-sm font-medium text-ink placeholder:text-mute focus:outline-none disabled:cursor-not-allowed"
           />
           <button
             type="submit"
             disabled={!inputValue.trim() || isLoading || !selectedCompany}
             aria-label="送信"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500 text-zinc-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-pop text-white transition hover:bg-pop-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute"
           >
-            <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M3.4 2.6a1 1 0 00-1.3 1.2l1.6 5.4a1 1 0 00.8.7l7.1 1.1-7.1 1.1a1 1 0 00-.8.7l-1.6 5.4a1 1 0 001.3 1.2l14.2-6.6a1 1 0 000-1.8L3.4 2.6z" />
+            <svg className="h-4.5 w-4.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 16V4M4.5 9.5L10 4l5.5 5.5" />
             </svg>
           </button>
         </form>
         {/* 透明性の明示: 本文は保存しない（話題等のメタデータのみ匿名記録）。
             本文がIRに送られるのは「IR窓口へ問い合わせる」を押した時のみ。 */}
-        <p className="mt-2 px-1 text-center text-[11px] leading-relaxed text-zinc-600">
+        <p className="mt-2.5 px-1 text-center text-[10.5px] leading-relaxed text-mute">
           ※ 会話の本文は保存されません。話題・回答状況などの統計のみ匿名で記録し、IR活動の改善に利用します。
         </p>
       </div>
