@@ -63,12 +63,13 @@ function useCountUp(target: number, unit: string, finalText: string, duration = 
   return display;
 }
 
-/** fact.value（"3,057百万円"）を数字部と単位部に分け、大小のタイポで描画できるようにする */
+/** fact.value（"3,057百万円" / "5.8%"）を数字部と単位部に分け、大小のタイポで描画する。
+ * 単位（百万円・円・%）は数字以外の最初の文字以降。% も単位側に含める（fact.unit と二重に
+ * ならないよう、数字側には残さない）。 */
 function splitValue(fact: FactCard): { num: string; unit: string } {
   const v = fact.value;
-  const i = v.search(/[^\d,.\-△+%]/);
-  if (i < 0) return { num: v, unit: '' };
-  if (i === 0) return { num: v, unit: '' };
+  const i = v.search(/[^\d,.\-△+]/);
+  if (i <= 0) return { num: v, unit: '' };
   return { num: v.slice(0, i), unit: v.slice(i) };
 }
 
@@ -102,7 +103,7 @@ const TrendCard: React.FC<{ series: FactCard[] }> = ({ series }) => {
     });
 
   return (
-    <div className="relative rounded-3xl bg-paper p-5 shadow-[0_10px_30px_rgba(38,35,29,0.09)]">
+    <div className="relative rounded-3xl bg-paper p-5 shadow-e3">
       {/* 指標ピル */}
       <div className="inline-block rounded-full bg-pop/10 px-2.5 py-1 text-[10px] font-bold text-pop">
         {hero.metric} · {hero.period} {hero.basis === 'forecast' ? '会社予想' : '実績'}
@@ -181,7 +182,7 @@ export const FactCardView: React.FC<{ fact: FactCard }> = ({ fact }) => {
 
   return (
     <div
-      className={`h-full rounded-2xl bg-paper p-4 shadow-[0_8px_22px_rgba(38,35,29,0.07)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(38,35,29,0.12)] ${
+      className={`h-full rounded-2xl bg-paper p-4 shadow-e2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-e3 ${
         isForecast ? 'border-2 border-dashed border-sun-line' : ''
       }`}
     >
@@ -257,7 +258,7 @@ const ScopeNotice: React.FC<{
   }
 
   return (
-    <div className="mt-1 rounded-2xl bg-paper p-4 shadow-[0_8px_22px_rgba(38,35,29,0.07)]">
+    <div className="mt-1 rounded-2xl bg-paper p-4 shadow-e2">
       <p className="mb-2.5 text-xs font-medium leading-relaxed text-ink-soft">
         この質問は開示資料に見当たりませんでした。IR窓口にお取り次ぎできます。
       </p>
@@ -334,7 +335,7 @@ export const AgentAnswer: React.FC<{
 
       {/* 散文（エディトリアル・白カード） */}
       {answer_prose && (
-        <div className="animate-fade-slide-in rounded-3xl bg-paper p-5 shadow-[0_10px_30px_rgba(38,35,29,0.09)]">
+        <div className="animate-fade-slide-in rounded-3xl bg-paper p-5 shadow-e3">
           <Markdown>{answer_prose}</Markdown>
         </div>
       )}

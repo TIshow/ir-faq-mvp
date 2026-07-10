@@ -200,7 +200,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         <div className="flex shrink-0 items-center gap-2">
           {/* 読者レベル: 説明のかみ砕き方だけが変わる（専門性は同じ） */}
           <div
-            className="flex items-center rounded-full bg-paper p-0.5 shadow-[0_4px_14px_rgba(38,35,29,0.08)]"
+            className="flex items-center rounded-full bg-paper p-0.5 shadow-e1"
             title="説明のかみ砕き方が変わります（内容の専門性は同じです）"
           >
             {AUDIENCES.map((a) => (
@@ -275,11 +275,11 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
                       />
                     ) : (
                       m.content ? (
-                        <div className="rounded-3xl bg-paper p-5 shadow-[0_10px_30px_rgba(38,35,29,0.09)]">
+                        <div className="rounded-3xl bg-paper p-5 shadow-e3">
                           <StreamingProse text={m.content} streaming={!!m.isStreaming} />
                         </div>
                       ) : (
-                        <span className="inline-flex items-center gap-2 rounded-full bg-paper px-4 py-2.5 text-[12.5px] font-bold text-ink-soft shadow-[0_6px_18px_rgba(38,35,29,0.08)]">
+                        <span className="inline-flex items-center gap-2 rounded-full bg-paper px-4 py-2.5 text-[12.5px] font-bold text-ink-soft shadow-e2">
                           <span key={m.stage ?? 'thinking'} className="animate-fade-slide-in">
                             {STAGE_LABELS[m.stage ?? ''] ?? '考え中'}
                           </span>
@@ -306,7 +306,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       <div className="px-4 pb-5 pt-1">
         <form
           onSubmit={(e) => { e.preventDefault(); send(inputValue); }}
-          className="flex items-center gap-2 rounded-full bg-paper p-2 pl-5 shadow-[0_8px_24px_rgba(38,35,29,0.10)] transition-shadow duration-300 focus-within:shadow-[0_10px_30px_rgba(38,35,29,0.16)]"
+          className="flex items-center gap-2 rounded-full bg-paper p-2 pl-5 shadow-e2 transition-shadow duration-300 focus-within:shadow-e4"
         >
           <input
             ref={inputRef}

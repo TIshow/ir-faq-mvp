@@ -49,7 +49,7 @@ export const CompanyPicker: React.FC = () => {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="group flex items-center gap-2.5 rounded-full bg-paper py-1.5 pl-2 pr-3 text-left shadow-[0_4px_14px_rgba(38,35,29,0.08)] transition hover:shadow-[0_6px_20px_rgba(38,35,29,0.12)]"
+        className="group flex items-center gap-2.5 rounded-full bg-paper py-1.5 pl-2 pr-3 text-left shadow-e1 transition hover:shadow-e3"
       >
         {selectedCompany ? (
           <>
@@ -75,7 +75,7 @@ export const CompanyPicker: React.FC = () => {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-40 mt-2 w-[19rem] overflow-hidden rounded-3xl border border-line bg-paper shadow-[0_18px_48px_rgba(38,35,29,0.16)]">
+        <div className="absolute right-0 z-40 mt-2 w-[19rem] overflow-hidden rounded-3xl border border-line bg-paper shadow-e4">
           <div className="font-round px-4 pb-1.5 pt-3.5 text-[11px] font-black tracking-wider text-mute">
             銘柄を選択
           </div>

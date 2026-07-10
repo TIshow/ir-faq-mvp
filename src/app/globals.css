@@ -34,6 +34,13 @@
   --font-round: var(--font-zen-maru);
   --font-num: var(--font-outfit);
   --font-mono: var(--font-plex-mono);
+
+  /* エレベーション（クリーム面に浮く要素の統一影。インク色を淡く落とす）。
+     shadow-e1(チップ/小ボタン) < e2(カード静止) < e3(強調カード/フォーカス) < e4(ポップオーバー/浮遊) */
+  --shadow-e1: 0 4px 14px rgba(38, 35, 29, 0.08);
+  --shadow-e2: 0 8px 22px rgba(38, 35, 29, 0.08);
+  --shadow-e3: 0 10px 30px rgba(38, 35, 29, 0.10);
+  --shadow-e4: 0 18px 48px rgba(38, 35, 29, 0.16);
 }
 
 body {
