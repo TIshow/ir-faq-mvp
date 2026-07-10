@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getCompanyById } from '@/config/companies';
+import { agentAuthHeader } from '@/lib/agent-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,9 +28,14 @@ export async function POST(request: NextRequest) {
 
   let upstream: Response;
   try {
+    // #88: ir-agent は非公開（IAM保護）。このフロントのSAだけが invoker を持つ。
+    const authHeader = await agentAuthHeader(AGENT_URL);
     upstream = await fetch(`${AGENT_URL}/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authHeader ? { Authorization: authHeader } : {}),
+      },
       body: JSON.stringify({
         // 企業コンテキストは companies.ts が唯一の正（エージェント側はハードコードしない）
         message,
