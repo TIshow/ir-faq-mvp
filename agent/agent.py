@@ -186,12 +186,12 @@ async def run_agent_stream(
     user_id: str = "anon",
     session_id: str = "s1",
     history: list[dict[str, str]] | None = None,
-    audience: str = "intermediate",
+    audience: str = "standard",
 ) -> AsyncIterator[dict[str, Any]]:
     """
     company = {"ticker","name","datastore_id"}。
     history = [{"role","content"}...]（短期メモリ。フォロー質問の書き換え用。synthesis のみ使用）。
-    audience = 'beginner'|'intermediate'|'advanced'（説明の翻訳度のみ。synthesis のみ使用）。
+    audience = 'casual'|'standard'（説明の翻訳度のみ。synthesis のみ使用）。
     yield: {"type":"prose_delta","text":...} / {"type":"final","response": AgentResponse}
     """
     ticker = str(company.get("ticker") or "")
