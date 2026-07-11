@@ -39,8 +39,9 @@ class ChatRequest(BaseModel):
     userId: str = "anon"
     # 短期メモリ: 直近の会話履歴（フォロー質問の書き換え用）。サーバはステートレス。
     history: list[Turn] = []
-    # 読者レベル（説明の翻訳度のみ調整。既定=中級者。未知値は中級者へ丸める）
-    audience: str = "intermediate"
+    # 読者レベル（説明の翻訳度のみ調整。casual/standard の2段階・既定=standard。
+    # 旧3段階(beginner/intermediate/advanced)や未知値は normalize_audience が丸める）
+    audience: str = "standard"
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:

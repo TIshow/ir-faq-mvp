@@ -83,7 +83,7 @@ FactCard = { metric, metricKey, period, value, valueNumeric, unit, yoy?, consoli
 > リクエスト側（/api/chat body）: `message, companyId, sessionId, history[], audience`。`audience` と `history` は synthesis のみ使用（レスポンス契約 AgentResponse には含めない）。
 
 ## フロント UIX（現テーマ踏襲・柔らかくモダン）
-- **読者レベル切替**: コンテキストバーの3択セグメント（初心者/中級者/上級者）。選択は `localStorage('ir-audience')` に永続し `/api/chat` の `audience` として送る（説明の翻訳度のみ変わる）。
+- **読者レベル切替**: コンテキストバーの2択セグメント（カジュアル/スタンダード）。旧3段階(beginner/intermediate/advanced)の保存値・リクエスト値は casual/standard へ後方互換マッピング。選択は `localStorage('ir-audience')` に永続し `/api/chat` の `audience` として送る（説明の翻訳度のみ変わる）。
 - **背景装飾** `components/AmbientBackground.tsx`: 薄く流れるチャートライン＋幾何学ドットグリッド（不透明度3〜5%・2枚を -50% 移動でシームレスループ・`pointer-events-none`・`aria-hidden`）。`prefers-reduced-motion` で停止（globals.css）。可読性・操作を邪魔しない。
 - **モーション/質感**: メッセージの `fade-slide-in` 出現、バブル/入力バー/カードの `backdrop-blur`、フォーカス時のエメラルドグロー、カード・チップのホバー浮遊、`💡 注目ポイント`（`#### 見出し`）のアクセント（Markdown.tsx で h4 をスタイル）。`lang=ja`。
 

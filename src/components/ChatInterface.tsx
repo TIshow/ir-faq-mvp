@@ -16,13 +16,19 @@ const GUIDED_ENTRIES = [
   '中期経営計画の進捗',
 ];
 
-// 読者レベル（回答の"翻訳度"だけが変わる。専門性・正確性は同じ）
-type Audience = 'beginner' | 'intermediate' | 'advanced';
+// 読者レベル（回答の"翻訳度"だけが変わる。専門性・正確性は同じ）。
+// カジュアル=投資1年目でも読めるやさしい言い換え / スタンダード=一般的な個人投資家向け。
+type Audience = 'casual' | 'standard';
 const AUDIENCES: { key: Audience; label: string }[] = [
-  { key: 'beginner', label: '初心者' },
-  { key: 'intermediate', label: '中級者' },
-  { key: 'advanced', label: '上級者' },
+  { key: 'casual', label: 'カジュアル' },
+  { key: 'standard', label: 'スタンダード' },
 ];
+// 旧3段階の保存値からの移行（初心者→カジュアル、それ以外→スタンダード）
+const LEGACY_AUDIENCE: Record<string, Audience> = {
+  beginner: 'casual',
+  intermediate: 'standard',
+  advanced: 'standard',
+};
 
 /** A1: 進行段階の実況ラベル（SSE 'status' イベント）。実際のパイプライン工程に対応。 */
 const STAGE_LABELS: Record<string, string> = {
@@ -70,7 +76,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId] = useState<string | undefined>(sessionId);
-  const [audience, setAudience] = useState<Audience>('intermediate');
+  const [audience, setAudience] = useState<Audience>('standard');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { selectedCompany } = useCompany();
@@ -80,10 +86,17 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  // 読者レベルはブラウザに記憶（次回訪問時も同じ設定で）
+  // 読者レベルはブラウザに記憶（次回訪問時も同じ設定で）。
+  // 旧3段階の保存値は新2段階へ変換し、新値で書き戻す（自己清掃＝旧値はストレージに残らない）
   useEffect(() => {
     const saved = localStorage.getItem('ir-audience');
-    if (saved === 'beginner' || saved === 'intermediate' || saved === 'advanced') setAudience(saved);
+    if (!saved) return;
+    const a = saved === 'casual' || saved === 'standard' ? saved : LEGACY_AUDIENCE[saved];
+    if (!a) return;
+    setAudience(a);
+    if (a !== saved) {
+      try { localStorage.setItem('ir-audience', a); } catch { /* private mode 等は無視 */ }
+    }
   }, []);
   const changeAudience = (a: Audience) => {
     setAudience(a);
