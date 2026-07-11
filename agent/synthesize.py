@@ -519,6 +519,21 @@ def _contextualize(name: str, history: list[dict[str, str]], query: str) -> str:
     return query
 
 
+def _parse_plan_json(text: str) -> dict[str, Any]:
+    """PLAN応答のJSONを堅牢にパースする。
+    gemini-3 は json_mode でも稀にJSONオブジェクトの後へ余分なテキストを付ける
+    （json.loads が 'Extra data' で落ちる）。先頭の完全なJSONオブジェクトだけを
+    raw_decode で取り出し、後続は無視する（strict=False は本文中の生改行対策）。"""
+    s = text.lstrip()
+    start = s.find("{")
+    if start < 0:
+        raise ValueError(f"PLAN応答にJSONが見つかりません: {s[:80]!r}")
+    obj, _end = json.JSONDecoder(strict=False).raw_decode(s[start:])
+    if not isinstance(obj, dict):
+        raise ValueError(f"PLAN応答がオブジェクトではありません: {type(obj).__name__}")
+    return obj
+
+
 def _plan(name: str, query: str, facts_ctx: str, passages_ctx: str) -> dict[str, Any]:
     """PLAN: answerability 判定＋カード指標・引用の選択＋話題分類（構造化JSON）。
     話題は既存のPLAN呼び出しに相乗り＝追加のLLMコール・コストゼロ（タクソノミーから選択のみ）。"""
@@ -530,7 +545,7 @@ def _plan(name: str, query: str, facts_ctx: str, passages_ctx: str) -> dict[str,
         topics=" | ".join(TOPICS),
     )
     resp = _generate([prompt], json_mode=True)
-    return json.loads(resp.text, strict=False)
+    return _parse_plan_json(resp.text)
 
 
 def _ground(ticker, pa, pf, rel_metrics, used, passages):
