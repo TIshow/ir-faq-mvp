@@ -307,13 +307,16 @@ function planCards(cards: FactCard[]): { series: FactCard[] | null; rest: FactCa
  *  純CSS＝決定論・コンテンツには一切触れない。reduced-motion では静止。
  * ------------------------------------------------------------------ */
 
+/** 節ごとに下へ育っていくリズム（枝→芽→カードの階段の基準。1箇所で管理） */
+const VINE_STEP_MS = 160;
+
 /** 節（ふし）: 茎から枝が伸び、先端の芽がぽんと膨らみ、カードが現れる */
 const VineNode: React.FC<{ index: number; sprout?: boolean; children: React.ReactNode }> = ({
   index,
   sprout = false,
   children,
 }) => {
-  const d = index * 160; // 節ごとに下へ育っていくリズム
+  const d = index * VINE_STEP_MS;
   return (
     <div className="animate-fade-slide-in relative" style={{ animationDelay: `${d + 120}ms` }}>
       {/* 枝（茎 x≈7px からカード左端 x=24px まで） */}
@@ -357,69 +360,88 @@ export const AgentAnswer: React.FC<{
   const { answer_prose, fact_cards, citations, scope_status, scope_reason, suggestions } = response;
   const { series, rest } = planCards(fact_cards ?? []);
 
-  // 表示するセクションを順に集める（蔦の節＝カードのまとまり）
-  const sections: React.ReactNode[] = [];
-  if (series) sections.push(<TrendCard key="trend" series={series} />);
+  // 表示するセクションを順に集める（蔦の節＝カードのまとまり）。key は節の安定ID
+  const sections: { key: string; node: React.ReactNode }[] = [];
+  if (series) {
+    sections.push({ key: 'trend', node: <TrendCard series={series} /> });
+  }
   if (rest.length > 0) {
-    sections.push(
-      <div key="stats" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-        {rest.map((f, i) => (
-          <div
-            key={`${f.metricKey}-${f.period}-${i}`}
-            className="animate-fade-slide-in"
-            style={{ animationDelay: `${i * 70}ms` }}
-          >
-            <FactCardView fact={f} />
-          </div>
-        ))}
-      </div>,
-    );
-  }
-  if (answer_prose) {
-    sections.push(
-      <div key="prose" className="rounded-3xl bg-paper p-5 shadow-e3">
-        <Markdown>{answer_prose}</Markdown>
-      </div>,
-    );
-  }
-  if (citations && citations.length > 0) {
-    sections.push(
-      <div key="cites" className="flex flex-wrap items-center gap-1.5 py-1">
-        <span className="font-round text-[10.5px] font-black text-mute">参考資料</span>
-        {citations.map((c, i) => (<CitationLink key={i} citation={c} />))}
-      </div>,
-    );
-  }
-  if (scope_status !== 'answered') {
-    sections.push(
-      <ScopeNotice
-        key="scope"
-        status={scope_status}
-        reason={scope_reason}
-        contactStatus={irContactStatus}
-        onContactIR={onContactIR}
-      />,
-    );
-  }
-  const hasSuggestions = !!(onSuggestion && suggestions && suggestions.length > 0);
-  if (hasSuggestions) {
-    sections.push(
-      <div key="suggest" className="flex flex-col gap-2 pt-0.5">
-        <p className="font-round text-[10.5px] font-black text-mute">つぎはこれ、聞いてみる？</p>
-        <div className="flex flex-wrap gap-2">
-          {suggestions!.map((s, i) => (
-            <button
-              key={i}
-              style={{ animationDelay: `${sections.length * 160 + 300 + i * 60}ms` }}
-              onClick={() => onSuggestion!(s)}
-              className="animate-fade-slide-in rounded-full border-[1.5px] border-ink bg-paper px-3.5 py-2 text-xs font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream active:translate-y-0"
+    sections.push({
+      key: 'stats',
+      node: (
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+          {rest.map((f, i) => (
+            <div
+              key={`${f.metricKey}-${f.period}-${i}`}
+              className="animate-fade-slide-in"
+              style={{ animationDelay: `${i * 70}ms` }}
             >
-              {s} →
-            </button>
+              <FactCardView fact={f} />
+            </div>
           ))}
         </div>
-      </div>,
-    );
+      ),
+    });
+  }
+  if (answer_prose) {
+    sections.push({
+      key: 'prose',
+      node: (
+        <div className="rounded-3xl bg-paper p-5 shadow-e3">
+          <Markdown>{answer_prose}</Markdown>
+        </div>
+      ),
+    });
+  }
+  if (citations && citations.length > 0) {
+    sections.push({
+      key: 'cites',
+      node: (
+        <div className="flex flex-wrap items-center gap-1.5 py-1">
+          <span className="font-round text-[10.5px] font-black text-mute">参考資料</span>
+          {citations.map((c, i) => (<CitationLink key={i} citation={c} />))}
+        </div>
+      ),
+    });
+  }
+  if (scope_status !== 'answered') {
+    sections.push({
+      key: 'scope',
+      node: (
+        <ScopeNotice
+          status={scope_status}
+          reason={scope_reason}
+          contactStatus={irContactStatus}
+          onContactIR={onContactIR}
+        />
+      ),
+    });
+  }
+  let hasSuggestions = false;
+  if (onSuggestion && suggestions && suggestions.length > 0) {
+    hasSuggestions = true;
+    // この節の index（＝push前の長さ）。ピルの出現は節のリズムに揃えて少し後から
+    const nodeIndex = sections.length;
+    sections.push({
+      key: 'suggest',
+      node: (
+        <div className="flex flex-col gap-2 pt-0.5">
+          <p className="font-round text-[10.5px] font-black text-mute">つぎはこれ、聞いてみる？</p>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((s, i) => (
+              <button
+                key={i}
+                style={{ animationDelay: `${nodeIndex * VINE_STEP_MS + 300 + i * 60}ms` }}
+                onClick={() => onSuggestion(s)}
+                className="animate-fade-slide-in rounded-full border-[1.5px] border-ink bg-paper px-3.5 py-2 text-xs font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream active:translate-y-0"
+              >
+                {s} →
+              </button>
+            ))}
+          </div>
+        </div>
+      ),
+    });
   }
 
   return (
@@ -432,8 +454,8 @@ export const AgentAnswer: React.FC<{
       />
       <div className="flex flex-col gap-3.5">
         {sections.map((s, i) => (
-          <VineNode key={i} index={i} sprout={hasSuggestions && i === sections.length - 1}>
-            {s}
+          <VineNode key={s.key} index={i} sprout={hasSuggestions && i === sections.length - 1}>
+            {s.node}
           </VineNode>
         ))}
       </div>
