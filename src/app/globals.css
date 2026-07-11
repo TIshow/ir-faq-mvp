@@ -7,6 +7,12 @@
 :root {
   --background: #faf6ee; /* クリーム */
   --foreground: #26231d; /* インク */
+
+  /* ブランドカーソル（値の唯一の正）。SVG→PNG(Safari)→OS標準の3段フォールバック。
+     ホットスポットは矢印先端(4,2)。 */
+  --cursor-arrow: url("/cursors/naruhodo-arrow.svg") 4 2, url("/cursors/naruhodo-arrow.png") 4 2, auto;
+  --cursor-pointer: url("/cursors/naruhodo-pointer.svg") 4 2, url("/cursors/naruhodo-pointer.png") 4 2,
+    pointer;
 }
 
 @theme inline {
@@ -59,14 +65,24 @@ body {
 *::-webkit-scrollbar-thumb { background: #d8d2c4; border-radius: 9999px; }
 *::-webkit-scrollbar-track { background: transparent; }
 
-/* クリック可能要素はポインタカーソルに（Tailwind v4 Preflight は button に既定で付けない）。
-   企業ピッカー/送信/クリア/IR連絡/各種ボタンを一括でカバー。無効時は not-allowed。 */
+/* --- ブランドカーソル（Naruhodo IR）---
+   通常＝インクの矢印（クリーム縁取り＋尻尾に緑の点）。
+   クリック可能＝矢印がグリーンになり「！の芽」の双葉が芽吹く（なるほど＝芽、をインタラクションに）。
+   入力欄はI-beam・無効は not-allowed のまま（実用性優先）。値は :root のトークンが唯一の正。 */
+body {
+  cursor: var(--cursor-arrow);
+}
+a,
 button:not(:disabled),
 [role="button"]:not([aria-disabled="true"]),
 summary,
 select,
 label[for] {
-  cursor: pointer;
+  cursor: var(--cursor-pointer);
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea {
+  cursor: text;
 }
 button:disabled,
 [role="button"][aria-disabled="true"] {
