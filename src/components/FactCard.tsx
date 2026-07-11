@@ -301,7 +301,56 @@ function planCards(cards: FactCard[]): { series: FactCard[] | null; rest: FactCa
   return { series: null, rest: valid };
 }
 
-/** IR Agent の回答（数値カード＋散文＋出典＋scope分岐＋次の質問サジェスト） */
+/* ------------------------------------------------------------------ *
+ *  蔦（つる）レイアウト: 回答の各カードを「茎＋枝＋芽」で接続し、
+ *  回答が植物のように育っていく演出（ブランド「なるほど＝芽」）。
+ *  純CSS＝決定論・コンテンツには一切触れない。reduced-motion では静止。
+ * ------------------------------------------------------------------ */
+
+/** 節ごとに下へ育っていくリズム（枝→芽→カードの階段の基準。1箇所で管理） */
+const VINE_STEP_MS = 160;
+
+/** 節（ふし）: 茎から枝が伸び、先端の芽がぽんと膨らみ、カードが現れる */
+const VineNode: React.FC<{ index: number; sprout?: boolean; children: React.ReactNode }> = ({
+  index,
+  sprout = false,
+  children,
+}) => {
+  const d = index * VINE_STEP_MS;
+  return (
+    <div className="animate-fade-slide-in relative" style={{ animationDelay: `${d + 120}ms` }}>
+      {/* 枝（茎 x≈7px からカード左端 x=24px まで） */}
+      <span
+        aria-hidden
+        className="animate-twig-grow absolute -left-[17px] top-[15px] h-[2.5px] w-[15px] rounded-full bg-pop/60"
+        style={{ animationDelay: `${d}ms` }}
+      />
+      {sprout ? (
+        /* 末端の節は双葉＝「次の質問は新しい芽」 */
+        <svg
+          aria-hidden
+          viewBox="0 0 28 30"
+          className="animate-pop-in absolute -left-[29px] top-[1px] h-[27px] w-[25px]"
+          style={{ animationDelay: `${d + 80}ms` }}
+        >
+          <circle cx="14" cy="25" r="3.6" fill="#22C06A" stroke="#FAF6EE" strokeWidth="1.4" />
+          <path d="M14 19 C14 11 8 8 3.5 8.5 C4 15 9 19.5 14 19 Z" fill="#22C06A" />
+          <path d="M14 19 C14 11 20 8 24.5 8.5 C24 15 19 19.5 14 19 Z" fill="#7BE8AC" />
+        </svg>
+      ) : (
+        /* 通常の節は芽（緑の点・クリーム縁） */
+        <span
+          aria-hidden
+          className="animate-pop-in absolute -left-[24px] top-[10px] h-3 w-3 rounded-full border-2 border-cream bg-pop"
+          style={{ animationDelay: `${d + 80}ms` }}
+        />
+      )}
+      {children}
+    </div>
+  );
+};
+
+/** IR Agent の回答（数値カード＋散文＋出典＋scope分岐＋次の質問サジェスト）を蔦で接続 */
 export const AgentAnswer: React.FC<{
   response: AgentResponse;
   irContactStatus?: 'sending' | 'sent' | 'error';
@@ -311,15 +360,15 @@ export const AgentAnswer: React.FC<{
   const { answer_prose, fact_cards, citations, scope_status, scope_reason, suggestions } = response;
   const { series, rest } = planCards(fact_cards ?? []);
 
-  return (
-    <div className="flex flex-col gap-3">
-      {/* 数値エリア: トレンドカード（自動集約）＋残りのステータスカード */}
-      {series && (
-        <div className="animate-fade-slide-in">
-          <TrendCard series={series} />
-        </div>
-      )}
-      {rest.length > 0 && (
+  // 表示するセクションを順に集める（蔦の節＝カードのまとまり）。key は節の安定ID
+  const sections: { key: string; node: React.ReactNode }[] = [];
+  if (series) {
+    sections.push({ key: 'trend', node: <TrendCard series={series} /> });
+  }
+  if (rest.length > 0) {
+    sections.push({
+      key: 'stats',
+      node: (
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
           {rest.map((f, i) => (
             <div
@@ -331,39 +380,58 @@ export const AgentAnswer: React.FC<{
             </div>
           ))}
         </div>
-      )}
-
-      {/* 散文（エディトリアル・白カード） */}
-      {answer_prose && (
-        <div className="animate-fade-slide-in rounded-3xl bg-paper p-5 shadow-e3">
+      ),
+    });
+  }
+  if (answer_prose) {
+    sections.push({
+      key: 'prose',
+      node: (
+        <div className="rounded-3xl bg-paper p-5 shadow-e3">
           <Markdown>{answer_prose}</Markdown>
         </div>
-      )}
-
-      {/* 参考資料 */}
-      {citations && citations.length > 0 && (
-        <div className="animate-fade-slide-in flex flex-wrap items-center gap-1.5" style={{ animationDelay: '220ms' }}>
+      ),
+    });
+  }
+  if (citations && citations.length > 0) {
+    sections.push({
+      key: 'cites',
+      node: (
+        <div className="flex flex-wrap items-center gap-1.5 py-1">
           <span className="font-round text-[10.5px] font-black text-mute">参考資料</span>
           {citations.map((c, i) => (<CitationLink key={i} citation={c} />))}
         </div>
-      )}
-
-      <ScopeNotice
-        status={scope_status}
-        reason={scope_reason}
-        contactStatus={irContactStatus}
-        onContactIR={onContactIR}
-      />
-
-      {/* 次の質問サジェスト */}
-      {onSuggestion && suggestions && suggestions.length > 0 && (
-        <div className="animate-fade-slide-in mt-0.5 flex flex-col gap-2" style={{ animationDelay: '340ms' }}>
+      ),
+    });
+  }
+  if (scope_status !== 'answered') {
+    sections.push({
+      key: 'scope',
+      node: (
+        <ScopeNotice
+          status={scope_status}
+          reason={scope_reason}
+          contactStatus={irContactStatus}
+          onContactIR={onContactIR}
+        />
+      ),
+    });
+  }
+  let hasSuggestions = false;
+  if (onSuggestion && suggestions && suggestions.length > 0) {
+    hasSuggestions = true;
+    // この節の index（＝push前の長さ）。ピルの出現は節のリズムに揃えて少し後から
+    const nodeIndex = sections.length;
+    sections.push({
+      key: 'suggest',
+      node: (
+        <div className="flex flex-col gap-2 pt-0.5">
           <p className="font-round text-[10.5px] font-black text-mute">つぎはこれ、聞いてみる？</p>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((s, i) => (
               <button
                 key={i}
-                style={{ animationDelay: `${420 + i * 60}ms` }}
+                style={{ animationDelay: `${nodeIndex * VINE_STEP_MS + 300 + i * 60}ms` }}
                 onClick={() => onSuggestion(s)}
                 className="animate-fade-slide-in rounded-full border-[1.5px] border-ink bg-paper px-3.5 py-2 text-xs font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream active:translate-y-0"
               >
@@ -372,7 +440,25 @@ export const AgentAnswer: React.FC<{
             ))}
           </div>
         </div>
-      )}
+      ),
+    });
+  }
+
+  return (
+    <div className="relative pl-6">
+      {/* 茎: 上から下へ伸びる（グリーン→ライトグリーンのグラデーション） */}
+      <span
+        aria-hidden
+        className="animate-stem-grow absolute bottom-4 left-[6px] top-2 w-[3px] rounded-full"
+        style={{ background: 'linear-gradient(to bottom, #22C06A, #7BE8AC)' }}
+      />
+      <div className="flex flex-col gap-3.5">
+        {sections.map((s, i) => (
+          <VineNode key={s.key} index={i} sprout={hasSuggestions && i === sections.length - 1}>
+            {s.node}
+          </VineNode>
+        ))}
+      </div>
     </div>
   );
 };
