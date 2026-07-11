@@ -1,22 +1,18 @@
 import ChatInterface from '@/components/ChatInterface';
 import { CompanyProvider } from '@/contexts/CompanyContext';
 import { CompanyPicker } from '@/components/CompanyPicker';
-import { AmbientBackground } from '@/components/AmbientBackground';
 
 export default function Home() {
   return (
     <CompanyProvider>
-      <div className="relative flex h-screen flex-col bg-[#0a0b0d] text-zinc-100">
-        {/* 背景: 薄く流れるチャート＋グリッド（装飾のみ） */}
-        <AmbientBackground />
-
+      <div className="relative flex h-screen flex-col bg-cream text-ink">
         {/* Header */}
-        <header className="relative z-10 flex items-center justify-between gap-4 border-b border-zinc-900/80 bg-[#0a0b0d]/60 px-4 py-3 backdrop-blur-sm sm:px-6">
+        <header className="relative z-10 flex items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/15 font-black text-emerald-400 ring-1 ring-emerald-500/30">
+            <span className="font-round grid h-9 w-9 place-items-center rounded-full bg-pop text-[13px] font-black text-cream">
               IR
             </span>
-            <span className="text-base font-semibold tracking-tight text-zinc-100">IR Agent</span>
+            <span className="font-round text-[17px] font-black tracking-tight text-ink">IR Agent</span>
           </div>
           <CompanyPicker />
         </header>
