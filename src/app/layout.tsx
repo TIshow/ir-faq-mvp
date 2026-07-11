@@ -31,8 +31,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "IR Agent",
-  description: "上場企業の開示済みIR情報について、出典付きで相談できるIR Agent",
+  title: "Naruhodo IR",
+  description: "「なるほど！」が芽になる、投資家のためのIR対話エージェント。上場企業の開示済み情報を、出典付きで対話的に。",
 };
 
 export default function RootLayout({
