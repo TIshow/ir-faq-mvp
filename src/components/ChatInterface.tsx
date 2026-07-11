@@ -86,12 +86,17 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  // 読者レベルはブラウザに記憶（次回訪問時も同じ設定で）。旧3段階の保存値は新2段階へ移行
+  // 読者レベルはブラウザに記憶（次回訪問時も同じ設定で）。
+  // 旧3段階の保存値は新2段階へ変換し、新値で書き戻す（自己清掃＝旧値はストレージに残らない）
   useEffect(() => {
     const saved = localStorage.getItem('ir-audience');
     if (!saved) return;
-    if (saved === 'casual' || saved === 'standard') setAudience(saved);
-    else if (LEGACY_AUDIENCE[saved]) setAudience(LEGACY_AUDIENCE[saved]);
+    const a = saved === 'casual' || saved === 'standard' ? saved : LEGACY_AUDIENCE[saved];
+    if (!a) return;
+    setAudience(a);
+    if (a !== saved) {
+      try { localStorage.setItem('ir-audience', a); } catch { /* private mode 等は無視 */ }
+    }
   }, []);
   const changeAudience = (a: Audience) => {
     setAudience(a);
