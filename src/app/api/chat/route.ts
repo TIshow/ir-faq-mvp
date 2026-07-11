@@ -54,8 +54,8 @@ export async function POST(request: NextRequest) {
         sessionId: sessionId || 's1',
         // 短期メモリ: 直近の会話履歴（フォロー質問の書き換え用）。サーバはステートレス。
         history: Array.isArray(history) ? history : [],
-        // 読者レベル（説明の翻訳度のみ。未知値はサーバ側で中級者に丸める）
-        audience: typeof audience === 'string' ? audience : 'intermediate',
+        // 読者レベル（説明の翻訳度のみ。未知値・旧3段階はサーバ側で standard に丸める）
+        audience: typeof audience === 'string' ? audience : 'standard',
       }),
     });
   } catch (e) {
