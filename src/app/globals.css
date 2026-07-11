@@ -59,14 +59,25 @@ body {
 *::-webkit-scrollbar-thumb { background: #d8d2c4; border-radius: 9999px; }
 *::-webkit-scrollbar-track { background: transparent; }
 
-/* クリック可能要素はポインタカーソルに（Tailwind v4 Preflight は button に既定で付けない）。
-   企業ピッカー/送信/クリア/IR連絡/各種ボタンを一括でカバー。無効時は not-allowed。 */
+/* --- ブランドカーソル（Naruhodo IR）---
+   通常＝インクの矢印（クリーム縁取り＋尻尾に緑の点）。
+   クリック可能＝矢印がグリーンになり「！の芽」の双葉が芽吹く（なるほど＝芽、をインタラクションに）。
+   SVGが第一候補、SafariはSVGカーソル非対応のためPNGへ、最後にOS標準へフォールバック。
+   ホットスポットは矢印の先端(4,2)。入力欄はI-beam・無効は not-allowed のまま（実用性優先）。 */
+body {
+  cursor: url("/cursors/naruhodo-arrow.svg") 4 2, url("/cursors/naruhodo-arrow.png") 4 2, auto;
+}
+a,
 button:not(:disabled),
 [role="button"]:not([aria-disabled="true"]),
 summary,
 select,
 label[for] {
-  cursor: pointer;
+  cursor: url("/cursors/naruhodo-pointer.svg") 4 2, url("/cursors/naruhodo-pointer.png") 4 2, pointer;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea {
+  cursor: text;
 }
 button:disabled,
 [role="button"][aria-disabled="true"] {
