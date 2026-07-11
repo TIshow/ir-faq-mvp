@@ -7,6 +7,12 @@
 :root {
   --background: #faf6ee; /* クリーム */
   --foreground: #26231d; /* インク */
+
+  /* ブランドカーソル（値の唯一の正）。SVG→PNG(Safari)→OS標準の3段フォールバック。
+     ホットスポットは矢印先端(4,2)。 */
+  --cursor-arrow: url("/cursors/naruhodo-arrow.svg") 4 2, url("/cursors/naruhodo-arrow.png") 4 2, auto;
+  --cursor-pointer: url("/cursors/naruhodo-pointer.svg") 4 2, url("/cursors/naruhodo-pointer.png") 4 2,
+    pointer;
 }
 
 @theme inline {
@@ -62,10 +68,9 @@ body {
 /* --- ブランドカーソル（Naruhodo IR）---
    通常＝インクの矢印（クリーム縁取り＋尻尾に緑の点）。
    クリック可能＝矢印がグリーンになり「！の芽」の双葉が芽吹く（なるほど＝芽、をインタラクションに）。
-   SVGが第一候補、SafariはSVGカーソル非対応のためPNGへ、最後にOS標準へフォールバック。
-   ホットスポットは矢印の先端(4,2)。入力欄はI-beam・無効は not-allowed のまま（実用性優先）。 */
+   入力欄はI-beam・無効は not-allowed のまま（実用性優先）。値は :root のトークンが唯一の正。 */
 body {
-  cursor: url("/cursors/naruhodo-arrow.svg") 4 2, url("/cursors/naruhodo-arrow.png") 4 2, auto;
+  cursor: var(--cursor-arrow);
 }
 a,
 button:not(:disabled),
@@ -73,7 +78,7 @@ button:not(:disabled),
 summary,
 select,
 label[for] {
-  cursor: url("/cursors/naruhodo-pointer.svg") 4 2, url("/cursors/naruhodo-pointer.png") 4 2, pointer;
+  cursor: var(--cursor-pointer);
 }
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 textarea {
