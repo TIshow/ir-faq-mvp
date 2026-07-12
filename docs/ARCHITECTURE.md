@@ -56,7 +56,7 @@ IR Agent の設計詳細。背景・方針は CLAUDE.md、現状/再開手順は
 回答は**2フェーズ**で生成し、本文をトークン逐次で流す（`synthesize_stream`）:
 - **CONTEXTUALIZE（短期メモリ・`_contextualize`）**: `history`（直近の会話）があれば、フォロー質問（「なんで？」「前期は？」）を会話履歴で**自己完結クエリに書き換え**（condense question）てから retrieve/plan へ。履歴が無ければ LLM を呼ばず素通り＝**eval は従来と完全に同一**。履歴は質問の解釈のみに使い、数値の根拠にはしない（決定論維持）。
 - **RETRIEVE**: `_facts_context(ticker)` が層1の全実値に加え**前年比・営業利益率・セグメント構成比をコードで計算**した「分析用データシート」を作る（LLMに暗算させない）。層2は `search_disclosures` を**2角度で並列検索**（1本目=質問そのもの／2本目=「背景・要因・会社の説明」angle）＝Multi-Query Retrieval。結果は dedupe＋上限12（`_MAX_PASSAGES`）。並列実行のためレイテンシ増なし。最新決算を聞かれても**過去の説明資料・IR想定問答に根拠/背景があれば補足材料として同梱**できる。選別は下流の PLAN(answerability) が担う。
-- **PLAN（answerability・JSONモード）**: LLM が `{can_answer, relevant_metrics, used_citations, escalate_reason}` を返す（構造化出力＝eval決定論性を守る）。`can_answer=false` ならここで即エスカレ（本文生成なし＝速い）。プロンプトは「FAQ逐語禁止」「新たな割り算をしない＝計算済み値を使う」。最優先規則: **FAQ/開示抜粋が質問に直接答えるなら、構造化数値に無い指標(例ROE)でも answered**。
+- **PLAN（answerability・JSONモード）**: LLM が `{can_answer, relevant_metrics, used_citations, escalate_reason}` を返す（構造化出力＝eval決定論性を守る）。`can_answer=false` ならここで即エスカレ（本文生成なし＝速い）。プロンプトは「FAQ逐語禁止」「新たな割り算をしない＝計算済み値を使う」。最優先規則: **FAQ/開示抜粋が質問に直接答えるなら、構造化数値に無い指標(例ROE)でも answered**。応答のパースは `_parse_plan_json`（`raw_decode` で先頭の完全なJSONのみ取り出す）＝gemini-3 が json_mode でも稀にJSON後へ余分テキストを付けて `Extra data` で落ちる揺らぎへの恒久対処（#105）。
 - **GROUND**: `relevant_metrics` から `build_financial_facts` がカードの数値を**コードで**埋める（過多は `_reduce_cards` で抑制。派生指標＝全社/セグメント利益率・売上構成比・利益寄与度もコード計算でカード化可）。カードも引用も無い（接地ゼロ）なら正直にエスカレ。
 - **話題分類（PLAN相乗り）**: PLAN の出力に `topic` を含め、質問を固定タクソノミー（agent/analytics.py の TOPICS・14分類）へ分類（追加LLMコールなし）。`topic` は AgentResponse 契約外の内部フィールドで、agent.py が pop して分析記録にのみ使う。
 - **WRITE（本文・プレーンテキスト・ストリーム）**: `generate_content_stream` で生成IR本文をトークン逐次生成。数値は提供データシートの範囲のみ（カード＋出典でクロスチェック）。**開示抜粋に会社自身の説明があれば数値とセットで織り込み**、本文末尾に「#### 💡 注目ポイント」（開示事実の範囲の気づき1〜3点・**意見/推奨/予測は禁止**・材料が無ければ省略）。
@@ -82,10 +82,13 @@ FactCard = { metric, metricKey, period, value, valueNumeric, unit, yoy?, consoli
 ```
 > リクエスト側（/api/chat body）: `message, companyId, sessionId, history[], audience`。`audience` と `history` は synthesis のみ使用（レスポンス契約 AgentResponse には含めない）。
 
-## フロント UIX（現テーマ踏襲・柔らかくモダン）
-- **読者レベル切替**: コンテキストバーの2択セグメント（カジュアル/スタンダード）。旧3段階(beginner/intermediate/advanced)の保存値・リクエスト値は casual/standard へ後方互換マッピング。選択は `localStorage('ir-audience')` に永続し `/api/chat` の `audience` として送る（説明の翻訳度のみ変わる）。
-- **背景装飾** `components/AmbientBackground.tsx`: 薄く流れるチャートライン＋幾何学ドットグリッド（不透明度3〜5%・2枚を -50% 移動でシームレスループ・`pointer-events-none`・`aria-hidden`）。`prefers-reduced-motion` で停止（globals.css）。可読性・操作を邪魔しない。
-- **モーション/質感**: メッセージの `fade-slide-in` 出現、バブル/入力バー/カードの `backdrop-blur`、フォーカス時のエメラルドグロー、カード・チップのホバー浮遊、`💡 注目ポイント`（`#### 見出し`）のアクセント（Markdown.tsx で h4 をスタイル）。`lang=ja`。
+## フロント UIX（Naruhodo IR — クリーム×インク×ポップ）
+> ブランド・トークン・演出ルールの詳細は **`DESIGN.md`**（実装上の正は `globals.css` の `@theme`/`:root`）。ここではアーキテクチャに関わる要点のみ。
+- **読者レベル切替**: コンテキストバーの2択セグメント（カジュアル/スタンダード）。旧3段階(beginner/intermediate/advanced)の保存値・リクエスト値は casual/standard へ後方互換マッピング（フロントは初回ロードで新値に書き戻す自己清掃型）。選択は `localStorage('ir-audience')` に永続し `/api/chat` の `audience` として送る（説明の翻訳度のみ変わる）。
+- **評決カード＋決定論チャート**（`FactCard.tsx`）: `planCards()` が fact_cards を「先頭カードと同一 metricKey が複数期あれば TrendCard（大きな数字＋YoYピル＋棒グラフ。予想は点線）に集約、残りはステータスカードのグリッド」に並べ替える。**値の加工・生成は一切しない＝チャートも決定論**（データが無ければチャートは出ない）。
+- **蔦レイアウト**（`FactCard.tsx` VineNode）: 回答の各セクション（数値/散文/出典/CTA/サジェスト）を茎＋枝＋芽の節で接続し、`VINE_STEP_MS`(160ms) の階段で「育つ」演出。末端の節は双葉。純CSS（transform/opacity・一度だけ再生）でコンテンツ不変。
+- **散文のエディトリアル描画**（`Markdown.tsx`）: 太字→黄マーカー（`.mk`）、💡注目ポイント（h4）→マーカー見出し。CommonMark仕様で日本語約物隣接の `**「…」**` が強調にならない問題は `remarkCjkStrong`（パース後ASTの救済プラグイン・生HTML不使用＝XSS安全）で解決。
+- **モーション原則**: transform/opacity のみ・無限ループなし・`prefers-reduced-motion` で全静止（globals.css で一括管理）。ブランドカーソル（`--cursor-*` トークン・SVG→PNG→OS標準フォールバック）も同様に実用性優先の例外（入力=I-beam・無効=not-allowed）を持つ。`lang=ja`。
 
 ## マルチテナント（企業切替）
 - フロント `companies.ts` が唯一の正（id/name/ticker/datastoreId/isActive）。
@@ -118,8 +121,8 @@ FactCard = { metric, metricKey, period, value, valueNumeric, unit, yoy?, consoli
 ## デプロイ構成
 | サービス | 種別 | ビルド/デプロイ | 公開 |
 |---|---|---|---|
-| ir-frontend | Cloud Run (Next.js) | `Dockerfile` / `cloudbuild.yaml` / `gcloud run deploy --source` | allUsers（公開UI） |
-| ir-agent | Cloud Run (Python) | `Dockerfile.agent` / `cloudbuild.agent.yaml` | allUsers（**本番は非公開化推奨**） |
+| ir-frontend | Cloud Run (Next.js) | `Dockerfile` / `cloudbuild.yaml` / `gcloud run deploy --source` | allUsers（公開UI）＋ /api/chat にIP単位レート制限（`CHAT_RATE_LIMIT_PER_MIN` 既定10/分） |
+| ir-agent | Cloud Run (Python) | `Dockerfile.agent` / `cloudbuild.agent.yaml` | **非公開（#88完了）**: invoker=フロントSAのみ。フロントが `lib/agent-auth.ts` のIDトークンで呼ぶ（直叩き403・localhostはスキップ） |
 - `next.config.mjs`（**.tsだとCloud Run実行時にtypescript依存で503**になるため .mjs）。
 - フロント↔エージェントは `AGENT_URL` env で接続。
 - エージェントの Vertex/Discovery Engine 認証は Cloud Run ランタイムSA（デフォルトCompute SAが既に権限保有）。

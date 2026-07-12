@@ -1,11 +1,12 @@
 # IR Agent — プロジェクト指示 / 引き継ぎガイド
 
 > このファイルは AI / エンジニアが最初に読む「正」のドキュメント。
-> 詳細は `docs/ARCHITECTURE.md`（設計）と `docs/HANDOFF.md`（現状・残課題・再開手順）。
+> 詳細は `docs/ARCHITECTURE.md`（設計）・`docs/DESIGN.md`（ブランド/デザインシステム）・`docs/HANDOFF.md`（現状・残課題・再開手順）。
 
 ## 1. これは何か
 個人投資家が **選んだ上場企業の開示情報について自然言語で相談できる「IR Agent」**（B2B2C / 発行体に提供する想定）。
 単なるFAQボットではなく、**開示済み情報のみを、出典付きで、対話的に深く言い換える**エージェント。
+プロダクトブランドは **「Naruhodo IR（なるほどIR）」**（マーク=「！の芽」。IR Agent はリポジトリ/コード内部名。詳細 `docs/DESIGN.md`）。
 
 **設計の背骨（最重要・崩さない）**
 - **数値の正確性は決定論で担保する**。`fact_cards` の数値は層1からコードが取得・計算（YoY/利益率/構成比）し、**LLMは生成しない**。生成IR（分析散文）はLLMが書き数値にも言及するが、LLMには**コード計算済みの実数・比率だけ**を渡して暗算させない。散文の数値は隣のカード＋出典でクロスチェックできる。
@@ -41,14 +42,18 @@ src/                      フロント（Next.js）
   app/ir/page.tsx, app/ir/login/page.tsx  IR向け管理画面（質問トレンド/エスカレ/FAQ管理）＋ログイン（痛み②）
   lib/firebase.ts / firebase-admin.ts  Firebase Auth（マルチテナント。custom claims=company/admin。owner=全社アクセス）
   lib/gcp.ts              GCP_PROJECT_ID 等の集約（ハードコード排除）
-  components/ChatInterface.tsx  チャットUI（SSE受信・ストリーミング表示・次質問サジェスト）
-  components/FactCard.tsx       数値カード/出典リンク/scope分岐 描画
-  components/CompanyPicker.tsx  企業選択ピッカー（モノグラム＋ティッカー・ダークUI）
-  components/Markdown.tsx       回答散文のMarkdown描画（react-markdown・💡注目ポイント見出し）
-  components/AmbientBackground.tsx  背景装飾（薄く流れるチャート＋幾何学ドット・reduced-motion対応）
+  components/ChatInterface.tsx  チャットUI（SSE受信・ストリーミング表示・読者レベル・次質問サジェスト）
+  components/FactCard.tsx       評決カード/TrendCard（決定論チャート）/出典チップ/scope分岐/蔦レイアウト
+  components/CompanyPicker.tsx  企業選択ピッカー（モノグラム＋ティッカー）
+  components/Markdown.tsx       回答散文のMarkdown描画（マーカー強調・💡注目ポイント・CJK太字救済）
+  components/BrandLogo.tsx      Naruhodo IR ロゴ（「！の芽」マーク＋ワードマーク）
   config/companies.ts     企業マスター（id/name/ticker/datastoreId）＝唯一の正
   contexts/CompanyContext.tsx
   lib/agent-types.ts      AgentResponse 等の型（契約）
+  lib/agent-auth.ts       ir-agent呼び出しのIDトークン取得（#88・localhostはスキップ）
+  lib/rate-limit.ts       /api/chat のIP単位レート制限（既定10回/分）
+  app/globals.css         デザイントークン（色/影/カーソル）＋モーション＝デザインの実装上の正
+public/brand/ , public/cursors/   ブランド素材（マーク/アイコン/カーソル。docs/DESIGN.md 参照）
 agent/                    エージェント（Python / ADK）
   agent.py                本体。run_agent_stream が ANSWER_MODE で分岐（synthesis 既定 / legacy）＋AgentResponse 合成＋ストリーミング
   synthesize.py           **既定の回答生成（生成IR）**: retrieve→統合分析→接地。実値＋計算済み比率(前年比/利益率/構成比)のデータシートをLLMへ
@@ -70,7 +75,7 @@ eval/
   eval_harness.py         評価ハーネス（数値=決定論比較・コンプラ=ゼロ許容CI関門・--company で企業別）
   golden_set.vis.jsonl / golden_set.7561.jsonl  ゴールデンセット（vis / ハークスレイ）
 database/                 層1本番用 Cloud SQL スキーマ（financial_facts.sql 等。未接続=将来）
-docs/                     ARCHITECTURE.md / HANDOFF.md / phase1-gcp-setup.md / investor-experience-quality.md
+docs/                     ARCHITECTURE.md / DESIGN.md / HANDOFF.md / phase1-gcp-setup.md / investor-experience-quality.md
 Dockerfile                フロント用 / Dockerfile.agent  エージェント用
 cloudbuild.yaml           フロント用 / cloudbuild.agent.yaml  エージェント用
 ```
@@ -113,17 +118,17 @@ gcloud run services update ir-frontend --region us-central1 \
 - **PR作成後はマージせず一旦停止し、ユーザーのレビュー/承認を待ってからマージする**（merge の手前で必ず確認を取る）。
 - 秘密情報はコミットしない（`.env*` は gitignore、`agent/.env.example` のみ追跡）。
 
-## 7. 現状サマリ（2026-07-04）
-- ✅ 全GCPで実稼働（Vercel廃止）。マルチテナント切替・ガードレール・**層2の実FAQ/PDF回答（出典付き）**・モダンなダークUI（Markdown描画）。
+## 7. 現状サマリ（2026-07-12）
+- ✅ 全GCPで実稼働（Vercel廃止）。マルチテナント切替・ガードレール・**層2の実FAQ/PDF回答（出典付き）**。
 - ✅ **層1（数値）はハークスレイ(7561)を旗艦に深掘り点灯**＝FY25/26実績＋3セグメント＋FY27会社予想（EDINET有報XBRLから決定論抽出、31件）。ヴィス(5071)も10件。**派生指標**（全社/セグメント利益率・売上構成比・利益寄与度）もコード計算でカード化。
 - ✅ **生成IR（既定 `ANSWER_MODE=synthesis`）**: 表＋セグメント分析＋会社予想の洞察まで生成。**層2は2角度並列検索**（質問＋「背景・要因・会社の説明」）で過去資料/想定問答の根拠も補足材料に。本文末尾に**💡注目ポイント**（開示事実の気づき・意見/予測は禁止）。**読者レベル**（カジュアル/スタンダード）で説明の翻訳度のみ調整（専門性は共通）。本文ストリーミング＋短期メモリ、カード過多は上限8枚に自動抑制。数値はコード計算済みデータシート由来でLLM非経由＝決定論。eval関門（数値100%/コンプラ0）維持。LLMは **gemini-3-flash-preview（global）**＝thinking最小化で先頭トークン≒半減。
 - ✅ **痛み②の堀**: escalation→FAQ複利ループ（冪等upsert）＋IRダッシュボード＝**話題トレンド**（話題×件数・原文非表示）＋**IR要対応**（CTA同意分のみ・×Nグループ化・削除可）＋Firebase認証（owner全社）。
 - ✅ **信頼・プライバシー**: 誹謗中傷の入口ガード（拒否・CTA非表示・記録マスク）。会話の**本文はどこにも保存しない**（メタデータのみ。チャットUIに明示）。
-- ✅ **UIX**: 背景に薄く流れるチャート＋幾何学ドット（reduced-motion停止）、ふわっと出現・ガラス質感・ホバー浮遊。読者レベルはlocalStorage永続。
+- ✅ **UIX/ブランド（Naruhodo IR）**: クリーム×インク×ポップの全面リブランド（`docs/DESIGN.md`）＝評決カード＋**決定論チャート**（同一指標×複数期のカードを自動で棒グラフ化・予想は点線）・マーカー強調のエディトリアル散文・**蔦の成長演出**（茎＋枝＋芽でカードを接続・末端は双葉）・**芽吹くカーソル**・「！の芽」ロゴ/favicon。読者レベルはlocalStorage永続・reduced-motionで全演出静止。gemini-3のPLAN JSON揺らぎは堅牢パース（_parse_plan_json）で恒久対処。
 - ✅ **セキュリティ #88 完了**: ir-agent は非公開（invoker=フロントSAのみ）。フロントがIDトークンで呼ぶ（`src/lib/agent-auth.ts`・localhostはスキップ）＋ `/api/chat` にIP単位レート制限（既定10回/分・`CHAT_RATE_LIMIT_PER_MIN`）。投資家UXは無変化（ログイン不要のまま）。
 - ⚠️ 未了: フィル/ピアズの層1・ヴィスのYoY/セグメント・層2本文数値の実在照合・BQ東京(#89)。gemini-3 は thinking 最小化で先頭〜12s に短縮（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` へ即戻し）。
 - 詳細・残課題は **`docs/HANDOFF.md`**、戦略は **Issue #77**（尖らせ方=#85-87／インフラ=#88-92）。
 ```
-GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#95 マージ済）
+GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#109 マージ済）
 GCP project: hallowed-trail-462613-v1 / region us-central1（Vertexはglobal）
 ```
