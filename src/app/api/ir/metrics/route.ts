@@ -89,53 +89,81 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const token = await accessToken();
 
-    const byScope = await bqQuery(
-      token,
-      `SELECT scope_status, COUNT(*) AS c FROM ${TABLE} ${where} GROUP BY scope_status`,
-      since,
-    );
+    const IRREQ = `\`${PROJECT}.ir_analytics.ir_requests\``;
+    const IRRES = `\`${PROJECT}.ir_analytics.ir_resolved\``;
+
+    // 5クエリは互いに独立なので並列実行（体感の初期表示を短縮）
+    const [byScope, prevRows, irRows, top, weeklyRows] = await Promise.all([
+      bqQuery(
+        token,
+        `SELECT scope_status, COUNT(*) AS c FROM ${TABLE} ${where} GROUP BY scope_status`,
+        since,
+      ),
+      // 前期間（直前の同じ長さの窓）の総質問数＝KPIの増減表示用
+      bqQuery(
+        token,
+        `SELECT COUNT(*) AS c FROM ${TABLE}
+         WHERE company_ticker=@company
+           AND ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days2 DAY)
+           AND ts <  TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)`,
+        [...since, { name: 'days2', type: 'INT64', value: String(days * 2) }],
+      ),
+      // 未回答（IR要対応）= 投資家が「IR窓口へ問い合わせる」を押したものだけ（自動エスカレは含めない）。
+      // 同一質問はグループ化（件数）し、ir_resolved で解決済みにした質問は除外する
+      // （同じ問い合わせが多数来ても、一つ解決すれば worklist から消せる）。
+      // 解決済み判定: その質問の解決マーカー(resolved_at)が問い合わせ(ts)以降にあれば対応済みとして除外。
+      bqQuery(
+        token,
+        `SELECT r.question AS question, COUNT(*) AS c,
+                FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', MAX(r.ts)) AS asked_at
+         FROM ${IRREQ} r
+         WHERE r.company_ticker=@company
+           AND r.ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)
+           AND NOT EXISTS (
+             SELECT 1 FROM ${IRRES} x
+             WHERE x.company_ticker=r.company_ticker AND x.question=r.question AND x.resolved_at >= r.ts
+           )
+         GROUP BY r.question ORDER BY MAX(r.ts) DESC LIMIT 50`,
+        since,
+      ),
+      // 話題トレンド: 質問の**原文は IR に見せず**、話題（タクソノミー分類）×件数だけ集計する
+      // （プライバシー保護＝暗黙チャットの原文露出を避ける。原文が見えるのは CTA 同意済みの
+      //  ir_requests のみ）。話題は PLAN で分類し interactions.topic に保存済み＝ここは純SQL。
+      // 「ROEは？」「ROEを教えて」等の表記ゆれも同一話題に合算される。
+      // 誹謗中傷(inappropriate)は従来どおり除外（件数は拒否KPIで見える）。
+      bqQuery(
+        token,
+        `SELECT topic, COUNT(*) AS c FROM ${TABLE} ${where}
+           AND topic IS NOT NULL
+           AND COALESCE(scope_reason, '') != 'inappropriate'
+         GROUP BY topic ORDER BY c DESC LIMIT 15`,
+        since,
+      ),
+      // 週ごとの質問数（直近4週・月曜起点）。データが無い週も0で返す（棒グラフが欠けない）
+      bqQuery(
+        token,
+        `WITH weeks AS (
+           SELECT w FROM UNNEST(GENERATE_TIMESTAMP_ARRAY(
+             TIMESTAMP_TRUNC(TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 21 DAY), WEEK(MONDAY)),
+             TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), WEEK(MONDAY)),
+             INTERVAL 7 DAY)) AS w
+         )
+         SELECT FORMAT_TIMESTAMP('%m/%d', weeks.w) AS week_start, COUNT(t.ts) AS c
+         FROM weeks LEFT JOIN ${TABLE} t
+           ON t.company_ticker=@company AND TIMESTAMP_TRUNC(t.ts, WEEK(MONDAY)) = weeks.w
+         GROUP BY weeks.w ORDER BY weeks.w`,
+        [{ name: 'company', type: 'STRING', value: company }],
+      ),
+    ]);
+
     const counts = { answered: 0, refused: 0, escalated: 0 };
     for (const r of byScope) {
       const k = r.scope_status as keyof typeof counts;
       if (k in counts) counts[k] = Number(r.c);
     }
     const total = counts.answered + counts.refused + counts.escalated;
-
-    // 未回答（IR要対応）= 投資家が「IR窓口へ問い合わせる」を押したものだけ（自動エスカレは含めない）。
-    // 同一質問はグループ化（件数）し、ir_resolved で解決済みにした質問は除外する
-    // （同じ問い合わせが多数来ても、一つ解決すれば worklist から消せる）。
-    const IRREQ = `\`${PROJECT}.ir_analytics.ir_requests\``;
-    const IRRES = `\`${PROJECT}.ir_analytics.ir_resolved\``;
-    // 解決済み判定: その質問の解決マーカー(resolved_at)が問い合わせ(ts)以降にあれば対応済みとして除外。
-    const irRows = await bqQuery(
-      token,
-      `SELECT r.question AS question, COUNT(*) AS c,
-              FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', MAX(r.ts)) AS asked_at
-       FROM ${IRREQ} r
-       WHERE r.company_ticker=@company
-         AND r.ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @days DAY)
-         AND NOT EXISTS (
-           SELECT 1 FROM ${IRRES} x
-           WHERE x.company_ticker=r.company_ticker AND x.question=r.question AND x.resolved_at >= r.ts
-         )
-       GROUP BY r.question ORDER BY MAX(r.ts) DESC LIMIT 50`,
-      since,
-    );
+    const prevTotal = Number(prevRows[0]?.c ?? 0);
     const irRequests = irRows.length; // 要対応＝未解決のユニーク質問数
-
-    // 話題トレンド: 質問の**原文は IR に見せず**、話題（タクソノミー分類）×件数だけ集計する
-    // （プライバシー保護＝暗黙チャットの原文露出を避ける。原文が見えるのは CTA 同意済みの
-    //  ir_requests のみ）。話題は PLAN で分類し interactions.topic に保存済み＝ここは純SQL。
-    // 「ROEは？」「ROEを教えて」等の表記ゆれも同一話題に合算される。
-    // 誹謗中傷(inappropriate)は従来どおり除外（件数は拒否KPIで見える）。
-    const top = await bqQuery(
-      token,
-      `SELECT topic, COUNT(*) AS c FROM ${TABLE} ${where}
-         AND topic IS NOT NULL
-         AND COALESCE(scope_reason, '') != 'inappropriate'
-       GROUP BY topic ORDER BY c DESC LIMIT 15`,
-      since,
-    );
 
     return Response.json({
       company,
@@ -143,6 +171,7 @@ export async function GET(request: Request): Promise<Response> {
       totals: {
         ...counts,
         total,
+        prev_total: prevTotal, // 直前の同一期間の総質問数（増減表示用）
         ir_requests: irRequests,
         answer_rate: total ? Math.round((counts.answered / total) * 1000) / 10 : 0,
       },
@@ -153,6 +182,8 @@ export async function GET(request: Request): Promise<Response> {
         count: Number(r.c),
       })),
       top_topics: top.map((r) => ({ topic: r.topic, count: Number(r.c) })),
+      // 直近4週の質問数（週の月曜 MM/DD ラベル・0埋め済み）
+      weekly: weeklyRows.map((r) => ({ week: r.week_start, count: Number(r.c) })),
     });
   } catch (e) {
     console.error('[api/ir/metrics] error:', e);
