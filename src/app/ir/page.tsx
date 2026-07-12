@@ -27,6 +27,14 @@ interface Metrics {
 
 const DAYS_OPTIONS = [7, 30, 90];
 
+// ポップエディトリアルの共通部品クラス（サイズは呼び出し側で付与。変更は1箇所で済ませる）
+const BTN_POP =
+  'rounded-full bg-pop font-bold text-white transition hover:bg-pop-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute';
+const BTN_CORAL =
+  'rounded-full border-[1.5px] border-coral/40 font-bold text-coral-deep transition hover:border-coral disabled:opacity-40';
+const FIELD_CREAM =
+  'w-full rounded-xl bg-cream px-3.5 py-2.5 text-sm font-medium text-ink placeholder:text-mute focus:outline-none';
+
 // 話題タクソノミー（agent/analytics.py TOPICS）→ アイコン。未知の話題は 💬。
 const TOPIC_ICONS: Record<string, string> = {
   '業績・決算（全社）': '📊',
@@ -500,7 +508,7 @@ function FaqHeader({
           <button
             onClick={save}
             disabled={busy || !question.trim() || !answer.trim()}
-            className="mt-2 rounded-full bg-pop px-4 py-2 text-xs font-bold text-white transition hover:bg-pop-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute"
+            className={`${BTN_POP} mt-2 px-4 py-2 text-xs`}
           >
             {busy ? '登録中…' : 'FAQに登録'}
           </button>
@@ -559,7 +567,7 @@ function FaqRow({
           <button
             onClick={remove}
             disabled={busy}
-            className="rounded-full border-[1.5px] border-coral/40 px-3 py-1.5 text-[11.5px] font-bold text-coral-deep transition hover:border-coral disabled:opacity-40"
+            className={`${BTN_CORAL} px-3 py-1.5 text-[11.5px]`}
           >
             削除
           </button>
@@ -571,12 +579,12 @@ function FaqRow({
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             rows={3}
-            className="w-full rounded-xl bg-cream px-3.5 py-2.5 text-sm font-medium text-ink focus:outline-none"
+            className={FIELD_CREAM}
           />
           <button
             onClick={save}
             disabled={busy || !answer.trim()}
-            className="mt-2 rounded-full bg-pop px-4 py-1.5 text-xs font-bold text-white transition hover:bg-pop-deep disabled:bg-line disabled:text-mute"
+            className={`${BTN_POP} mt-2 px-4 py-1.5 text-xs`}
           >
             {busy ? '保存中…' : '更新する'}
           </button>
@@ -627,7 +635,7 @@ function EscalationRow({
         <button
           onClick={resolve}
           disabled={resolving}
-          className="rounded-full border-[1.5px] border-coral/40 px-3 py-1 text-[11.5px] font-bold text-coral-deep transition hover:border-coral disabled:opacity-40"
+          className={`${BTN_CORAL} px-3 py-1 text-[11.5px]`}
         >
           一覧から削除
         </button>
@@ -658,14 +666,14 @@ function EscalationRow({
         <div className="flex shrink-0 gap-2">
           <button
             onClick={() => setOpen(!open)}
-            className="rounded-full bg-pop px-4 py-2 text-[11.5px] font-bold text-white transition hover:bg-pop-deep"
+            className={`${BTN_POP} px-4 py-2 text-[11.5px]`}
           >
             {open ? '閉じる' : '回答する'}
           </button>
           <button
             onClick={resolve}
             disabled={resolving}
-            className="rounded-full border-[1.5px] border-coral/40 px-3.5 py-2 text-[11.5px] font-bold text-coral-deep transition hover:border-coral disabled:opacity-40"
+            className={`${BTN_CORAL} px-3.5 py-2 text-[11.5px]`}
           >
             {resolving ? '…' : '削除'}
           </button>
@@ -678,13 +686,13 @@ function EscalationRow({
             onChange={(e) => setAnswer(e.target.value)}
             rows={3}
             placeholder="開示済みの内容で回答を入力（投資家にそのまま提示されます）"
-            className="w-full rounded-xl bg-cream px-3.5 py-2.5 text-sm font-medium text-ink placeholder:text-mute focus:outline-none"
+            className={FIELD_CREAM}
           />
           <div className="mt-2 flex items-center gap-2">
             <button
               onClick={save}
               disabled={status === 'saving' || !answer.trim()}
-              className="rounded-full bg-pop px-4 py-2 text-xs font-bold text-white transition hover:bg-pop-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute"
+              className={`${BTN_POP} px-4 py-2 text-xs`}
             >
               {status === 'saving' ? '登録中…' : 'FAQに登録'}
             </button>
