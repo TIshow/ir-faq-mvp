@@ -22,12 +22,12 @@
 | 分析ログ（痛み②） | BigQuery `ir_analytics.interactions` | `ANALYTICS_ENABLED=1` で記録。**本文レス＝メタデータのみ**（ts/企業/scope/カード・引用数/話題）。話題はPLAN相乗りで分類（タクソノミー14分類・agent/analytics.py） |
 | IR要対応ワークリスト | BigQuery `ir_analytics.ir_requests`（ts/company_ticker/question） | **ユーザーがCTA「IR窓口へ問い合わせる」を押した質問のみ**。`/api/ir/contact`(未認証)が記録。自動エスカレは入れない |
 | 解決マーカー | BigQuery `ir_analytics.ir_resolved` | ダッシュボードの「削除」＝`/api/ir/resolve`(要認証)がマーカーINSERT→一覧から除外（同一質問の重複もまとめて消える。ハード削除はstreaming bufferで不可のため） |
-| IR管理画面 | `/ir`（ダッシュボード）・`/ir/login` | 質問トレンド/**IR要対応(問い合わせ)**/FAQ管理。`/api/ir/metrics`(BQ集計)・`/api/ir/faq`(CRUD) |
+| IR管理画面 | `/ir`（ダッシュボード）・`/ir/login` | **ポップエディトリアル刷新済み(#111)**: KPI4枚（総質問数＋前期間比/自動回答率/IR要対応/回答対象外）＋話題トレンド（タクソノミー別アイコン・色分けバー）＋**IR要対応**＋FAQ管理（新規追加/修正/削除）＋**週次チャート**。`/api/ir/metrics`(BQ集計・5クエリ並列・`prev_total`/`weekly`含む)・`/api/ir/faq`(CRUD) |
 | 認証 | **Firebase Auth / Identity Platform**（既存プロジェクトに追加、表示名 ir-bot-mvp） | メール/パスワード。custom claims=company/admin。owner=全社アクセス。`lib/firebase*.ts` |
 | CI/CD | GitHub Actions（`.github/workflows/ci.yml`・`security.yml`）＋ **main ブランチ保護**＋ Dependabot | frontend(型/lint/build)＋agent(ruff/format/eval)＋gitleaks＋CodeQL。緑必須・PR経由 |
 | Firestore / 旧フロント / Vercel | (default) / ir-bot-mvp / — | 未使用 / **削除済み** / **削除済み**（全GCP集約） |
 
-GitHub: https://github.com/TIshow/ir-faq-mvp （main、PR #1〜#109 マージ済）。Issue: #3 経緯と残課題 / #42 FAQサジェスト(A本実装) / #46 IRインテリジェンス epic / #67 派生指標Phase2(CAGR・ROE/ROIC=B1データ投入待ち) / **#77 戦略（足りないもの・moat・残タスクTier）** / #85-87 尖らせ方(MCPエンドポイント・話題フォロー・フェデレーション) / **#88-92 インフラ（#88 ir-agent非公開化=✅完了、#89 BQ東京=データ空の今が好機、#90 SA分離、#91 モデル世代管理、#92 小規模ハードニング）** / **#97 Tier A（ハークスレイ実トラフィックで複利ループ1周）** / **#98 B1（層1縦深化: 多年度+BS/CF→ROE/ROIC解禁）** / **#107 層2精度（評価セット50〜100問＋取り込み方式比較: raw/digital/layout/手動MD/XBRL併用）**。
+GitHub: https://github.com/TIshow/ir-faq-mvp （main、PR #1〜#111 マージ済）。Issue: #3 経緯と残課題 / #42 FAQサジェスト(A本実装) / #46 IRインテリジェンス epic / #67 派生指標Phase2(CAGR・ROE/ROIC=B1データ投入待ち) / **#77 戦略（足りないもの・moat・残タスクTier）** / #85-87 尖らせ方(MCPエンドポイント・話題フォロー・フェデレーション) / **#88-92 インフラ（#88 ir-agent非公開化=✅完了、#89 BQ東京=データ空の今が好機、#90 SA分離、#91 モデル世代管理、#92 小規模ハードニング）** / **#97 Tier A（ハークスレイ実トラフィックで複利ループ1周）** / **#98 B1（層1縦深化: 多年度+BS/CF→ROE/ROIC解禁）** / **#107 層2精度（評価セット50〜100問＋取り込み方式比較: raw/digital/layout/手動MD/XBRL併用）**。
 
 ## 3. 今の挙動（ブラウザで確認可能）
 フロント URL を開く → 企業選択 → 質問:
@@ -44,7 +44,8 @@ GitHub: https://github.com/TIshow/ir-faq-mvp （main、PR #1〜#109 マージ済
 | フォロー質問（「なんで？」「前期は？」「セグメント別では？」） | ✅ 短期メモリで文脈を補い会話として回答（直近の話題を維持）。フロントが直近履歴を同梱→`_contextualize` が自己完結クエリへ書き換え |
 | 誹謗中傷・暴言（「クソ株」「死ね」等） | ✅ 入口ガードで丁寧に拒否（refused/inappropriate・CTA非表示＝IRに転送されない・記録もマスク/集計除外）。不満を含む正当質問（「なぜ業績が落ちた」）は通常回答 |
 | 派生指標（「中食の売上構成比は？」「セグメント別の利益率は？」） | ✅ 構成比・寄与度・セグメント利益率をコード計算でカード化（`segment.<事業>.revenue_contribution` 等） |
-| ダッシュボードの話題トレンド | ✅ 話題×件数のみ表示（**原文非表示**）。「ROEは？」「ROEを教えて」等の表記ゆれは同一話題に自然合算 |
+| ダッシュボードの話題トレンド | ✅ 話題×件数のみ表示（**原文非表示**・タクソノミー別アイコン＋色分けバー）。「ROEは？」「ROEを教えて」等の表記ゆれは同一話題に自然合算 |
+| ダッシュボードのKPI・週次 | ✅ 総質問数に**前期間比±**、直近4週の**週次バー**（月曜起点・0埋め）。すべて Naruhodo IR ポップエディトリアル（#111・`DESIGN.md`） |
 | IR要対応の運用 | ✅ 同一質問は×Nグループ化。「削除」で解決済み化（重複ごと消える）。回答すればFAQ登録→次回から自動回答 |
 | チャットUIの明示 | ✅ 「会話の本文は保存されません。話題・回答状況などの統計のみ匿名で記録し、IR活動の改善に利用します」 |
 | 深掘り（最新決算×過去資料） | ✅ 2角度並列検索で過去の説明資料・IR想定問答の根拠/背景も補足材料に。本文末尾に💡注目ポイント（開示事実の気づき） |
@@ -80,7 +81,7 @@ curl -s -N -X POST https://ir-frontend-255752121803.us-central1.run.app/api/chat
 
 ### Tier 1 — 堀（痛み②＝発行体が金を払う理由）
 - ✅ **1-1 escalation→FAQ 複利ループ** = 実装済み（冪等upsert・一覧/修正/削除。`/api/ir/faq`）。
-- ✅ **1-2 IR向けダッシュボード** = 実装済み（`/ir`：質問トレンド/エスカレ/FAQ管理、BigQuery集計 `/api/ir/metrics`、Firebase認証）。
+- ✅ **1-2 IR向けダッシュボード** = 実装済み（`/ir`：KPI/話題トレンド/IR要対応/FAQ管理/週次、BigQuery集計 `/api/ir/metrics`、Firebase認証）。**ポップエディトリアルへ刷新済み(#111)**。
 
 ### Tier 1.5 — 生成IRの磨き込み
 - ✅ **1.5-1 カード過多の抑制** = 実装済み（#66: 上限8枚・超過時は最新実績1枚に畳む）。

@@ -36,10 +36,10 @@ src/                      フロント（Next.js）
   app/page.tsx, layout    画面
   app/api/chat/route.ts   エージェントへの SSE プロキシ（companies.ts から企業コンテキスト送信）
   app/api/doc/route.ts    出典PDFのプロキシ配信（非公開GCSをSA権限で中継・許可バケットのみ）
-  app/api/ir/metrics/route.ts  IRダッシュボードの集計API（BigQuery集計・Firebase認証＋企業スコープ強制）
+  app/api/ir/metrics/route.ts  IRダッシュボードの集計API（BQ集計・Firebase認証＋企業スコープ強制。5クエリ並列＝KPI/前期間比/IR要対応/話題/週次）
   app/api/ir/faq/route.ts      FAQ CRUD（Discovery Engine へ冪等upsert/一覧/削除。複利ループの投入口）
   app/api/ir/contact/route.ts  「IR窓口へ問い合わせる」記録（未認証）。押された質問のみ ir_requests へ＝IR要対応ワークリスト
-  app/ir/page.tsx, app/ir/login/page.tsx  IR向け管理画面（質問トレンド/エスカレ/FAQ管理）＋ログイン（痛み②）
+  app/ir/page.tsx, app/ir/login/page.tsx  IR向け管理画面（KPI/話題トレンド/IR要対応/FAQ管理/週次チャート）＋ログイン（痛み②・ポップエディトリアル）
   lib/firebase.ts / firebase-admin.ts  Firebase Auth（マルチテナント。custom claims=company/admin。owner=全社アクセス）
   lib/gcp.ts              GCP_PROJECT_ID 等の集約（ハードコード排除）
   components/ChatInterface.tsx  チャットUI（SSE受信・ストリーミング表示・読者レベル・次質問サジェスト）
@@ -122,13 +122,13 @@ gcloud run services update ir-frontend --region us-central1 \
 - ✅ 全GCPで実稼働（Vercel廃止）。マルチテナント切替・ガードレール・**層2の実FAQ/PDF回答（出典付き）**。
 - ✅ **層1（数値）はハークスレイ(7561)を旗艦に深掘り点灯**＝FY25/26実績＋3セグメント＋FY27会社予想（EDINET有報XBRLから決定論抽出、31件）。ヴィス(5071)も10件。**派生指標**（全社/セグメント利益率・売上構成比・利益寄与度）もコード計算でカード化。
 - ✅ **生成IR（既定 `ANSWER_MODE=synthesis`）**: 表＋セグメント分析＋会社予想の洞察まで生成。**層2は2角度並列検索**（質問＋「背景・要因・会社の説明」）で過去資料/想定問答の根拠も補足材料に。本文末尾に**💡注目ポイント**（開示事実の気づき・意見/予測は禁止）。**読者レベル**（カジュアル/スタンダード）で説明の翻訳度のみ調整（専門性は共通）。本文ストリーミング＋短期メモリ、カード過多は上限8枚に自動抑制。数値はコード計算済みデータシート由来でLLM非経由＝決定論。eval関門（数値100%/コンプラ0）維持。LLMは **gemini-3-flash-preview（global）**＝thinking最小化で先頭トークン≒半減。
-- ✅ **痛み②の堀**: escalation→FAQ複利ループ（冪等upsert）＋IRダッシュボード＝**話題トレンド**（話題×件数・原文非表示）＋**IR要対応**（CTA同意分のみ・×Nグループ化・削除可）＋Firebase認証（owner全社）。
+- ✅ **痛み②の堀**: escalation→FAQ複利ループ（冪等upsert）＋IRダッシュボード＝**KPI4枚（総質問数＋前期間比/自動回答率/IR要対応/回答対象外）**＋**話題トレンド**（話題×件数・原文非表示・タクソノミー別アイコン）＋**IR要対応**（CTA同意分のみ・×Nグループ化・削除可）＋**週次チャート**＋FAQ管理（新規追加/修正/削除）＋Firebase認証（owner全社）。**/ir もポップエディトリアルへ刷新済み（#111）**。
 - ✅ **信頼・プライバシー**: 誹謗中傷の入口ガード（拒否・CTA非表示・記録マスク）。会話の**本文はどこにも保存しない**（メタデータのみ。チャットUIに明示）。
 - ✅ **UIX/ブランド（Naruhodo IR）**: クリーム×インク×ポップの全面リブランド（`docs/DESIGN.md`）＝評決カード＋**決定論チャート**（同一指標×複数期のカードを自動で棒グラフ化・予想は点線）・マーカー強調のエディトリアル散文・**蔦の成長演出**（茎＋枝＋芽でカードを接続・末端は双葉）・**芽吹くカーソル**・「！の芽」ロゴ/favicon。読者レベルはlocalStorage永続・reduced-motionで全演出静止。gemini-3のPLAN JSON揺らぎは堅牢パース（_parse_plan_json）で恒久対処。
 - ✅ **セキュリティ #88 完了**: ir-agent は非公開（invoker=フロントSAのみ）。フロントがIDトークンで呼ぶ（`src/lib/agent-auth.ts`・localhostはスキップ）＋ `/api/chat` にIP単位レート制限（既定10回/分・`CHAT_RATE_LIMIT_PER_MIN`）。投資家UXは無変化（ログイン不要のまま）。
 - ⚠️ 未了: フィル/ピアズの層1・ヴィスのYoY/セグメント・層2本文数値の実在照合・BQ東京(#89)。gemini-3 は thinking 最小化で先頭〜12s に短縮（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` へ即戻し）。
 - 詳細・残課題は **`docs/HANDOFF.md`**、戦略は **Issue #77**（尖らせ方=#85-87／インフラ=#88-92）。
 ```
-GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#109 マージ済）
+GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#111 マージ済）
 GCP project: hallowed-trail-462613-v1 / region us-central1（Vertexはglobal）
 ```
