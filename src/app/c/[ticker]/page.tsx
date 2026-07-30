@@ -81,7 +81,8 @@ export default async function CompanyQaPage({ params }: { params: Promise<{ tick
   };
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-3xl px-5 py-8 text-ink">
+    /* pb-44: 画面下端に固定されるチャット入力バーの裏に本文が隠れないための余白 */
+    <div className="mx-auto min-h-screen w-full max-w-3xl px-5 pb-44 pt-8 text-ink">
       {/* JSON-LD（答え全文を含む・レイアウト変更の影響を受けない機械向け経路） */}
       <script
         type="application/ld+json"

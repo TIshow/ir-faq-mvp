@@ -204,8 +204,8 @@ export default function ChatInterface({ sessionId, variant = 'app' }: ChatInterf
 
   return (
     <div
-      className={`mx-auto flex w-full max-w-3xl flex-col lg:max-w-4xl ${
-        embedded ? '' : 'h-full'
+      className={`mx-auto flex w-full flex-col ${
+        embedded ? 'max-w-3xl' : 'h-full max-w-3xl lg:max-w-4xl'
       }`}
     >
       {/* コンテキストバー */}
@@ -329,17 +329,21 @@ export default function ChatInterface({ sessionId, variant = 'app' }: ChatInterf
                 )}
               </div>
             ))}
-            <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} className={embedded ? "scroll-mb-40" : undefined} />
           </div>
         )}
       </div>
 
       {/* 入力 */}
       <div
-        className={`px-4 pb-5 pt-1 ${
-          embedded ? 'sticky bottom-0 z-20 bg-cream pt-3' : ''
-        }`}
+        className={
+          embedded
+            ? 'fixed inset-x-0 bottom-0 z-30 border-t border-line/60 bg-cream/95 px-4 pb-3 pt-3 backdrop-blur-sm'
+            : 'px-4 pb-5 pt-1'
+        }
       >
+        {/* 固定バーの中身は、ページ本文と同じ幅に揃える */}
+        <div className={embedded ? 'mx-auto w-full max-w-3xl' : 'contents'}>
         <form
           onSubmit={(e) => { e.preventDefault(); send(inputValue); }}
           className="flex items-center gap-2 rounded-full bg-paper p-2 pl-5 shadow-e2 transition-shadow duration-300 focus-within:shadow-e4"
@@ -369,6 +373,7 @@ export default function ChatInterface({ sessionId, variant = 'app' }: ChatInterf
         <p className="mt-2.5 px-1 text-center text-[10.5px] leading-relaxed text-mute">
           ※ 会話の本文は保存されません。話題・回答状況などの統計のみ匿名で記録し、IR活動の改善に利用します。
         </p>
+        </div>
       </div>
     </div>
   );
