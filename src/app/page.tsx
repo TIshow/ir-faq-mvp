@@ -17,8 +17,10 @@ export default function Home() {
   return (
     <CompanyProvider>
       <div className="relative flex h-screen flex-col bg-cream text-ink">
-        {/* Header */}
-        <header className="relative z-10 flex items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+        {/* Header。企業ピッカーのドロップダウンが本文の上に出るよう、
+            チャット領域より高い z を持たせる（同じ z だと後続の兄弟が上に乗り、
+            ドロップダウンがクリックできなくなる）。 */}
+        <header className="relative z-30 flex items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
           <BrandLogo />
           <CompanyPicker />
         </header>
