@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /** facts.json の1レコード（層1の検証済みファクト） */
-export interface Fact {
+interface Fact {
   ticker: string;
   metric_key: string;
   metric_label_ja: string;
@@ -61,18 +61,18 @@ function allFacts(): Fact[] {
 }
 
 /** 指定企業の、出典を持つファクトだけを返す（出典なしは公開しない）。 */
-export function factsFor(ticker: string): Fact[] {
+function factsFor(ticker: string): Fact[] {
   return allFacts().filter((f) => f.ticker === ticker && !!f.source_doc_label);
 }
 
 /** 数値の整形（サーバ側の _fmt_value と同じ規則: %は小数1桁、それ以外は3桁区切り）。 */
-export function formatValue(value: number, unit: string): string {
+function formatValue(value: number, unit: string): string {
   if (unit === '%') return `${value.toFixed(1)}%`;
   return `${Math.round(value).toLocaleString('ja-JP')}${unit}`;
 }
 
 /** 前年比（同一 metric_key の fiscal_year-1）。前年が無い/ゼロなら null。 */
-export function yoyPercent(facts: Fact[], target: Fact): number | null {
+function yoyPercent(facts: Fact[], target: Fact): number | null {
   const prev = facts.find(
     (f) =>
       f.metric_key === target.metric_key &&
@@ -84,7 +84,7 @@ export function yoyPercent(facts: Fact[], target: Fact): number | null {
 }
 
 /** 前年比の表示（+58.3% / △6.0%）。 */
-export function formatYoy(pct: number): string {
+function formatYoy(pct: number): string {
   return pct >= 0 ? `+${pct.toFixed(1)}%` : `△${Math.abs(pct).toFixed(1)}%`;
 }
 
@@ -98,7 +98,7 @@ function anchorId(metricKey: string, period: string): string {
  * 不明な企業は層1のラベル（2026FY）のまま出す（勝手に決算月を推測しない）。
  * 投資家もAIも「2026年3月期の営業利益は？」と尋ねるため、分かる場合は日本語表記が望ましい。
  */
-export function periodLabel(raw: string, fiscalYearEndMonth?: number): string {
+function periodLabel(raw: string, fiscalYearEndMonth?: number): string {
   const m = /^(\d{4})FY$/.exec(raw);
   if (!m || !fiscalYearEndMonth) return raw;
   return `${m[1]}年${fiscalYearEndMonth}月期`;
@@ -181,18 +181,26 @@ export function buildNumericQa(ticker: string, fiscalYearEndMonth?: number): Pub
   return qa;
 }
 
-/** トップ画面のティッカー表示用（クライアントに渡す最小の形）。 */
+/** 企業を指す最小の形（Company 全体を要求しない＝呼び出しが軽い）。 */
+type CompanyRef = { ticker?: string; fiscalYearEndMonth?: number };
+
+/** 「おもな数字」1項目。 */
 export interface HeadlineNumber {
   label: string;
   value: string;
   yoy: string | null;
 }
 
+/** ある企業の「おもな数字」ひとまとまり。UI側もこの型を使う（手書きの複製を作らない）。 */
+export interface CompanyHeadline {
+  period: string;
+  qaCount: number;
+  numbers: HeadlineNumber[];
+}
+
 /** 「おもな数字」（層1の検証済み実績・最新期の上位3項目）をティッカー別に返す。 */
-export function headlineNumbersByTicker(
-  companies: { ticker?: string; fiscalYearEndMonth?: number }[],
-): Record<string, { period: string; qaCount: number; numbers: HeadlineNumber[] }> {
-  const out: Record<string, { period: string; qaCount: number; numbers: HeadlineNumber[] }> = {};
+export function headlineNumbersByTicker(companies: CompanyRef[]): Record<string, CompanyHeadline> {
+  const out: Record<string, CompanyHeadline> = {};
   for (const { ticker, fiscalYearEndMonth } of companies) {
     if (!ticker) continue;
     const facts = factsFor(ticker);
@@ -215,25 +223,22 @@ export function headlineNumbersByTicker(
   return out;
 }
 
+/** その企業の「おもな数字」。層1が無ければ undefined。 */
+export function companyHeadline(company: CompanyRef): CompanyHeadline | undefined {
+  return company.ticker ? headlineNumbersByTicker([company])[company.ticker] : undefined;
+}
+
 /**
- * 公式Q&Aをティッカー別に返す（銘柄URL `/c/<ticker>` 用）。
+ * その企業の公式Q&A。層1が無ければ空配列。
  * サーバー側で解決してチャットに渡すことで、パネルが閉じていてもそのURLのHTMLに
  * 質問＋答え全文が載る＝JSを実行しないAIクローラーが読める。
  */
-export function qaByTicker(
-  companies: { ticker?: string; fiscalYearEndMonth?: number }[],
-): Record<string, PublicQa[]> {
-  const out: Record<string, PublicQa[]> = {};
-  for (const c of companies) {
-    if (!c.ticker) continue;
-    const qa = buildNumericQa(c.ticker, c.fiscalYearEndMonth);
-    if (qa.length > 0) out[c.ticker] = qa;
-  }
-  return out;
+export function companyQa(company: CompanyRef): PublicQa[] {
+  return company.ticker ? buildNumericQa(company.ticker, company.fiscalYearEndMonth) : [];
 }
 
 /** 「参考：直近期の主要数値」に出す実績（最新期のみ・脇役として少数） */
-export function latestHeadlineFacts(ticker: string): Fact[] {
+function latestHeadlineFacts(ticker: string): Fact[] {
   const facts = factsFor(ticker);
   const out: Fact[] = [];
   for (const key of HEADLINE_METRICS) {

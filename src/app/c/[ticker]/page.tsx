@@ -18,11 +18,11 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import ChatInterface from '@/components/ChatInterface';
-import { CompanyProvider } from '@/contexts/CompanyContext';
 import { CompanyPicker } from '@/components/CompanyPicker';
+import { RememberCompany } from '@/components/RememberCompany';
 import { BrandLogo } from '@/components/BrandLogo';
 import { getActiveCompanies, companyShortName, type Company } from '@/config/companies';
-import { buildNumericQa, headlineNumbersByTicker, qaByTicker } from '@/lib/public-facts';
+import { companyHeadline, companyQa } from '@/lib/public-facts';
 
 /** 静的生成（Phase 1: デプロイ時のみ生成・実行時のクエリはゼロ） */
 export const dynamic = 'force-static';
@@ -63,15 +63,15 @@ export default async function CompanyChatPage({
 
   const short = companyShortName(company.name);
   // この企業ぶんだけをサーバーで用意する＝このURLのHTMLに答え全文が載る
-  const qa = qaByTicker([company]);
-  const headline = headlineNumbersByTicker([company]);
+  const qa = companyQa(company);
+  const headline = companyHeadline(company);
 
   // 機械専用の経路: schema.org/FAQPage に答え全文を入れる
   const faqJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
     name: `${company.name}の公式Q&A`,
-    mainEntity: buildNumericQa(ticker, company.fiscalYearEndMonth).map((q) => ({
+    mainEntity: qa.map((q) => ({
       '@type': 'Question',
       name: q.question,
       acceptedAnswer: { '@type': 'Answer', text: q.answer },
@@ -88,35 +88,36 @@ export default async function CompanyChatPage({
   };
 
   return (
-    <CompanyProvider initialCompanyId={company.id}>
-      <div className="relative flex h-screen flex-col bg-cream text-ink">
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
-        />
+    <div className="relative flex h-screen flex-col bg-cream text-ink">
+      {/* 「前回みていた銘柄」を覚える（トップの「続きから」が読む）。描画はしない */}
+      <RememberCompany companyId={company.id} />
 
-        {/* このURLが何のページかを機械にも人（スクリーンリーダー）にも明示する。
-            画面ではチャットの見出しが同じ役割を果たすので視覚的には出さない。 */}
-        <h1 className="sr-only">
-          {`${company.name}（証券コード ${ticker}）の公式Q&A — ${short}の開示済み情報にもとづく、出典つきの回答`}
-        </h1>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
+      />
 
-        {/* Header。企業ピッカーのドロップダウンが本文の上に出るよう、
-            チャット領域より高い z を持たせる。 */}
-        <header className="relative z-30 flex items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
-          <BrandLogo />
-          <CompanyPicker />
-        </header>
+      {/* このURLが何のページかを機械にも人（スクリーンリーダー）にも明示する。
+          画面ではチャットの見出しが同じ役割を果たすので視覚的には出さない。 */}
+      <h1 className="sr-only">
+        {`${company.name}（証券コード ${ticker}）の公式Q&A — ${short}の開示済み情報にもとづく、出典つきの回答`}
+      </h1>
 
-        {/* z-index は付けない（理由は / と同じ: Q&Aパネルをヘッダーより上に出すため） */}
-        <div className="relative flex-1 overflow-hidden">
-          <ChatInterface headline={headline} qa={qa} />
-        </div>
+      {/* Header。企業ピッカーのドロップダウンが本文の上に出るよう、
+          チャット領域より高い z を持たせる。 */}
+      <header className="relative z-30 flex items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+        <BrandLogo />
+        <CompanyPicker selected={company} />
+      </header>
+
+      {/* z-index は付けない（理由は / と同じ: Q&Aパネルをヘッダーより上に出すため） */}
+      <div className="relative flex-1 overflow-hidden">
+        <ChatInterface company={company} headline={headline} qa={qa} />
       </div>
-    </CompanyProvider>
+    </div>
   );
 }

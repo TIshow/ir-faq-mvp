@@ -1,14 +1,13 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useCompany } from '@/contexts/CompanyContext';
-import { companyShortName } from '@/config/companies';
+import { companyShortName, type Company } from '@/config/companies';
 import { AgentResponse } from '@/lib/agent-types';
 import { AgentAnswer } from '@/components/FactCard';
 import { Markdown } from '@/components/Markdown';
 import { NaruhodoMark } from '@/components/BrandLogo';
 import { QaPanel } from '@/components/QaPanel';
-import type { PublicQa } from '@/lib/public-facts';
+import type { CompanyHeadline, PublicQa } from '@/lib/public-facts';
 
 // ガイド付き入口（企業はピッカーで選択するため企業名は含めない＝スコープ安全）
 const GUIDED_ENTRIES = [
@@ -135,19 +134,18 @@ interface Message {
 }
 
 interface ChatInterfaceProps {
+  /** 対象企業。銘柄URL（/c/<ticker>）がサーバー側で確定させて渡す。
+   *  クライアントで選ばせないので「未選択」の状態は存在しない。 */
+  company: Company;
   sessionId?: string;
-  /** 全企業ぶんの「おもな数字」（層1の検証済み実績）。トップ画面の初期状態で表示する。
-   *  企業の選択はクライアント側で決まるため、サーバが全社ぶんを渡しておく。 */
-  headline?: Record<
-    string,
-    { period: string; qaCount: number; numbers: { label: string; value: string; yoy: string | null }[] }
-  >;
-  /** 公式Q&A（層1から決定論で組み立て済み）。ティッカー別。
+  /** この企業の「おもな数字」（層1の検証済み実績）。層1が無い企業では undefined。 */
+  headline?: CompanyHeadline;
+  /** この企業の公式Q&A（層1から決定論で組み立て済み）。
    *  サイドパネルに常時描画され、閉じている間もHTMLに答え全文が載る＝AIの引用元になる。 */
-  qa?: Record<string, PublicQa[]>;
+  qa?: PublicQa[];
 }
 
-export default function ChatInterface({ sessionId, headline = {}, qa = {} }: ChatInterfaceProps) {
+export default function ChatInterface({ company, sessionId, headline, qa = [] }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -156,10 +154,9 @@ export default function ChatInterface({ sessionId, headline = {}, qa = {} }: Cha
   const [qaOpen, setQaOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { selectedCompany } = useCompany();
 
   // 企業固有のガイドチップがあれば優先、無ければ汎用にフォールバック
-  const chips = selectedCompany?.guidedQuestions ?? GUIDED_ENTRIES;
+  const chips = company.guidedQuestions ?? GUIDED_ENTRIES;
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
@@ -186,7 +183,6 @@ export default function ChatInterface({ sessionId, headline = {}, qa = {} }: Cha
   const send = async (text: string) => {
     const q = text.trim();
     if (!q || isLoading) return;
-    if (!selectedCompany) { alert('銘柄を選択してから質問してください。'); return; }
 
     // 短期メモリ: 直近の会話履歴を同梱（サーバはステートレス＝毎回受け取って使い捨て）。
     // フォロー質問（「なんで？」等）をエージェント側で自己完結クエリに書き換えるのに使う。
@@ -208,7 +204,7 @@ export default function ChatInterface({ sessionId, headline = {}, qa = {} }: Cha
       const res = await fetch('/api/chat/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: q, companyId: selectedCompany.id, sessionId: currentSessionId, history, audience }),
+        body: JSON.stringify({ message: q, companyId: company.id, sessionId: currentSessionId, history, audience }),
       });
       if (!res.ok || !res.body) throw new Error('Chat request failed');
 
@@ -256,7 +252,7 @@ export default function ChatInterface({ sessionId, headline = {}, qa = {} }: Cha
   // 「IR窓口へ問い合わせる」を押したときだけ、その質問を IR要対応として記録する
   // （自動エスカレでは記録しない＝要対応一覧の肥大化を防ぐ）。状態はメッセージ内インライン表示。
   const handleContactIR = async (messageId: string, question: string) => {
-    if (!selectedCompany || !question) return;
+    if (!question) return;
     const msg = messages.find((m) => m.id === messageId);
     if (msg?.irContactStatus === 'sending' || msg?.irContactStatus === 'sent') return; // 二重送信防止
     patchMessage(messageId, { irContactStatus: 'sending' });
@@ -264,7 +260,7 @@ export default function ChatInterface({ sessionId, headline = {}, qa = {} }: Cha
       const res = await fetch('/api/ir/contact/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId: selectedCompany.id, question }),
+        body: JSON.stringify({ companyId: company.id, question }),
       });
       if (!res.ok) throw new Error(String(res.status));
       patchMessage(messageId, { irContactStatus: 'sent' });
@@ -273,8 +269,6 @@ export default function ChatInterface({ sessionId, headline = {}, qa = {} }: Cha
       patchMessage(messageId, { irContactStatus: 'error' }); // 再送可能（ボタンに戻す）
     }
   };
-
-  const companyQa = selectedCompany?.ticker ? (qa[selectedCompany.ticker] ?? []) : [];
 
   return (
     /* デスクトップでは右にQ&Aパネルが生えて二画面になる。パネルは常時DOMにあり、
@@ -285,12 +279,8 @@ export default function ChatInterface({ sessionId, headline = {}, qa = {} }: Cha
       <div className="flex items-center justify-between gap-3 px-4 py-2.5">
         {/* 企業名はヘッダーのピッカーにも出るため、狭い画面ではラベルを隠して潰れを防ぐ */}
         <span className="hidden items-center gap-2 truncate text-sm text-mute sm:flex">
-          {selectedCompany ? (
-            <>
-              <span className="h-2 w-2 rounded-full bg-pop" />
-              <span className="truncate font-medium text-ink-soft">{companyShortName(selectedCompany.name)} のIR情報</span>
-            </>
-          ) : '銘柄を選択してください'}
+          <span className="h-2 w-2 rounded-full bg-pop" />
+          <span className="truncate font-medium text-ink-soft">{`${companyShortName(company.name)} のIR情報`}</span>
         </span>
         <div className="flex shrink-0 items-center gap-2">
           {/* 読者レベル: 説明のかみ砕き方だけが変わる（専門性は同じ） */}
@@ -332,19 +322,11 @@ export default function ChatInterface({ sessionId, headline = {}, qa = {} }: Cha
                質問をタップするとそのまま送信される。 */
             <div className="mx-auto flex w-full max-w-3xl flex-col px-2 py-6">
               <h2 className="font-round text-[28px] font-black leading-[1.45] tracking-tight text-ink sm:text-[34px]">
-                {selectedCompany ? (
-                  <>
-                    {companyShortName(selectedCompany.name)}
-                    <span className="font-num text-[0.7em] font-semibold text-mute">
-                      {`（${selectedCompany.ticker}）`}
-                    </span>
-                    の IR に <span className="mk">なるほど！</span>
-                  </>
-                ) : (
-                  <>
-                    銘柄を選んで <span className="mk">なるほど！</span>
-                  </>
-                )}
+                {companyShortName(company.name)}
+                <span className="font-num text-[0.7em] font-semibold text-mute">
+                  {`（${company.ticker}）`}
+                </span>
+                の IR に <span className="mk">なるほど！</span>
               </h2>
 
               {/* 吹き出しガーデン */}
@@ -357,21 +339,21 @@ export default function ChatInterface({ sessionId, headline = {}, qa = {} }: Cha
                     key={entry}
                     rank={i}
                     text={entry}
-                    disabled={!selectedCompany || isLoading}
-                    onSelect={() => (selectedCompany ? send(entry) : inputRef.current?.focus())}
+                    disabled={isLoading}
+                    onSelect={() => send(entry)}
                   />
                 ))}
               </div>
 
               {/* おもな数字（層1の検証済み実績）＋公式Q&Aへの導線 */}
-              {selectedCompany?.ticker && headline[selectedCompany.ticker] && (
+              {headline && (
                 <div className="mt-7 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-3xl bg-paper px-6 py-4 shadow-e2">
                   <div className="text-[10.5px] font-bold leading-[1.6] text-mute">
-                    {headline[selectedCompany.ticker].period}
+                    {headline.period}
                     <br />
                     おもな数字
                   </div>
-                  {headline[selectedCompany.ticker].numbers.map((n) => (
+                  {headline.numbers.map((n) => (
                     <div key={n.label}>
                       <div className="text-[10.5px] font-medium text-mute">{n.label}</div>
                       <div className="font-num mt-0.5 text-[19px] font-bold text-ink">
@@ -392,7 +374,7 @@ export default function ChatInterface({ sessionId, headline = {}, qa = {} }: Cha
                     onClick={() => setQaOpen(true)}
                     className="ml-auto border-b-[1.5px] border-line pb-0.5 text-[10.5px] font-bold text-mute transition hover:border-ink hover:text-ink"
                   >
-                    {`公式Q&A ${headline[selectedCompany.ticker].qaCount}件をみる →`}
+                    {`公式Q&A ${headline.qaCount}件をみる →`}
                   </button>
                 </div>
               )}
@@ -455,13 +437,13 @@ export default function ChatInterface({ sessionId, headline = {}, qa = {} }: Cha
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder={selectedCompany ? `${companyShortName(selectedCompany.name)}について質問する…` : '銘柄を選択してください'}
-            disabled={isLoading || !selectedCompany}
+            placeholder={`${companyShortName(company.name)}について質問する…`}
+            disabled={isLoading}
             className="flex-1 bg-transparent text-sm font-medium text-ink placeholder:text-mute focus:outline-none disabled:cursor-not-allowed"
           />
           <button
             type="submit"
-            disabled={!inputValue.trim() || isLoading || !selectedCompany}
+            disabled={!inputValue.trim() || isLoading}
             aria-label="送信"
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-pop text-white transition hover:bg-pop-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute"
           >
@@ -479,9 +461,9 @@ export default function ChatInterface({ sessionId, headline = {}, qa = {} }: Cha
       </div>
 
       <QaPanel
-        qa={companyQa}
-        companyName={selectedCompany ? companyShortName(selectedCompany.name) : ''}
-        open={qaOpen && companyQa.length > 0}
+        qa={qa}
+        companyName={companyShortName(company.name)}
+        open={qaOpen && qa.length > 0}
         onClose={() => setQaOpen(false)}
         onAsk={(question) => {
           setQaOpen(false); // スマホでは全面を覆っているので、送る前に閉じる

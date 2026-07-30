@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { useCompany } from '@/contexts/CompanyContext';
-import { Company, companyShortName } from '@/config/companies';
+import { useRouter } from 'next/navigation';
+import { Company, companyShortName, getActiveCompanies } from '@/config/companies';
 
 // 銘柄ごとのモノグラム配色（ポップな塗りつぶしスクエア）
 const MONO = [
@@ -14,22 +13,17 @@ const MONO = [
   'bg-pop-soft text-ink',
 ];
 
-export const CompanyPicker: React.FC = () => {
-  const { selectedCompany, setSelectedCompany, companies } = useCompany();
+/** 銘柄URL（/c/<ticker>）のヘッダーに置く切替。選ぶと**URLごと移動**する
+ *  （状態だけ変えるとURLと中身が食い違い、AIに引用されたURLの意味が壊れる）。 */
+export const CompanyPicker: React.FC<{ selected: Company }> = ({ selected }) => {
+  const companies = getActiveCompanies();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  const pathname = usePathname();
 
-  // 銘柄URL（/c/7561）ではURLが企業を決めているので、選び直したらURLごと移動する
-  // （そのまま状態だけ変えるとURLと中身が食い違い、AIに引用されたURLの意味が壊れる）。
   const onPickedCompany = (c: Company) => {
     setOpen(false);
-    if (pathname?.startsWith('/c/') && c.ticker) {
-      router.push(`/c/${c.ticker}/`);
-      return;
-    }
-    setSelectedCompany(c);
+    if (c.ticker) router.push(`/c/${c.ticker}/`);
   };
 
   useEffect(() => {
@@ -65,21 +59,15 @@ export const CompanyPicker: React.FC = () => {
         aria-expanded={open}
         className="group flex items-center gap-2.5 rounded-full bg-paper py-1.5 pl-2 pr-3 text-left shadow-e1 transition hover:shadow-e3"
       >
-        {selectedCompany ? (
-          <>
-            <Monogram c={selectedCompany} size="h-7 w-7 text-xs" />
-            <span className="min-w-0">
-              <span className="block max-w-[9rem] truncate text-sm font-bold leading-tight text-ink">
-                {companyShortName(selectedCompany.name)}
-              </span>
-              <span className="font-num block text-[11px] font-semibold leading-tight text-mute">
-                {selectedCompany.ticker}
-              </span>
-            </span>
-          </>
-        ) : (
-          <span className="px-1 text-sm font-bold text-ink-soft">銘柄を選択</span>
-        )}
+        <Monogram c={selected} size="h-7 w-7 text-xs" />
+        <span className="min-w-0">
+          <span className="block max-w-[9rem] truncate text-sm font-bold leading-tight text-ink">
+            {companyShortName(selected.name)}
+          </span>
+          <span className="font-num block text-[11px] font-semibold leading-tight text-mute">
+            {selected.ticker}
+          </span>
+        </span>
         <svg
           className={`h-4 w-4 text-mute transition group-hover:text-ink ${open ? 'rotate-180' : ''}`}
           viewBox="0 0 20 20" fill="currentColor"
@@ -95,7 +83,7 @@ export const CompanyPicker: React.FC = () => {
           </div>
           <ul className="p-1.5" role="listbox">
             {companies.map((c) => {
-              const sel = selectedCompany?.id === c.id;
+              const sel = selected.id === c.id;
               return (
                 <li key={c.id}>
                   <button

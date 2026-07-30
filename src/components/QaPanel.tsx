@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import type { PublicQa } from '@/lib/public-facts';
 
 /**
@@ -28,6 +29,18 @@ export function QaPanel({
   /** Q&Aをチャットで深掘りする（スマホではパネルを閉じてから送る） */
   onAsk: (question: string) => void;
 }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Escape で閉じる。スマホでは全面を覆うので、閉じる手段が「閉じる」ボタンだけだと詰む。
+  useEffect(() => {
+    if (!open) return;
+    const onEsc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onEsc);
+    // 開いたらパネル内にフォーカスを移す（キーボード操作がチャット側に取り残されない）
+    closeRef.current?.focus();
+    return () => document.removeEventListener('keydown', onEsc);
+  }, [open, onClose]);
+
   return (
     <aside
       // 閉じている間はフォーカスも当たらないようにする（DOMには残す）
@@ -44,6 +57,7 @@ export function QaPanel({
             <span className="ml-2 text-[11px] font-bold text-mute">{`${qa.length}件`}</span>
           </h2>
           <button
+            ref={closeRef}
             onClick={onClose}
             aria-label="公式Q&Aを閉じる"
             className="shrink-0 rounded-full border-[1.5px] border-line bg-paper px-3 py-1 text-xs font-bold text-ink-soft transition hover:border-ink hover:text-ink"

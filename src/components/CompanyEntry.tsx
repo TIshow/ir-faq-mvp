@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getCompanyById, companyShortName, type Company } from '@/config/companies';
+import { readLastCompany } from '@/lib/last-company';
 
 /**
  * トップ（`/`）の入口まわりで、ブラウザにしか無い情報だけを扱う小さなクライアント部品。
@@ -26,8 +27,8 @@ export function CompanyEntry() {
         router.replace(`/c/${fromUrl.ticker}/`);
         return;
       }
-      const saved = getCompanyById(localStorage.getItem('selectedCompanyId') ?? '');
-      if (saved?.isActive && saved.ticker) setLast(saved);
+      const saved = readLastCompany();
+      if (saved?.ticker) setLast(saved);
     } catch {
       /* private mode 等は無視（「続きから」が出ないだけ） */
     }
