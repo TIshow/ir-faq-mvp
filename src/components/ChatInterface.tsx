@@ -33,7 +33,13 @@ const LEGACY_AUDIENCE: Record<string, Audience> = {
 
 /**
  * 吹き出しガーデンの「よく聞かれる順」階層（claude.ai/design「Naruhodo IR Home」）。
- * 上位ほど大きく・濃く・単独行で目立つ。順位は index で決まる＝決定論。
+ * 上位ほど大きく・濃い。順位は index で決まる＝決定論。色の並びはデザイン準拠
+ * （インク → グリーン → 白 → イエロー → 白 → コーラル → 破線）。
+ *
+ * デザインは各カードを回転させているが、**実装では回さない**（可読性を優先）。
+ * 代わりに配置で散らす: カードは文字量ぶんの幅で折り返し配置し、順位ごとに
+ * 上限幅（width）と上マージン（offset）を変えて縦位置に段差をつける。
+ * 段差は sm 以上だけ（スマホは1列に積むので、段差があると崩れて見える）。
  *
  * **件数（「N人が質問」）は出さない**: 会話の本文をどこにも保存していないため
  * 質問単位の集計は存在せず、数字を書けば捏造になる（プライバシー設計 CLAUDE.md）。
@@ -41,17 +47,53 @@ const LEGACY_AUDIENCE: Record<string, Audience> = {
  * 実績データ（BigQuery interactions.topic の話題別件数）での並べ替えは #113 段階C。
  */
 const BUBBLE_STYLES = [
-  // 1位: 単独行・最大・インク面。ここだけで「一番聞かれている」と伝わる大きさにする
-  { box: 'basis-full bg-ink px-7 py-6 shadow-e3', text: 'text-cream text-[21px] sm:text-[25px]', radius: 'rounded-[34px] rounded-bl-xl', rotate: '-rotate-1' },
-  { box: 'bg-pop px-6 py-5 shadow-e3', text: 'text-cream text-[17px] sm:text-[18.5px]', radius: 'rounded-[30px] rounded-br-lg', rotate: 'rotate-2' },
-  { box: 'bg-sun px-6 py-5 shadow-e2', text: 'text-ink text-[16px] sm:text-[17px]', radius: 'rounded-[30px] rounded-tr-lg', rotate: '-rotate-2' },
-  { box: 'bg-paper px-5 py-4 shadow-e2', text: 'text-ink text-[14.5px]', radius: 'rounded-[26px] rounded-bl-lg', rotate: 'rotate-3' },
-  { box: 'bg-paper px-5 py-4 shadow-e2', text: 'text-ink text-[14.5px]', radius: 'rounded-[26px] rounded-br-lg', rotate: '-rotate-1' },
-  { box: 'bg-coral/20 px-4 py-3.5 shadow-e1', text: 'text-ink text-[13.5px]', radius: 'rounded-[24px] rounded-bl-lg', rotate: 'rotate-2' },
-  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[12.5px]', radius: 'rounded-[22px] rounded-bl-lg', rotate: '-rotate-2' },
-  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[12.5px]', radius: 'rounded-[22px] rounded-br-lg', rotate: 'rotate-[1.5deg]' },
-  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[12.5px]', radius: 'rounded-[22px] rounded-tr-lg', rotate: '-rotate-[2.5deg]' },
+  { box: 'bg-ink px-6 py-5 shadow-e3', text: 'text-cream text-[19px] sm:text-[22px]', radius: 'rounded-[30px] rounded-bl-lg', width: 'sm:max-w-[21rem]', offset: '' },
+  { box: 'bg-pop px-5 py-4 shadow-e3', text: 'text-cream text-[15.5px] sm:text-[18px]', radius: 'rounded-[28px] rounded-br-lg', width: 'sm:max-w-[17rem]', offset: 'sm:mt-5' },
+  { box: 'bg-paper px-5 py-4 shadow-e2', text: 'text-ink text-[14px] sm:text-[16px]', radius: 'rounded-[26px] rounded-bl-lg', width: 'sm:max-w-[14rem]', offset: '' },
+  { box: 'bg-sun px-5 py-4 shadow-e2', text: 'text-ink text-[14px] sm:text-[16.5px]', radius: 'rounded-[26px] rounded-tr-lg', width: 'sm:max-w-[15rem]', offset: 'sm:mt-4' },
+  { box: 'bg-paper px-5 py-4 shadow-e2', text: 'text-ink text-[13.5px] sm:text-[15px]', radius: 'rounded-[26px] rounded-br-lg', width: 'sm:max-w-[18rem]', offset: 'sm:mt-2' },
+  { box: 'bg-coral/20 px-4 py-3.5 shadow-e2', text: 'text-ink text-[13px] sm:text-[14.5px]', radius: 'rounded-[24px] rounded-bl-lg', width: 'sm:max-w-[13.5rem]', offset: '' },
+  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[13px] sm:text-[14px]', radius: 'rounded-[22px] rounded-bl-lg', width: 'sm:max-w-[13rem]', offset: 'sm:mt-6' },
+  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[13px] sm:text-[14px]', radius: 'rounded-[22px] rounded-br-lg', width: 'sm:max-w-[14rem]', offset: 'sm:mt-4' },
+  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[13px] sm:text-[14px]', radius: 'rounded-[22px] rounded-tr-lg', width: 'sm:max-w-[13rem]', offset: 'sm:mt-1' },
 ] as const;
+
+/**
+ * 吹き出し1つ。順位（0起点）で大きさ・色・吹き出しの向き（角の落とし方）・
+ * 上限幅・縦の段差がすべて決まる＝決定論。
+ */
+function Bubble({
+  rank,
+  text,
+  onSelect,
+  disabled,
+}: {
+  rank: number;
+  text: string;
+  onSelect: () => void;
+  disabled: boolean;
+}) {
+  const s = BUBBLE_STYLES[Math.min(rank, BUBBLE_STYLES.length - 1)];
+  return (
+    <button
+      onClick={onSelect}
+      disabled={disabled}
+      style={{ animationDelay: `${rank * 380}ms` }}
+      className={`animate-bubble-float max-w-full text-left transition-transform duration-200 hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-40 ${s.box} ${s.radius} ${s.width} ${s.offset}`}
+    >
+      {rank === 0 && (
+        <span className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-black tracking-wide text-pop-soft">
+          <NaruhodoMark height={13} />
+          いちばん聞かれています
+        </span>
+      )}
+      {/* text-balance: 「…比べてど / う？」のような不格好な行割れを防ぐ */}
+      <span className={`font-round block text-balance font-black leading-[1.6] ${s.text}`}>
+        {text}
+      </span>
+    </button>
+  );
+}
 
 /** A1: 進行段階の実況ラベル（SSE 'status' イベント）。実際のパイプライン工程に対応。 */
 const STAGE_LABELS: Record<string, string> = {
@@ -327,27 +369,18 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
 
               {/* 吹き出しガーデン */}
               <h3 className="font-round mt-7 text-[15px] font-black text-ink">よく聞かれる質問</h3>
+              {/* カードは文字量ぶんの幅で並び、順位ごとの上マージンで縦位置がずれる
+                  （＝デザインの散らし配置。回転はかけない） */}
               <div className="mt-3.5 flex flex-wrap items-start gap-3">
-                {chips.map((entry, i) => {
-                  const s = BUBBLE_STYLES[i % BUBBLE_STYLES.length];
-                  return (
-                    <button
-                      key={entry}
-                      onClick={() => (selectedCompany ? send(entry) : inputRef.current?.focus())}
-                      disabled={!selectedCompany || isLoading}
-                      style={{ animationDelay: `${i * 400}ms` }}
-                      className={`animate-bubble-float max-w-full text-left transition-transform duration-200 hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-40 ${s.rotate} ${s.box} ${s.radius}`}
-                    >
-                      {i === 0 && (
-                        <span className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-black tracking-wide text-pop-soft">
-                          <NaruhodoMark height={13} />
-                          いちばん聞かれています
-                        </span>
-                      )}
-                      <span className={`font-round block font-black leading-[1.6] ${s.text}`}>{entry}</span>
-                    </button>
-                  );
-                })}
+                {chips.map((entry, i) => (
+                  <Bubble
+                    key={entry}
+                    rank={i}
+                    text={entry}
+                    disabled={!selectedCompany || isLoading}
+                    onSelect={() => (selectedCompany ? send(entry) : inputRef.current?.focus())}
+                  />
+                ))}
               </div>
 
               {/* おもな数字（層1の検証済み実績）＋公式Q&Aへの導線 */}
