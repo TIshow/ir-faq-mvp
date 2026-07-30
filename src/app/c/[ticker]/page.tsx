@@ -154,19 +154,14 @@ export default async function CompanyQaPage({ params }: { params: Promise<{ tick
         </section>
       )}
 
-      {/* もっと詳しく聞く＝チャット本体。
-          投資家がこのページに来る理由は「数字を見る」ではなく「その先を知りたい」から
-          （数字だけなら四季報で足りる）。したがってチャットはリンク先の予備機能ではなく、
+      {/* チャット本体。投資家がこのページに来る理由は「数字を見る」ではなく「その先を知りたい」
+          から（数字だけなら四季報で足りる）。したがってチャットはリンク先の予備機能ではなく、
           このページに全幅で置く。入力バーは画面下端に貼り付き、常に「聞ける状態」で見えている。 */}
-      <section className="mt-10 border-t-2 border-dashed border-line pt-8">
-        <h2 className="font-round text-[15px] font-black text-ink">もっと詳しく聞く</h2>
-        <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
-          「なぜ増益なのか」「セグメントごとの背景は」など、開示資料にもとづいて対話で深掘りできます。
-        </p>
-      </section>
-      <CompanyProvider initialCompanyId={company.id}>
-        <ChatInterface variant="page" />
-      </CompanyProvider>
+      <div className="mt-10 border-t-2 border-dashed border-line pt-6">
+        <CompanyProvider initialCompanyId={company.id}>
+          <ChatInterface variant="page" />
+        </CompanyProvider>
+      </div>
 
       <footer className="mt-6 px-4 text-[10.5px] leading-relaxed text-mute">
         <p>
