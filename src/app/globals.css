@@ -133,6 +133,13 @@ button:disabled,
   animation: bar-grow 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* 吹き出しガーデン: ゆっくり浮遊する（初期画面が「生きている」感じ） */
+@keyframes bubble-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.animate-bubble-float { animation: bubble-float 7s ease-in-out infinite; }
+
 /* 回答の蔦（つる）: 茎が上から下へ伸び、各カードが枝＋芽で接続される */
 @keyframes stem-grow {
   from { transform: scaleY(0); }
@@ -157,7 +164,8 @@ button:disabled,
   .animate-pop-in,
   .animate-bar-grow,
   .animate-stem-grow,
-  .animate-twig-grow {
+  .animate-twig-grow,
+  .animate-bubble-float {
     animation: none;
   }
 }

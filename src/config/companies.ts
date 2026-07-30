@@ -15,6 +15,9 @@ export interface Company {
   datastoreId: string;           // Discovery Engine データストアID（層2の検索先）
   isActive: boolean;             // 有効/無効
   guidedQuestions?: string[];    // 初期画面のガイドチップ。未設定なら汎用にフォールバック
+  /** 決算期の末月（例: 3 = 3月期）。公開Q&Aページ(#113)で「2026FY」を「2026年3月期」と
+   *  表記するために使う。**出典資料で確認できた企業にだけ設定する**（不明なら未設定＝FY表記のまま）。 */
+  fiscalYearEndMonth?: number;
 }
 
 export const companies: Company[] = [
@@ -63,6 +66,8 @@ export const companies: Company[] = [
     websiteUrl: 'https://www.harx.co.jp/',
     datastoreId: 'harux-ir-data',
     isActive: true,
+    // 層1の出典が「2026年3月期 決算補足説明資料」＝2026FY は 2026年3月期（確認済み）
+    fiscalYearEndMonth: 3,
     guidedQuestions: [
       '営業利益は前年と比べてどう？',
       'セグメント別の売上は？',

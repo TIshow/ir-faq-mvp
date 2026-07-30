@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useCompany } from '@/contexts/CompanyContext';
-import { companyShortName } from '@/config/companies';
+import { companyShortName, type Company } from '@/config/companies';
 import { AgentResponse } from '@/lib/agent-types';
 import { AgentAnswer } from '@/components/FactCard';
 import { Markdown } from '@/components/Markdown';
+import { NaruhodoMark } from '@/components/BrandLogo';
+import { QaPanel } from '@/components/QaPanel';
+import type { CompanyHeadline, PublicQa } from '@/lib/public-facts';
 
 // ガイド付き入口（企業はピッカーで選択するため企業名は含めない＝スコープ安全）
 const GUIDED_ENTRIES = [
@@ -29,6 +31,70 @@ const LEGACY_AUDIENCE: Record<string, Audience> = {
   intermediate: 'standard',
   advanced: 'standard',
 };
+
+/**
+ * 吹き出しガーデンの「よく聞かれる順」階層（claude.ai/design「Naruhodo IR Home」）。
+ * 上位ほど大きく・濃い。順位は index で決まる＝決定論。色の並びはデザイン準拠
+ * （インク → グリーン → 白 → イエロー → 白 → コーラル → 破線）。
+ *
+ * デザインは各カードを回転させているが、**実装では回さない**（可読性を優先）。
+ * 代わりに配置で散らす: カードは文字量ぶんの幅で折り返し配置し、順位ごとに
+ * 上限幅（width）と上マージン（offset）を変えて縦位置に段差をつける。
+ * 段差は sm 以上だけ（スマホは1列に積むので、段差があると崩れて見える）。
+ *
+ * **件数（「N人が質問」）は出さない**: 会話の本文をどこにも保存していないため
+ * 質問単位の集計は存在せず、数字を書けば捏造になる（プライバシー設計 CLAUDE.md）。
+ * 現在の並びは `companies.ts` の guidedQuestions（IR/我々が「よく聞かれる」と判断した順）。
+ * 実績データ（BigQuery interactions.topic の話題別件数）での並べ替えは #113 段階C。
+ */
+const BUBBLE_STYLES = [
+  { box: 'bg-ink px-6 py-5 shadow-e3', text: 'text-cream text-[19px] sm:text-[22px]', radius: 'rounded-[30px] rounded-bl-lg', width: 'sm:max-w-[21rem]', offset: '' },
+  { box: 'bg-pop px-5 py-4 shadow-e3', text: 'text-cream text-[15.5px] sm:text-[18px]', radius: 'rounded-[28px] rounded-br-lg', width: 'sm:max-w-[17rem]', offset: 'sm:mt-5' },
+  { box: 'bg-paper px-5 py-4 shadow-e2', text: 'text-ink text-[14px] sm:text-[16px]', radius: 'rounded-[26px] rounded-bl-lg', width: 'sm:max-w-[14rem]', offset: '' },
+  { box: 'bg-sun px-5 py-4 shadow-e2', text: 'text-ink text-[14px] sm:text-[16.5px]', radius: 'rounded-[26px] rounded-tr-lg', width: 'sm:max-w-[15rem]', offset: 'sm:mt-4' },
+  { box: 'bg-paper px-5 py-4 shadow-e2', text: 'text-ink text-[13.5px] sm:text-[15px]', radius: 'rounded-[26px] rounded-br-lg', width: 'sm:max-w-[18rem]', offset: 'sm:mt-2' },
+  { box: 'bg-coral/20 px-4 py-3.5 shadow-e2', text: 'text-ink text-[13px] sm:text-[14.5px]', radius: 'rounded-[24px] rounded-bl-lg', width: 'sm:max-w-[13.5rem]', offset: '' },
+  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[13px] sm:text-[14px]', radius: 'rounded-[22px] rounded-bl-lg', width: 'sm:max-w-[13rem]', offset: 'sm:mt-6' },
+  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[13px] sm:text-[14px]', radius: 'rounded-[22px] rounded-br-lg', width: 'sm:max-w-[14rem]', offset: 'sm:mt-4' },
+  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[13px] sm:text-[14px]', radius: 'rounded-[22px] rounded-tr-lg', width: 'sm:max-w-[13rem]', offset: 'sm:mt-1' },
+] as const;
+
+/**
+ * 吹き出し1つ。順位（0起点）で大きさ・色・吹き出しの向き（角の落とし方）・
+ * 上限幅・縦の段差がすべて決まる＝決定論。
+ */
+function Bubble({
+  rank,
+  text,
+  onSelect,
+  disabled,
+}: {
+  rank: number;
+  text: string;
+  onSelect: () => void;
+  disabled: boolean;
+}) {
+  const s = BUBBLE_STYLES[Math.min(rank, BUBBLE_STYLES.length - 1)];
+  return (
+    <button
+      onClick={onSelect}
+      disabled={disabled}
+      style={{ animationDelay: `${rank * 380}ms` }}
+      className={`animate-bubble-float max-w-full text-left transition-transform duration-200 hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-40 ${s.box} ${s.radius} ${s.width} ${s.offset}`}
+    >
+      {rank === 0 && (
+        <span className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-black tracking-wide text-pop-soft">
+          <NaruhodoMark height={13} />
+          いちばん聞かれています
+        </span>
+      )}
+      {/* text-balance: 「…比べてど / う？」のような不格好な行割れを防ぐ */}
+      <span className={`font-round block text-balance font-black leading-[1.6] ${s.text}`}>
+        {text}
+      </span>
+    </button>
+  );
+}
 
 /** A1: 進行段階の実況ラベル（SSE 'status' イベント）。実際のパイプライン工程に対応。 */
 const STAGE_LABELS: Record<string, string> = {
@@ -68,21 +134,29 @@ interface Message {
 }
 
 interface ChatInterfaceProps {
+  /** 対象企業。銘柄URL（/c/<ticker>）がサーバー側で確定させて渡す。
+   *  クライアントで選ばせないので「未選択」の状態は存在しない。 */
+  company: Company;
   sessionId?: string;
+  /** この企業の「おもな数字」（層1の検証済み実績）。層1が無い企業では undefined。 */
+  headline?: CompanyHeadline;
+  /** この企業の公式Q&A（層1から決定論で組み立て済み）。
+   *  サイドパネルに常時描画され、閉じている間もHTMLに答え全文が載る＝AIの引用元になる。 */
+  qa?: PublicQa[];
 }
 
-export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
+export default function ChatInterface({ company, sessionId, headline, qa = [] }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId] = useState<string | undefined>(sessionId);
   const [audience, setAudience] = useState<Audience>('standard');
+  const [qaOpen, setQaOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { selectedCompany } = useCompany();
 
   // 企業固有のガイドチップがあれば優先、無ければ汎用にフォールバック
-  const chips = selectedCompany?.guidedQuestions ?? GUIDED_ENTRIES;
+  const chips = company.guidedQuestions ?? GUIDED_ENTRIES;
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
@@ -109,7 +183,6 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const send = async (text: string) => {
     const q = text.trim();
     if (!q || isLoading) return;
-    if (!selectedCompany) { alert('銘柄を選択してから質問してください。'); return; }
 
     // 短期メモリ: 直近の会話履歴を同梱（サーバはステートレス＝毎回受け取って使い捨て）。
     // フォロー質問（「なんで？」等）をエージェント側で自己完結クエリに書き換えるのに使う。
@@ -131,7 +204,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       const res = await fetch('/api/chat/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: q, companyId: selectedCompany.id, sessionId: currentSessionId, history, audience }),
+        body: JSON.stringify({ message: q, companyId: company.id, sessionId: currentSessionId, history, audience }),
       });
       if (!res.ok || !res.body) throw new Error('Chat request failed');
 
@@ -179,7 +252,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   // 「IR窓口へ問い合わせる」を押したときだけ、その質問を IR要対応として記録する
   // （自動エスカレでは記録しない＝要対応一覧の肥大化を防ぐ）。状態はメッセージ内インライン表示。
   const handleContactIR = async (messageId: string, question: string) => {
-    if (!selectedCompany || !question) return;
+    if (!question) return;
     const msg = messages.find((m) => m.id === messageId);
     if (msg?.irContactStatus === 'sending' || msg?.irContactStatus === 'sent') return; // 二重送信防止
     patchMessage(messageId, { irContactStatus: 'sending' });
@@ -187,7 +260,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       const res = await fetch('/api/ir/contact/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId: selectedCompany.id, question }),
+        body: JSON.stringify({ companyId: company.id, question }),
       });
       if (!res.ok) throw new Error(String(res.status));
       patchMessage(messageId, { irContactStatus: 'sent' });
@@ -198,17 +271,16 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   };
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col lg:max-w-4xl">
+    /* デスクトップでは右にQ&Aパネルが生えて二画面になる。パネルは常時DOMにあり、
+       開閉はCSSのみ（閉じていてもHTMLに答え全文が載る＝AIの引用元になる）。 */
+    <div className="flex h-full w-full min-h-0">
+      <div className="mx-auto flex h-full w-full min-w-0 flex-1 flex-col max-w-3xl lg:max-w-4xl">
       {/* コンテキストバー */}
       <div className="flex items-center justify-between gap-3 px-4 py-2.5">
         {/* 企業名はヘッダーのピッカーにも出るため、狭い画面ではラベルを隠して潰れを防ぐ */}
         <span className="hidden items-center gap-2 truncate text-sm text-mute sm:flex">
-          {selectedCompany ? (
-            <>
-              <span className="h-2 w-2 rounded-full bg-pop" />
-              <span className="truncate font-medium text-ink-soft">{companyShortName(selectedCompany.name)} のIR情報</span>
-            </>
-          ) : '銘柄を選択してください'}
+          <span className="h-2 w-2 rounded-full bg-pop" />
+          <span className="truncate font-medium text-ink-soft">{`${companyShortName(company.name)} のIR情報`}</span>
         </span>
         <div className="flex shrink-0 items-center gap-2">
           {/* 読者レベル: 説明のかみ砕き方だけが変わる（専門性は同じ） */}
@@ -245,30 +317,69 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       {/* メッセージ */}
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center px-2 text-center">
-            <h2 className="font-round text-[26px] font-black leading-snug tracking-tight text-ink">
-              {selectedCompany ? (
-                <>
-                  <span className="mk-green">{companyShortName(selectedCompany.name)}</span> について聞く
-                </>
-              ) : '銘柄を選んで質問しよう'}
-            </h2>
-            <p className="mt-2.5 text-sm font-medium text-ink-soft">
-              開示済みのIR情報を、出典付きでお答えします。
-            </p>
-            <div className="mt-6 flex max-w-xl flex-wrap justify-center gap-2">
-              {chips.map((entry) => (
-                <button
-                  key={entry}
-                  onClick={() => (selectedCompany ? send(entry) : inputRef.current?.focus())}
-                  disabled={!selectedCompany || isLoading}
-                  className="rounded-full border-[1.5px] border-ink bg-paper px-4 py-2 text-[13px] font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {entry}
-                </button>
-              ))}
+          (
+            /* 初期画面＝「吹き出しガーデン」。デザイン: claude.ai/design「Naruhodo IR Home」。
+               質問をタップするとそのまま送信される。 */
+            <div className="mx-auto flex w-full max-w-3xl flex-col px-2 py-6">
+              <h2 className="font-round text-[28px] font-black leading-[1.45] tracking-tight text-ink sm:text-[34px]">
+                {companyShortName(company.name)}
+                <span className="font-num text-[0.7em] font-semibold text-mute">
+                  {`（${company.ticker}）`}
+                </span>
+                の IR に <span className="mk">なるほど！</span>
+              </h2>
+
+              {/* 吹き出しガーデン */}
+              <h3 className="font-round mt-7 text-[15px] font-black text-ink">よく聞かれる質問</h3>
+              {/* カードは文字量ぶんの幅で並び、順位ごとの上マージンで縦位置がずれる
+                  （＝デザインの散らし配置。回転はかけない） */}
+              <div className="mt-3.5 flex flex-wrap items-start gap-3">
+                {chips.map((entry, i) => (
+                  <Bubble
+                    key={entry}
+                    rank={i}
+                    text={entry}
+                    disabled={isLoading}
+                    onSelect={() => send(entry)}
+                  />
+                ))}
+              </div>
+
+              {/* おもな数字（層1の検証済み実績）＋公式Q&Aへの導線 */}
+              {headline && (
+                <div className="mt-7 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-3xl bg-paper px-6 py-4 shadow-e2">
+                  <div className="text-[10.5px] font-bold leading-[1.6] text-mute">
+                    {headline.period}
+                    <br />
+                    おもな数字
+                  </div>
+                  {headline.numbers.map((n) => (
+                    <div key={n.label}>
+                      <div className="text-[10.5px] font-medium text-mute">{n.label}</div>
+                      <div className="font-num mt-0.5 text-[19px] font-bold text-ink">
+                        {n.value}
+                        {n.yoy && (
+                          <span
+                            className={`ml-1.5 text-[11px] font-bold ${
+                              n.yoy.startsWith('+') ? 'text-pop' : 'text-coral-deep'
+                            }`}
+                          >
+                            {n.yoy}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setQaOpen(true)}
+                    className="ml-auto border-b-[1.5px] border-line pb-0.5 text-[10.5px] font-bold text-mute transition hover:border-ink hover:text-ink"
+                  >
+                    {`公式Q&A ${headline.qaCount}件をみる →`}
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
+          )
         ) : (
           <div className="space-y-4 py-2">
             {messages.map((m) => (
@@ -326,13 +437,13 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder={selectedCompany ? `${companyShortName(selectedCompany.name)}について質問する…` : '銘柄を選択してください'}
-            disabled={isLoading || !selectedCompany}
+            placeholder={`${companyShortName(company.name)}について質問する…`}
+            disabled={isLoading}
             className="flex-1 bg-transparent text-sm font-medium text-ink placeholder:text-mute focus:outline-none disabled:cursor-not-allowed"
           />
           <button
             type="submit"
-            disabled={!inputValue.trim() || isLoading || !selectedCompany}
+            disabled={!inputValue.trim() || isLoading}
             aria-label="送信"
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-pop text-white transition hover:bg-pop-deep disabled:cursor-not-allowed disabled:bg-line disabled:text-mute"
           >
@@ -347,6 +458,18 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           ※ 会話の本文は保存されません。話題・回答状況などの統計のみ匿名で記録し、IR活動の改善に利用します。
         </p>
       </div>
+      </div>
+
+      <QaPanel
+        qa={qa}
+        companyName={companyShortName(company.name)}
+        open={qaOpen && qa.length > 0}
+        onClose={() => setQaOpen(false)}
+        onAsk={(question) => {
+          setQaOpen(false); // スマホでは全面を覆っているので、送る前に閉じる
+          send(question);
+        }}
+      />
     </div>
   );
 }
