@@ -181,6 +181,43 @@ export function buildNumericQa(ticker: string, fiscalYearEndMonth?: number): Pub
   return qa;
 }
 
+/** トップ画面のティッカー表示用（クライアントに渡す最小の形）。 */
+export interface HeadlineNumber {
+  label: string;
+  value: string;
+  yoy: string | null;
+}
+
+/**
+ * 全企業ぶんの「おもな数字」をクライアントへ渡せる形で返す。
+ * トップ画面(/)では企業の選択がクライアント側で決まるため、サーバは全社ぶんを
+ * 用意しておく（1社あたり数項目なのでペイロードは小さい）。
+ */
+export function headlineNumbersByTicker(tickers: string[]): Record<
+  string,
+  { period: string; qaCount: number; numbers: HeadlineNumber[] }
+> {
+  const out: Record<string, { period: string; qaCount: number; numbers: HeadlineNumber[] }> = {};
+  for (const ticker of tickers) {
+    const facts = factsFor(ticker);
+    const latest = latestHeadlineFacts(ticker).slice(0, 3); // 売上・営業利益・経常利益あたり
+    if (latest.length === 0) continue;
+    out[ticker] = {
+      period: latest[0].period_label,
+      qaCount: buildNumericQa(ticker).length,
+      numbers: latest.map((f) => {
+        const pct = yoyPercent(facts, f);
+        return {
+          label: f.metric_label_ja,
+          value: formatValue(f.value_numeric, f.unit),
+          yoy: pct === null ? null : formatYoy(pct),
+        };
+      }),
+    };
+  }
+  return out;
+}
+
 /** 「参考：直近期の主要数値」に出す実績（最新期のみ・脇役として少数） */
 export function latestHeadlineFacts(ticker: string): Fact[] {
   const facts = factsFor(ticker);

@@ -6,6 +6,7 @@ import { companyShortName } from '@/config/companies';
 import { AgentResponse } from '@/lib/agent-types';
 import { AgentAnswer } from '@/components/FactCard';
 import { Markdown } from '@/components/Markdown';
+import { NaruhodoMark } from '@/components/BrandLogo';
 
 // ガイド付き入口（企業はピッカーで選択するため企業名は含めない＝スコープ安全）
 const GUIDED_ENTRIES = [
@@ -29,6 +30,24 @@ const LEGACY_AUDIENCE: Record<string, Audience> = {
   intermediate: 'standard',
   advanced: 'standard',
 };
+
+/**
+ * 吹き出しガーデンのスタイル階層（claude.ai/design「Naruhodo IR Home」）。
+ * index で決まる＝決定論。**件数の表示はしない**: 質問文を保存していないため
+ * 「N人が質問」は算出できず、出せば捏造になる（プライバシー設計 CLAUDE.md）。
+ * 大きさは視覚的な階層づけのみで、人気度を主張しない。
+ */
+const BUBBLE_STYLES = [
+  { box: 'bg-ink px-6 py-5 shadow-e3', text: 'text-cream text-[19px] sm:text-[21px]', radius: 'rounded-[30px] rounded-bl-lg', rotate: '-rotate-2' },
+  { box: 'bg-pop px-5 py-4 shadow-e2', text: 'text-cream text-[16px] sm:text-[17px]', radius: 'rounded-[28px] rounded-br-lg', rotate: 'rotate-2' },
+  { box: 'bg-paper px-5 py-4 shadow-e2', text: 'text-ink text-[15px]', radius: 'rounded-[26px] rounded-bl-lg', rotate: '-rotate-3' },
+  { box: 'bg-sun px-5 py-4 shadow-e2', text: 'text-ink text-[15px]', radius: 'rounded-[26px] rounded-tr-lg', rotate: 'rotate-3' },
+  { box: 'bg-paper px-5 py-3.5 shadow-e2', text: 'text-ink text-[14.5px]', radius: 'rounded-[26px] rounded-br-lg', rotate: '-rotate-1' },
+  { box: 'bg-coral/20 px-4 py-3.5 shadow-e1', text: 'text-ink text-[14px]', radius: 'rounded-[24px] rounded-bl-lg', rotate: 'rotate-2' },
+  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[13.5px]', radius: 'rounded-[22px] rounded-bl-lg', rotate: '-rotate-2' },
+  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[13.5px]', radius: 'rounded-[22px] rounded-br-lg', rotate: 'rotate-[1.5deg]' },
+  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[13.5px]', radius: 'rounded-[22px] rounded-tr-lg', rotate: '-rotate-[2.5deg]' },
+] as const;
 
 /** A1: 進行段階の実況ラベル（SSE 'status' イベント）。実際のパイプライン工程に対応。 */
 const STAGE_LABELS: Record<string, string> = {
@@ -69,13 +88,19 @@ interface Message {
 
 interface ChatInterfaceProps {
   sessionId?: string;
+  /** 全企業ぶんの「おもな数字」（層1の検証済み実績）。トップ画面の初期状態で表示する。
+   *  企業の選択はクライアント側で決まるため、サーバが全社ぶんを渡しておく。 */
+  headline?: Record<
+    string,
+    { period: string; qaCount: number; numbers: { label: string; value: string; yoy: string | null }[] }
+  >;
   /** 'app'（既定・/ の全画面レイアウト。自身がスクロール）/
    *  'page'（公開Q&Aページ #113 に埋め込む。ドキュメントと一緒にスクロールし、
    *   入力バーだけ画面下端に貼り付く＝チャットが常に「聞ける状態」で見えている） */
   variant?: 'app' | 'page';
 }
 
-export default function ChatInterface({ sessionId, variant = 'app' }: ChatInterfaceProps) {
+export default function ChatInterface({ sessionId, variant = 'app', headline = {} }: ChatInterfaceProps) {
   const embedded = variant === 'page';
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -254,40 +279,113 @@ export default function ChatInterface({ sessionId, variant = 'app' }: ChatInterf
       {/* メッセージ */}
       <div className={embedded ? 'px-4 pb-4' : 'flex-1 overflow-y-auto px-4 pb-4'}>
         {messages.length === 0 ? (
-          <div
-            className={`flex flex-col items-center justify-center px-2 text-center ${
-              embedded ? 'py-6' : 'h-full'
-            }`}
-          >
-            {/* 企業ページ(#113)に埋め込むときは、見出しと説明が親ページと重複するので出さない。
-                入口となるチップだけを見せる。 */}
-            {!embedded && (
-              <>
-                <h2 className="font-round text-[26px] font-black leading-snug tracking-tight text-ink">
-                  {selectedCompany ? (
-                    <>
-                      <span className="mk-green">{companyShortName(selectedCompany.name)}</span> について聞く
-                    </>
-                  ) : '銘柄を選んで質問しよう'}
-                </h2>
-                <p className="mt-2.5 text-sm font-medium text-ink-soft">
-                  開示済みのIR情報を、出典付きでお答えします。
-                </p>
-              </>
-            )}
-            <div className={`flex max-w-xl flex-wrap justify-center gap-2 ${embedded ? '' : 'mt-6'}`}>
-              {chips.map((entry) => (
-                <button
-                  key={entry}
-                  onClick={() => (selectedCompany ? send(entry) : inputRef.current?.focus())}
-                  disabled={!selectedCompany || isLoading}
-                  className="rounded-full border-[1.5px] border-ink bg-paper px-4 py-2 text-[13px] font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {entry}
-                </button>
-              ))}
+          embedded ? (
+            /* 企業ページ(#113)に埋め込むとき: 上に公式Q&Aが並んでいるので、
+               見出しも吹き出しガーデンも出さず、控えめなチップだけにする（重複を避ける）。 */
+            <div className="flex flex-col items-center justify-center px-2 py-6 text-center">
+              <div className="flex max-w-xl flex-wrap justify-center gap-2">
+                {chips.map((entry) => (
+                  <button
+                    key={entry}
+                    onClick={() => (selectedCompany ? send(entry) : inputRef.current?.focus())}
+                    disabled={!selectedCompany || isLoading}
+                    className="rounded-full border-[1.5px] border-ink bg-paper px-4 py-2 text-[13px] font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {entry}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            /* トップ画面（初期状態）＝「吹き出しガーデン」。
+               デザイン: claude.ai/design「Naruhodo IR Home」。
+               質問をタップすると入力欄に**下書きとして入る**（すぐ送らない）ので、
+               投資家は言い回しを直してから送れる。 */
+            <div className="mx-auto flex w-full max-w-3xl flex-col px-2 py-6">
+              <div className="inline-flex items-center gap-1.5 self-start rounded-full border-[1.5px] border-ink bg-paper px-3.5 py-1.5 text-[11px] font-bold text-ink">
+                🌱 決算のこと、なんでも聞いてください
+              </div>
+              <h2 className="font-round mt-4 text-[28px] font-black leading-[1.45] tracking-tight text-ink sm:text-[34px]">
+                {selectedCompany ? (
+                  <>
+                    {companyShortName(selectedCompany.name)}
+                    <span className="font-num text-[0.7em] font-semibold text-mute">
+                      {`（${selectedCompany.ticker}）`}
+                    </span>
+                    の決算に <span className="mk">なるほど！</span>
+                  </>
+                ) : (
+                  <>
+                    銘柄を選んで <span className="mk">なるほど！</span>
+                  </>
+                )}
+              </h2>
+              <p className="mt-3 text-[12.5px] font-medium leading-[1.9] text-ink-soft">
+                開示済みの決算資料と公式Q&amp;Aだけを根拠に、その場でお答えします。
+                <br className="hidden sm:inline" />
+                気になるものをタップ、または下の入力欄から自由に質問できます。
+              </p>
+
+              {/* 吹き出しガーデン */}
+              <div className="mt-7 flex items-baseline justify-between gap-3">
+                <h3 className="font-round text-[15px] font-black text-ink">気になることから、聞いてみる</h3>
+                <span className="shrink-0 text-[10.5px] font-medium text-mute">タップで下書きに入ります</span>
+              </div>
+              <div className="mt-3.5 flex flex-wrap items-start gap-3">
+                {chips.map((entry, i) => {
+                  const s = BUBBLE_STYLES[i % BUBBLE_STYLES.length];
+                  return (
+                    <button
+                      key={entry}
+                      onClick={() => {
+                        setInputValue(entry);
+                        inputRef.current?.focus();
+                      }}
+                      disabled={!selectedCompany || isLoading}
+                      style={{ animationDelay: `${i * 400}ms` }}
+                      className={`animate-bubble-float max-w-full text-left transition-transform duration-200 hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-40 ${s.rotate} ${s.box} ${s.radius}`}
+                    >
+                      <span className={`font-round block font-black leading-[1.6] ${s.text}`}>{entry}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* おもな数字（層1の検証済み実績）＋公式Q&Aへの導線 */}
+              {selectedCompany?.ticker && headline[selectedCompany.ticker] && (
+                <div className="mt-7 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-3xl bg-paper px-6 py-4 shadow-e2">
+                  <div className="text-[10.5px] font-bold leading-[1.6] text-mute">
+                    {headline[selectedCompany.ticker].period}
+                    <br />
+                    おもな数字
+                  </div>
+                  {headline[selectedCompany.ticker].numbers.map((n) => (
+                    <div key={n.label}>
+                      <div className="text-[10.5px] font-medium text-mute">{n.label}</div>
+                      <div className="font-num mt-0.5 text-[19px] font-bold text-ink">
+                        {n.value}
+                        {n.yoy && (
+                          <span
+                            className={`ml-1.5 text-[11px] font-bold ${
+                              n.yoy.startsWith('+') ? 'text-pop' : 'text-coral-deep'
+                            }`}
+                          >
+                            {n.yoy}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <a
+                    href={`/c/${selectedCompany.ticker}/`}
+                    className="ml-auto border-b-[1.5px] border-line pb-0.5 text-[10.5px] font-bold text-mute transition hover:border-ink hover:text-ink"
+                  >
+                    {`公式Q&A ${headline[selectedCompany.ticker].qaCount}件をみる →`}
+                  </a>
+                </div>
+              )}
+            </div>
+          )
         ) : (
           <div className="space-y-4 py-2">
             {messages.map((m) => (
@@ -344,6 +442,13 @@ export default function ChatInterface({ sessionId, variant = 'app' }: ChatInterf
       >
         {/* 固定バーの中身は、ページ本文と同じ幅に揃える */}
         <div className={embedded ? 'mx-auto w-full max-w-3xl' : 'contents'}>
+        {/* 吹き出しから下書きが入ったことを知らせる（そのまま送るか、直してから送れる） */}
+        {!embedded && messages.length === 0 && inputValue && (
+          <p className="animate-pop-in mb-2 flex items-center gap-1.5 px-1 text-[11.5px] font-bold text-pop-deep">
+            <NaruhodoMark height={14} />
+            この質問を送ります（直してから送ることもできます）
+          </p>
+        )}
         <form
           onSubmit={(e) => { e.preventDefault(); send(inputValue); }}
           className="flex items-center gap-2 rounded-full bg-paper p-2 pl-5 shadow-e2 transition-shadow duration-300 focus-within:shadow-e4"
