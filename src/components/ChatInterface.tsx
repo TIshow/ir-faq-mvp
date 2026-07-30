@@ -32,21 +32,25 @@ const LEGACY_AUDIENCE: Record<string, Audience> = {
 };
 
 /**
- * 吹き出しガーデンのスタイル階層（claude.ai/design「Naruhodo IR Home」）。
- * index で決まる＝決定論。**件数の表示はしない**: 質問文を保存していないため
- * 「N人が質問」は算出できず、出せば捏造になる（プライバシー設計 CLAUDE.md）。
- * 大きさは視覚的な階層づけのみで、人気度を主張しない。
+ * 吹き出しガーデンの「よく聞かれる順」階層（claude.ai/design「Naruhodo IR Home」）。
+ * 上位ほど大きく・濃く・単独行で目立つ。順位は index で決まる＝決定論。
+ *
+ * **件数（「N人が質問」）は出さない**: 会話の本文をどこにも保存していないため
+ * 質問単位の集計は存在せず、数字を書けば捏造になる（プライバシー設計 CLAUDE.md）。
+ * 現在の並びは `companies.ts` の guidedQuestions（IR/我々が「よく聞かれる」と判断した順）。
+ * 実績データ（BigQuery interactions.topic の話題別件数）での並べ替えは #113 段階C。
  */
 const BUBBLE_STYLES = [
-  { box: 'bg-ink px-6 py-5 shadow-e3', text: 'text-cream text-[19px] sm:text-[21px]', radius: 'rounded-[30px] rounded-bl-lg', rotate: '-rotate-2' },
-  { box: 'bg-pop px-5 py-4 shadow-e2', text: 'text-cream text-[16px] sm:text-[17px]', radius: 'rounded-[28px] rounded-br-lg', rotate: 'rotate-2' },
-  { box: 'bg-paper px-5 py-4 shadow-e2', text: 'text-ink text-[15px]', radius: 'rounded-[26px] rounded-bl-lg', rotate: '-rotate-3' },
-  { box: 'bg-sun px-5 py-4 shadow-e2', text: 'text-ink text-[15px]', radius: 'rounded-[26px] rounded-tr-lg', rotate: 'rotate-3' },
-  { box: 'bg-paper px-5 py-3.5 shadow-e2', text: 'text-ink text-[14.5px]', radius: 'rounded-[26px] rounded-br-lg', rotate: '-rotate-1' },
-  { box: 'bg-coral/20 px-4 py-3.5 shadow-e1', text: 'text-ink text-[14px]', radius: 'rounded-[24px] rounded-bl-lg', rotate: 'rotate-2' },
-  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[13.5px]', radius: 'rounded-[22px] rounded-bl-lg', rotate: '-rotate-2' },
-  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[13.5px]', radius: 'rounded-[22px] rounded-br-lg', rotate: 'rotate-[1.5deg]' },
-  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[13.5px]', radius: 'rounded-[22px] rounded-tr-lg', rotate: '-rotate-[2.5deg]' },
+  // 1位: 単独行・最大・インク面。ここだけで「一番聞かれている」と伝わる大きさにする
+  { box: 'basis-full bg-ink px-7 py-6 shadow-e3', text: 'text-cream text-[21px] sm:text-[25px]', radius: 'rounded-[34px] rounded-bl-xl', rotate: '-rotate-1' },
+  { box: 'bg-pop px-6 py-5 shadow-e3', text: 'text-cream text-[17px] sm:text-[18.5px]', radius: 'rounded-[30px] rounded-br-lg', rotate: 'rotate-2' },
+  { box: 'bg-sun px-6 py-5 shadow-e2', text: 'text-ink text-[16px] sm:text-[17px]', radius: 'rounded-[30px] rounded-tr-lg', rotate: '-rotate-2' },
+  { box: 'bg-paper px-5 py-4 shadow-e2', text: 'text-ink text-[14.5px]', radius: 'rounded-[26px] rounded-bl-lg', rotate: 'rotate-3' },
+  { box: 'bg-paper px-5 py-4 shadow-e2', text: 'text-ink text-[14.5px]', radius: 'rounded-[26px] rounded-br-lg', rotate: '-rotate-1' },
+  { box: 'bg-coral/20 px-4 py-3.5 shadow-e1', text: 'text-ink text-[13.5px]', radius: 'rounded-[24px] rounded-bl-lg', rotate: 'rotate-2' },
+  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[12.5px]', radius: 'rounded-[22px] rounded-bl-lg', rotate: '-rotate-2' },
+  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[12.5px]', radius: 'rounded-[22px] rounded-br-lg', rotate: 'rotate-[1.5deg]' },
+  { box: 'bg-paper border-[1.5px] border-dashed border-line px-4 py-3', text: 'text-ink text-[12.5px]', radius: 'rounded-[22px] rounded-tr-lg', rotate: '-rotate-[2.5deg]' },
 ] as const;
 
 /** A1: 進行段階の実況ラベル（SSE 'status' イベント）。実際のパイプライン工程に対応。 */
@@ -303,7 +307,7 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
                投資家は言い回しを直してから送れる。 */
             <div className="mx-auto flex w-full max-w-3xl flex-col px-2 py-6">
               <div className="inline-flex items-center gap-1.5 self-start rounded-full border-[1.5px] border-ink bg-paper px-3.5 py-1.5 text-[11px] font-bold text-ink">
-                🌱 決算のこと、なんでも聞いてください
+                🌱 IRのこと、なんでも聞いてください
               </div>
               <h2 className="font-round mt-4 text-[28px] font-black leading-[1.45] tracking-tight text-ink sm:text-[34px]">
                 {selectedCompany ? (
@@ -312,7 +316,7 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
                     <span className="font-num text-[0.7em] font-semibold text-mute">
                       {`（${selectedCompany.ticker}）`}
                     </span>
-                    の決算に <span className="mk">なるほど！</span>
+                    の IR に <span className="mk">なるほど！</span>
                   </>
                 ) : (
                   <>
@@ -320,16 +324,13 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
                   </>
                 )}
               </h2>
-              <p className="mt-3 text-[12.5px] font-medium leading-[1.9] text-ink-soft">
-                開示済みの決算資料と公式Q&amp;Aだけを根拠に、その場でお答えします。
-                <br className="hidden sm:inline" />
-                気になるものをタップ、または下の入力欄から自由に質問できます。
-              </p>
 
               {/* 吹き出しガーデン */}
               <div className="mt-7 flex items-baseline justify-between gap-3">
-                <h3 className="font-round text-[15px] font-black text-ink">気になることから、聞いてみる</h3>
-                <span className="shrink-0 text-[10.5px] font-medium text-mute">タップで下書きに入ります</span>
+                <h3 className="font-round text-[15px] font-black text-ink">よく聞かれる質問</h3>
+                <span className="shrink-0 text-[10.5px] font-medium text-mute">
+                  大きいほど、よく聞かれています
+                </span>
               </div>
               <div className="mt-3.5 flex flex-wrap items-start gap-3">
                 {chips.map((entry, i) => {
@@ -337,14 +338,17 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
                   return (
                     <button
                       key={entry}
-                      onClick={() => {
-                        setInputValue(entry);
-                        inputRef.current?.focus();
-                      }}
+                      onClick={() => (selectedCompany ? send(entry) : inputRef.current?.focus())}
                       disabled={!selectedCompany || isLoading}
                       style={{ animationDelay: `${i * 400}ms` }}
                       className={`animate-bubble-float max-w-full text-left transition-transform duration-200 hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-40 ${s.rotate} ${s.box} ${s.radius}`}
                     >
+                      {i === 0 && (
+                        <span className="mb-1.5 flex items-center gap-1.5 text-[10.5px] font-black tracking-wide text-pop-soft">
+                          <NaruhodoMark height={13} />
+                          いちばん聞かれています
+                        </span>
+                      )}
                       <span className={`font-round block font-black leading-[1.6] ${s.text}`}>{entry}</span>
                     </button>
                   );
@@ -442,13 +446,6 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
       >
         {/* 固定バーの中身は、ページ本文と同じ幅に揃える */}
         <div className={embedded ? 'mx-auto w-full max-w-3xl' : 'contents'}>
-        {/* 吹き出しから下書きが入ったことを知らせる（そのまま送るか、直してから送れる） */}
-        {!embedded && messages.length === 0 && inputValue && (
-          <p className="animate-pop-in mb-2 flex items-center gap-1.5 px-1 text-[11.5px] font-bold text-pop-deep">
-            <NaruhodoMark height={14} />
-            この質問を送ります（直してから送ることもできます）
-          </p>
-        )}
         <form
           onSubmit={(e) => { e.preventDefault(); send(inputValue); }}
           className="flex items-center gap-2 rounded-full bg-paper p-2 pl-5 shadow-e2 transition-shadow duration-300 focus-within:shadow-e4"
