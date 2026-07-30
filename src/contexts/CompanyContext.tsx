@@ -23,14 +23,20 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 初期化（有効企業の読み込み＋前回選択の復元）
+  // 初期化。優先順位は URL(?c=) > 前回選択（localStorage）。
+  // ?c= は公開Q&Aページ(#113)などからの送客用ディープリンク。企業を選び直させない。
   useEffect(() => {
     try {
       setCompanies(getActiveCompanies());
-      const savedId = localStorage.getItem('selectedCompanyId');
-      if (savedId) {
-        const saved = getCompanyById(savedId);
-        if (saved && saved.isActive) setSelectedCompany(saved);
+      const fromUrl = new URLSearchParams(window.location.search).get('c');
+      const target = fromUrl ?? localStorage.getItem('selectedCompanyId');
+      if (target) {
+        const found = getCompanyById(target);
+        if (found?.isActive) {
+          setSelectedCompany(found);
+          // URL 由来の選択も次回のために保存する（挙動を localStorage 経路と揃える）
+          if (fromUrl) localStorage.setItem('selectedCompanyId', found.id);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '企業データの読み込みに失敗しました');
