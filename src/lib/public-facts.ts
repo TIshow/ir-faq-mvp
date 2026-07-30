@@ -188,23 +188,20 @@ export interface HeadlineNumber {
   yoy: string | null;
 }
 
-/**
- * 全企業ぶんの「おもな数字」をクライアントへ渡せる形で返す。
- * トップ画面(/)では企業の選択がクライアント側で決まるため、サーバは全社ぶんを
- * 用意しておく（1社あたり数項目なのでペイロードは小さい）。
- */
-export function headlineNumbersByTicker(tickers: string[]): Record<
-  string,
-  { period: string; qaCount: number; numbers: HeadlineNumber[] }
-> {
+/** 「おもな数字」（層1の検証済み実績・最新期の上位3項目）をティッカー別に返す。 */
+export function headlineNumbersByTicker(
+  companies: { ticker?: string; fiscalYearEndMonth?: number }[],
+): Record<string, { period: string; qaCount: number; numbers: HeadlineNumber[] }> {
   const out: Record<string, { period: string; qaCount: number; numbers: HeadlineNumber[] }> = {};
-  for (const ticker of tickers) {
+  for (const { ticker, fiscalYearEndMonth } of companies) {
+    if (!ticker) continue;
     const facts = factsFor(ticker);
     const latest = latestHeadlineFacts(ticker).slice(0, 3); // 売上・営業利益・経常利益あたり
     if (latest.length === 0) continue;
     out[ticker] = {
-      period: latest[0].period_label,
-      qaCount: buildNumericQa(ticker).length,
+      // 期間の表記は公式Q&A側と揃える（決算月が確認できている企業だけ「2026年3月期」）
+      period: periodLabel(latest[0].period_label, fiscalYearEndMonth),
+      qaCount: buildNumericQa(ticker, fiscalYearEndMonth).length,
       numbers: latest.map((f) => {
         const pct = yoyPercent(facts, f);
         return {
@@ -219,10 +216,9 @@ export function headlineNumbersByTicker(tickers: string[]): Record<
 }
 
 /**
- * 全企業ぶんのQ&A（トップ画面 `/` 用）。
- * `/` は企業の選択がクライアント側で決まるため、サーバは全社ぶんを渡しておく
- * （実測4.4KB＝無視できる大きさ）。SSR時点では企業未選択なのでHTMLには出ず、
- * `/` が特定銘柄のページだとクローラーに誤解させることもない。
+ * 公式Q&Aをティッカー別に返す（銘柄URL `/c/<ticker>` 用）。
+ * サーバー側で解決してチャットに渡すことで、パネルが閉じていてもそのURLのHTMLに
+ * 質問＋答え全文が載る＝JSを実行しないAIクローラーが読める。
  */
 export function qaByTicker(
   companies: { ticker?: string; fiscalYearEndMonth?: number }[],

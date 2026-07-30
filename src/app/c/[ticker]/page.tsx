@@ -64,7 +64,7 @@ export default async function CompanyChatPage({
   const short = companyShortName(company.name);
   // この企業ぶんだけをサーバーで用意する＝このURLのHTMLに答え全文が載る
   const qa = qaByTicker([company]);
-  const headline = headlineNumbersByTicker([ticker]);
+  const headline = headlineNumbersByTicker([company]);
 
   // 機械専用の経路: schema.org/FAQPage に答え全文を入れる
   const faqJsonLd = {
