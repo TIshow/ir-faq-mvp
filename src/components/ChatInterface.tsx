@@ -326,12 +326,7 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
               </h2>
 
               {/* 吹き出しガーデン */}
-              <div className="mt-7 flex items-baseline justify-between gap-3">
-                <h3 className="font-round text-[15px] font-black text-ink">よく聞かれる質問</h3>
-                <span className="shrink-0 text-[10.5px] font-medium text-mute">
-                  大きいほど、よく聞かれています
-                </span>
-              </div>
+              <h3 className="font-round mt-7 text-[15px] font-black text-ink">よく聞かれる質問</h3>
               <div className="mt-3.5 flex flex-wrap items-start gap-3">
                 {chips.map((entry, i) => {
                   const s = BUBBLE_STYLES[i % BUBBLE_STYLES.length];
