@@ -103,9 +103,6 @@ export default async function CompanyQaPage({ params }: { params: Promise<{ tick
         <p className="mt-2.5 text-sm font-medium leading-relaxed text-ink-soft">
           {`${company.name}（証券コード ${ticker}）${company.description ? ` — ${company.description}` : ''}`}
         </p>
-        <p className="mt-1.5 text-[11.5px] leading-relaxed text-mute">
-          開示済み情報にもとづく回答です。すべての回答に出典を示しています。
-        </p>
       </header>
 
       {/* 公式Q&A — このページの主役。答えは全文をHTMLに置く */}
