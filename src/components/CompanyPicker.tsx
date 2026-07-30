@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useCompany } from '@/contexts/CompanyContext';
 import { Company, companyShortName } from '@/config/companies';
 
@@ -17,6 +18,19 @@ export const CompanyPicker: React.FC = () => {
   const { selectedCompany, setSelectedCompany, companies } = useCompany();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // 銘柄URL（/c/7561）ではURLが企業を決めているので、選び直したらURLごと移動する
+  // （そのまま状態だけ変えるとURLと中身が食い違い、AIに引用されたURLの意味が壊れる）。
+  const onPickedCompany = (c: Company) => {
+    setOpen(false);
+    if (pathname?.startsWith('/c/') && c.ticker) {
+      router.push(`/c/${c.ticker}/`);
+      return;
+    }
+    setSelectedCompany(c);
+  };
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -88,7 +102,7 @@ export const CompanyPicker: React.FC = () => {
                     type="button"
                     role="option"
                     aria-selected={sel}
-                    onClick={() => { setSelectedCompany(c); setOpen(false); }}
+                    onClick={() => onPickedCompany(c)}
                     className={`flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition ${sel ? 'bg-cream' : 'hover:bg-cream/60'}`}
                   >
                     <Monogram c={c} size="h-9 w-9 text-sm" />

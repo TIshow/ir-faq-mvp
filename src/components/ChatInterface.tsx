@@ -7,6 +7,8 @@ import { AgentResponse } from '@/lib/agent-types';
 import { AgentAnswer } from '@/components/FactCard';
 import { Markdown } from '@/components/Markdown';
 import { NaruhodoMark } from '@/components/BrandLogo';
+import { QaPanel } from '@/components/QaPanel';
+import type { PublicQa } from '@/lib/public-facts';
 
 // ガイド付き入口（企業はピッカーで選択するため企業名は含めない＝スコープ安全）
 const GUIDED_ENTRIES = [
@@ -140,19 +142,18 @@ interface ChatInterfaceProps {
     string,
     { period: string; qaCount: number; numbers: { label: string; value: string; yoy: string | null }[] }
   >;
-  /** 'app'（既定・/ の全画面レイアウト。自身がスクロール）/
-   *  'page'（公開Q&Aページ #113 に埋め込む。ドキュメントと一緒にスクロールし、
-   *   入力バーだけ画面下端に貼り付く＝チャットが常に「聞ける状態」で見えている） */
-  variant?: 'app' | 'page';
+  /** 公式Q&A（層1から決定論で組み立て済み）。ティッカー別。
+   *  サイドパネルに常時描画され、閉じている間もHTMLに答え全文が載る＝AIの引用元になる。 */
+  qa?: Record<string, PublicQa[]>;
 }
 
-export default function ChatInterface({ sessionId, variant = 'app', headline = {} }: ChatInterfaceProps) {
-  const embedded = variant === 'page';
+export default function ChatInterface({ sessionId, headline = {}, qa = {} }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId] = useState<string | undefined>(sessionId);
   const [audience, setAudience] = useState<Audience>('standard');
+  const [qaOpen, setQaOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { selectedCompany } = useCompany();
@@ -273,12 +274,13 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
     }
   };
 
+  const companyQa = selectedCompany?.ticker ? (qa[selectedCompany.ticker] ?? []) : [];
+
   return (
-    <div
-      className={`mx-auto flex w-full flex-col ${
-        embedded ? 'max-w-3xl' : 'h-full max-w-3xl lg:max-w-4xl'
-      }`}
-    >
+    /* デスクトップでは右にQ&Aパネルが生えて二画面になる。パネルは常時DOMにあり、
+       開閉はCSSのみ（閉じていてもHTMLに答え全文が載る＝AIの引用元になる）。 */
+    <div className="flex h-full w-full min-h-0">
+      <div className="mx-auto flex h-full w-full min-w-0 flex-1 flex-col max-w-3xl lg:max-w-4xl">
       {/* コンテキストバー */}
       <div className="flex items-center justify-between gap-3 px-4 py-2.5">
         {/* 企業名はヘッダーのピッカーにも出るため、狭い画面ではラベルを隠して潰れを防ぐ */}
@@ -323,30 +325,11 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
       </div>
 
       {/* メッセージ */}
-      <div className={embedded ? 'px-4 pb-4' : 'flex-1 overflow-y-auto px-4 pb-4'}>
+      <div className="flex-1 overflow-y-auto px-4 pb-4">
         {messages.length === 0 ? (
-          embedded ? (
-            /* 企業ページ(#113)に埋め込むとき: 上に公式Q&Aが並んでいるので、
-               見出しも吹き出しガーデンも出さず、控えめなチップだけにする（重複を避ける）。 */
-            <div className="flex flex-col items-center justify-center px-2 py-6 text-center">
-              <div className="flex max-w-xl flex-wrap justify-center gap-2">
-                {chips.map((entry) => (
-                  <button
-                    key={entry}
-                    onClick={() => (selectedCompany ? send(entry) : inputRef.current?.focus())}
-                    disabled={!selectedCompany || isLoading}
-                    className="rounded-full border-[1.5px] border-ink bg-paper px-4 py-2 text-[13px] font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {entry}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            /* トップ画面（初期状態）＝「吹き出しガーデン」。
-               デザイン: claude.ai/design「Naruhodo IR Home」。
-               質問をタップすると入力欄に**下書きとして入る**（すぐ送らない）ので、
-               投資家は言い回しを直してから送れる。 */
+          (
+            /* 初期画面＝「吹き出しガーデン」。デザイン: claude.ai/design「Naruhodo IR Home」。
+               質問をタップするとそのまま送信される。 */
             <div className="mx-auto flex w-full max-w-3xl flex-col px-2 py-6">
               <h2 className="font-round text-[28px] font-black leading-[1.45] tracking-tight text-ink sm:text-[34px]">
                 {selectedCompany ? (
@@ -405,12 +388,12 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
                       </div>
                     </div>
                   ))}
-                  <a
-                    href={`/c/${selectedCompany.ticker}/`}
+                  <button
+                    onClick={() => setQaOpen(true)}
                     className="ml-auto border-b-[1.5px] border-line pb-0.5 text-[10.5px] font-bold text-mute transition hover:border-ink hover:text-ink"
                   >
                     {`公式Q&A ${headline[selectedCompany.ticker].qaCount}件をみる →`}
-                  </a>
+                  </button>
                 </div>
               )}
             </div>
@@ -456,21 +439,13 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
                 )}
               </div>
             ))}
-            <div ref={messagesEndRef} className={embedded ? "scroll-mb-40" : undefined} />
+            <div ref={messagesEndRef} />
           </div>
         )}
       </div>
 
       {/* 入力 */}
-      <div
-        className={
-          embedded
-            ? 'fixed inset-x-0 bottom-0 z-30 border-t border-line/60 bg-cream/95 px-4 pb-3 pt-3 backdrop-blur-sm'
-            : 'px-4 pb-5 pt-1'
-        }
-      >
-        {/* 固定バーの中身は、ページ本文と同じ幅に揃える */}
-        <div className={embedded ? 'mx-auto w-full max-w-3xl' : 'contents'}>
+      <div className="px-4 pb-5 pt-1">
         <form
           onSubmit={(e) => { e.preventDefault(); send(inputValue); }}
           className="flex items-center gap-2 rounded-full bg-paper p-2 pl-5 shadow-e2 transition-shadow duration-300 focus-within:shadow-e4"
@@ -500,8 +475,19 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
         <p className="mt-2.5 px-1 text-center text-[10.5px] leading-relaxed text-mute">
           ※ 会話の本文は保存されません。話題・回答状況などの統計のみ匿名で記録し、IR活動の改善に利用します。
         </p>
-        </div>
       </div>
+      </div>
+
+      <QaPanel
+        qa={companyQa}
+        companyName={selectedCompany ? companyShortName(selectedCompany.name) : ''}
+        open={qaOpen && companyQa.length > 0}
+        onClose={() => setQaOpen(false)}
+        onAsk={(question) => {
+          setQaOpen(false); // スマホでは全面を覆っているので、送る前に閉じる
+          send(question);
+        }}
+      />
     </div>
   );
 }

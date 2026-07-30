@@ -218,6 +218,24 @@ export function headlineNumbersByTicker(tickers: string[]): Record<
   return out;
 }
 
+/**
+ * 全企業ぶんのQ&A（トップ画面 `/` 用）。
+ * `/` は企業の選択がクライアント側で決まるため、サーバは全社ぶんを渡しておく
+ * （実測4.4KB＝無視できる大きさ）。SSR時点では企業未選択なのでHTMLには出ず、
+ * `/` が特定銘柄のページだとクローラーに誤解させることもない。
+ */
+export function qaByTicker(
+  companies: { ticker?: string; fiscalYearEndMonth?: number }[],
+): Record<string, PublicQa[]> {
+  const out: Record<string, PublicQa[]> = {};
+  for (const c of companies) {
+    if (!c.ticker) continue;
+    const qa = buildNumericQa(c.ticker, c.fiscalYearEndMonth);
+    if (qa.length > 0) out[c.ticker] = qa;
+  }
+  return out;
+}
+
 /** 「参考：直近期の主要数値」に出す実績（最新期のみ・脇役として少数） */
 export function latestHeadlineFacts(ticker: string): Fact[] {
   const facts = factsFor(ticker);

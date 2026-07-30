@@ -3,16 +3,16 @@ import { CompanyProvider } from '@/contexts/CompanyContext';
 import { CompanyPicker } from '@/components/CompanyPicker';
 import { BrandLogo } from '@/components/BrandLogo';
 import { getActiveCompanies } from '@/config/companies';
-import { headlineNumbersByTicker } from '@/lib/public-facts';
+import { headlineNumbersByTicker, qaByTicker } from '@/lib/public-facts';
 
 export default function Home() {
-  // トップ画面では企業の選択がクライアント側で決まるため、全社ぶんの「おもな数字」を
-  // サーバで用意して渡す（1社あたり数項目なのでペイロードは小さい）。
+  // トップ画面では企業の選択がクライアント側で決まるため、全社ぶんの「おもな数字」と
+  // 公式Q&Aをサーバで用意して渡す（全社あわせて数KBなのでペイロードは小さい）。
+  const companies = getActiveCompanies();
   const headline = headlineNumbersByTicker(
-    getActiveCompanies()
-      .map((c) => c.ticker)
-      .filter((t): t is string => !!t),
+    companies.map((c) => c.ticker).filter((t): t is string => !!t),
   );
+  const qa = qaByTicker(companies);
 
   return (
     <CompanyProvider>
@@ -25,9 +25,11 @@ export default function Home() {
           <CompanyPicker />
         </header>
 
-        {/* Main Chat */}
-        <div className="relative z-10 flex-1 overflow-hidden">
-          <ChatInterface headline={headline} />
+        {/* Main Chat。z-index は付けない: ここで積み重ねコンテキストを作ると、
+            中のQ&Aパネル(z-50)がヘッダー(z-30)より上に出られなくなる。
+            ピッカーのドロップダウンはヘッダー側の z-30 が勝つので従来どおり見える。 */}
+        <div className="relative flex-1 overflow-hidden">
+          <ChatInterface headline={headline} qa={qa} />
         </div>
       </div>
     </CompanyProvider>

@@ -20,27 +20,38 @@ interface CompanyProviderProps {
   initialCompanyId?: string;
 }
 
+/** 固定指定された企業を**同期的に**解決する（静的configなのでサーバーでも引ける）。 */
+function resolveInitial(initialCompanyId?: string): Company | null {
+  if (!initialCompanyId) return null;
+  const found = getCompanyById(initialCompanyId);
+  return found?.isActive ? found : null;
+}
+
 export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children, initialCompanyId }) => {
-  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // 銘柄URL（/c/7561）では企業を**初回レンダリング時点で**確定させる。
+  // useEffect で後から入れると SSR のHTMLが「企業未選択」の状態になり、公式Q&Aが
+  // HTMLに載らない＝JSを実行しないAIクローラーから中身が見えなくなる（#113 の目的が消える）。
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(() =>
+    resolveInitial(initialCompanyId),
+  );
+  // 企業マスターは静的configなのでサーバーでもそのまま引ける（ピッカーもSSRされる）
+  const [companies] = useState<Company[]>(() => getActiveCompanies());
+  const [isLoading, setIsLoading] = useState(!initialCompanyId);
   const [error, setError] = useState<string | null>(null);
 
-  // 初期化。優先順位は URL(?c=) > 前回選択（localStorage）。
-  // ?c= は公開Q&Aページ(#113)などからの送客用ディープリンク。企業を選び直させない。
+  // ブラウザにしか無い情報（URL・localStorage）だけを後から反映する。
+  // 優先順位: 固定指定（銘柄URL） > URL(?c=) > 前回選択。
   useEffect(() => {
+    if (initialCompanyId) return; // 固定指定が最優先。上書きしない
     try {
-      setCompanies(getActiveCompanies());
       const fromUrl = new URLSearchParams(window.location.search).get('c');
-      // 優先順位: 固定指定（企業ページ） > URL(?c=) > 前回選択
-      const target = initialCompanyId ?? fromUrl ?? localStorage.getItem('selectedCompanyId');
+      const target = fromUrl ?? localStorage.getItem('selectedCompanyId');
       if (target) {
         const found = getCompanyById(target);
         if (found?.isActive) {
           setSelectedCompany(found);
-          // URL 由来の選択も次回のために保存する（挙動を localStorage 経路と揃える）。
-          // 企業ページ由来（initialCompanyId）は「その場だけ」なので保存しない。
-          if (!initialCompanyId && fromUrl) localStorage.setItem('selectedCompanyId', found.id);
+          // URL 由来の選択も次回のために保存する（挙動を localStorage 経路と揃える）
+          if (fromUrl) localStorage.setItem('selectedCompanyId', found.id);
         }
       }
     } catch (err) {
