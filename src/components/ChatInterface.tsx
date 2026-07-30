@@ -348,10 +348,7 @@ export default function ChatInterface({ sessionId, variant = 'app', headline = {
                質問をタップすると入力欄に**下書きとして入る**（すぐ送らない）ので、
                投資家は言い回しを直してから送れる。 */
             <div className="mx-auto flex w-full max-w-3xl flex-col px-2 py-6">
-              <div className="inline-flex items-center gap-1.5 self-start rounded-full border-[1.5px] border-ink bg-paper px-3.5 py-1.5 text-[11px] font-bold text-ink">
-                🌱 IRのこと、なんでも聞いてください
-              </div>
-              <h2 className="font-round mt-4 text-[28px] font-black leading-[1.45] tracking-tight text-ink sm:text-[34px]">
+              <h2 className="font-round text-[28px] font-black leading-[1.45] tracking-tight text-ink sm:text-[34px]">
                 {selectedCompany ? (
                   <>
                     {companyShortName(selectedCompany.name)}
