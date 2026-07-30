@@ -15,6 +15,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getActiveCompanies, companyShortName, type Company } from '@/config/companies';
 import { BrandLogo } from '@/components/BrandLogo';
+import { CompanyProvider } from '@/contexts/CompanyContext';
+import ChatInterface from '@/components/ChatInterface';
 import { buildNumericQa, latestHeadlineFacts, formatValue, periodLabel } from '@/lib/public-facts';
 
 /** 静的生成（Phase 1: デプロイ時のみ生成・実行時のクエリはゼロ） */
@@ -155,21 +157,21 @@ export default async function CompanyQaPage({ params }: { params: Promise<{ tick
         </section>
       )}
 
-      {/* チャットへの導線（PR2で当ページに直接チャットを載せるまでの暫定） */}
-      <section className="mt-8 rounded-3xl bg-paper p-6 shadow-e3">
+      {/* もっと詳しく聞く＝チャット本体。
+          投資家がこのページに来る理由は「数字を見る」ではなく「その先を知りたい」から
+          （数字だけなら四季報で足りる）。したがってチャットはリンク先の予備機能ではなく、
+          このページに全幅で置く。入力バーは画面下端に貼り付き、常に「聞ける状態」で見えている。 */}
+      <section className="mt-10 border-t-2 border-dashed border-line pt-8">
         <h2 className="font-round text-[15px] font-black text-ink">もっと詳しく聞く</h2>
         <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
           「なぜ増益なのか」「セグメントごとの背景は」など、開示資料にもとづいて対話で深掘りできます。
         </p>
-        <Link
-          href={`/?c=${company.id}`}
-          className="mt-3.5 inline-block rounded-full bg-pop px-5 py-2.5 text-[13px] font-bold text-white transition hover:bg-pop-deep"
-        >
-          {`${short}について質問する →`}
-        </Link>
       </section>
+      <CompanyProvider initialCompanyId={company.id}>
+        <ChatInterface variant="page" />
+      </CompanyProvider>
 
-      <footer className="mt-8 text-[10.5px] leading-relaxed text-mute">
+      <footer className="mt-6 px-4 text-[10.5px] leading-relaxed text-mute">
         <p>
           本ページは開示済み情報の再掲です。投資判断の助言・将来予測・未開示情報は含みません。
           最新かつ正式な情報は各社の適時開示・法定開示をご確認ください。

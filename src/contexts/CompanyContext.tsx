@@ -15,9 +15,12 @@ const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 interface CompanyProviderProps {
   children: React.ReactNode;
+  /** 企業を固定して開く（公開Q&Aページ #113 のように、その企業専用の画面で使う）。
+   *  指定時は URL(?c=) や前回選択より優先する。 */
+  initialCompanyId?: string;
 }
 
-export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) => {
+export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children, initialCompanyId }) => {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -29,13 +32,15 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
     try {
       setCompanies(getActiveCompanies());
       const fromUrl = new URLSearchParams(window.location.search).get('c');
-      const target = fromUrl ?? localStorage.getItem('selectedCompanyId');
+      // 優先順位: 固定指定（企業ページ） > URL(?c=) > 前回選択
+      const target = initialCompanyId ?? fromUrl ?? localStorage.getItem('selectedCompanyId');
       if (target) {
         const found = getCompanyById(target);
         if (found?.isActive) {
           setSelectedCompany(found);
-          // URL 由来の選択も次回のために保存する（挙動を localStorage 経路と揃える）
-          if (fromUrl) localStorage.setItem('selectedCompanyId', found.id);
+          // URL 由来の選択も次回のために保存する（挙動を localStorage 経路と揃える）。
+          // 企業ページ由来（initialCompanyId）は「その場だけ」なので保存しない。
+          if (!initialCompanyId && fromUrl) localStorage.setItem('selectedCompanyId', found.id);
         }
       }
     } catch (err) {
@@ -43,7 +48,7 @@ export const CompanyProvider: React.FC<CompanyProviderProps> = ({ children }) =>
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [initialCompanyId]);
 
   // 企業選択時にローカルストレージへ保存
   const handleSetSelectedCompany = (company: Company | null) => {

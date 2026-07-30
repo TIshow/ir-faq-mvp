@@ -69,9 +69,14 @@ interface Message {
 
 interface ChatInterfaceProps {
   sessionId?: string;
+  /** 'app'（既定・/ の全画面レイアウト。自身がスクロール）/
+   *  'page'（公開Q&Aページ #113 に埋め込む。ドキュメントと一緒にスクロールし、
+   *   入力バーだけ画面下端に貼り付く＝チャットが常に「聞ける状態」で見えている） */
+  variant?: 'app' | 'page';
 }
 
-export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
+export default function ChatInterface({ sessionId, variant = 'app' }: ChatInterfaceProps) {
+  const embedded = variant === 'page';
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -198,7 +203,11 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   };
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col lg:max-w-4xl">
+    <div
+      className={`mx-auto flex w-full max-w-3xl flex-col lg:max-w-4xl ${
+        embedded ? '' : 'h-full'
+      }`}
+    >
       {/* コンテキストバー */}
       <div className="flex items-center justify-between gap-3 px-4 py-2.5">
         {/* 企業名はヘッダーのピッカーにも出るため、狭い画面ではラベルを隠して潰れを防ぐ */}
@@ -243,20 +252,30 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       </div>
 
       {/* メッセージ */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
+      <div className={embedded ? 'px-4 pb-4' : 'flex-1 overflow-y-auto px-4 pb-4'}>
         {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center px-2 text-center">
-            <h2 className="font-round text-[26px] font-black leading-snug tracking-tight text-ink">
-              {selectedCompany ? (
-                <>
-                  <span className="mk-green">{companyShortName(selectedCompany.name)}</span> について聞く
-                </>
-              ) : '銘柄を選んで質問しよう'}
-            </h2>
-            <p className="mt-2.5 text-sm font-medium text-ink-soft">
-              開示済みのIR情報を、出典付きでお答えします。
-            </p>
-            <div className="mt-6 flex max-w-xl flex-wrap justify-center gap-2">
+          <div
+            className={`flex flex-col items-center justify-center px-2 text-center ${
+              embedded ? 'py-6' : 'h-full'
+            }`}
+          >
+            {/* 企業ページ(#113)に埋め込むときは、見出しと説明が親ページと重複するので出さない。
+                入口となるチップだけを見せる。 */}
+            {!embedded && (
+              <>
+                <h2 className="font-round text-[26px] font-black leading-snug tracking-tight text-ink">
+                  {selectedCompany ? (
+                    <>
+                      <span className="mk-green">{companyShortName(selectedCompany.name)}</span> について聞く
+                    </>
+                  ) : '銘柄を選んで質問しよう'}
+                </h2>
+                <p className="mt-2.5 text-sm font-medium text-ink-soft">
+                  開示済みのIR情報を、出典付きでお答えします。
+                </p>
+              </>
+            )}
+            <div className={`flex max-w-xl flex-wrap justify-center gap-2 ${embedded ? '' : 'mt-6'}`}>
               {chips.map((entry) => (
                 <button
                   key={entry}
@@ -316,7 +335,11 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       </div>
 
       {/* 入力 */}
-      <div className="px-4 pb-5 pt-1">
+      <div
+        className={`px-4 pb-5 pt-1 ${
+          embedded ? 'sticky bottom-0 z-20 bg-cream pt-3' : ''
+        }`}
+      >
         <form
           onSubmit={(e) => { e.preventDefault(); send(inputValue); }}
           className="flex items-center gap-2 rounded-full bg-paper p-2 pl-5 shadow-e2 transition-shadow duration-300 focus-within:shadow-e4"
