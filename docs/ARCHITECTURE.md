@@ -88,10 +88,33 @@ FactCard = { metric, metricKey, period, value, valueNumeric, unit, yoy?, consoli
 - **評決カード＋決定論チャート**（`FactCard.tsx`）: `planCards()` が fact_cards を「先頭カードと同一 metricKey が複数期あれば TrendCard（大きな数字＋YoYピル＋棒グラフ。予想は点線）に集約、残りはステータスカードのグリッド」に並べ替える。**値の加工・生成は一切しない＝チャートも決定論**（データが無ければチャートは出ない）。
 - **蔦レイアウト**（`FactCard.tsx` VineNode）: 回答の各セクション（数値/散文/出典/CTA/サジェスト）を茎＋枝＋芽の節で接続し、`VINE_STEP_MS`(160ms) の階段で「育つ」演出。末端の節は双葉。純CSS（transform/opacity・一度だけ再生）でコンテンツ不変。
 - **散文のエディトリアル描画**（`Markdown.tsx`）: 太字→黄マーカー（`.mk`）、💡注目ポイント（h4）→マーカー見出し。CommonMark仕様で日本語約物隣接の `**「…」**` が強調にならない問題は `remarkCjkStrong`（パース後ASTの救済プラグイン・生HTML不使用＝XSS安全）で解決。
+- **吹き出しガーデン**（初期画面・`ChatInterface.tsx` `BUBBLE_STYLES`/`Bubble`）: 質問カードは**順位（index）で大きさ・色・角の落とし方・上限幅・縦の段差がすべて決まる＝決定論**。タップで即送信（下書きに入れるワンクッションは置かない）。**件数（「N人が質問」）は出さない**——会話の本文をどこにも保存していないため質問単位の集計が存在せず、書けば捏造になる。
 - **モーション原則**: transform/opacity のみ・無限ループなし・`prefers-reduced-motion` で全静止（globals.css で一括管理）。ブランドカーソル（`--cursor-*` トークン・SVG→PNG→OS標準フォールバック）も同様に実用性優先の例外（入力=I-beam・無効=not-allowed）を持つ。`lang=ja`。
 
+## 銘柄URLとAIへの露出（GEO・#113）
+**目的**: ChatGPT等が「ハークスレイの営業利益は？」に答えるとき、**会社公認・出典つきの答え**をこちらから引かせる。到達点をこちらのサイトにするのではなく、**答えの出所（source）になる**。
+
+### URLの役割分担（重要）
+| URL | 役割 | 実装 |
+|---|---|---|
+| `/` | **銘柄を選ぶ入口**。対話しない | 静的。会社カード（サーバー描画＝クローラーが全銘柄URLをたどれる）。将来ここを**横断チャットの総合窓口**にする |
+| `/c/<ticker>` | **対話の場**。その銘柄に固定したチャットUI＋公式Q&Aパネル | SSG（`generateStaticParams`＋`dynamic='force-static'`）。企業はサーバー側で確定 |
+
+- **別UIの「銘柄ページ」は作らない**。投資家に見せたいのはチャットUIで十分で、数値一覧なら四季報/IR Bankで足りる（我々の価値は「その先を対話で深掘り」）。独立URLが要るのは**AI向けの理由だけ**: `/` は企業をクライアント側（localStorage / `?c=`）で決めるため、クローラーが取得しても**中身のないシェル**になりGEOが成立しない。
+- **対話は引用できるURL上だけで起こす**。`/` で対話できるとURLを共有した相手には「相手のブラウザに残っている別の銘柄」が開く＝共有も引用もできない。
+- 旧ディープリンク `/?c=<id>` は `/c/<ticker>/` へ転送（`CompanyEntry`）。銘柄URL上でピッカーを操作しても**URLごと移動**する（URLと中身の食い違いを防ぐ）。
+
+### 公式Q&A（`lib/public-facts.ts` → `QaPanel`）
+- 層1（`agent/data/facts.json`＝XBRL検証済み）から**コードが**「質問＋答え＋出典」を組み立てる。**LLMは一切通さない**（文章はテンプレート＝毎回同じ＝静的ページとして安定）。計算するのは前年比のみ。出典が無いファクトは公開しない。
+- **パネルは常時DOMに描画し、開閉はCSSだけで行う**（条件レンダリングにしない）。これは見た目の都合ではなく機能の目的そのもの: AIクローラーはJSを実行せずHTMLを読むため、**閉じている間もHTMLに答え全文が無ければ引用されない**。クリックで開ける正当なUIなので隠しテキスト（クローキング）には当たらない。
+- 機械専用の経路として **JSON-LD `FAQPage`**（同じ答え全文）と `sr-only` の `h1`（このURLが何のページか）を持つ。
+- 露出の配管: `app/robots.ts`（GPTBot / OAI-SearchBot / ChatGPT-User / PerplexityBot / ClaudeBot / Claude-Web / Google-Extended / CCBot / Applebot-Extended を**明示的に許可**、`/ir/` `/api/` は拒否）・`app/sitemap.ts`・`app/llms.txt/route.ts`。
+
+> 段階B（実装済み）=層1由来の決定論Q&A。**段階C（未実装）**=`interactions.topic` の実績で並べ替え／層2のFAQをパネルに載せる。利用が少ないうちは自動更新しない方針（費用と鮮度の釣り合い）。
+
 ## マルチテナント（企業切替）
-- フロント `companies.ts` が唯一の正（id/name/ticker/datastoreId/isActive）。
+- フロント `companies.ts` が唯一の正（id/name/ticker/datastoreId/isActive/fiscalYearEndMonth）。
+- **企業は銘柄URLがサーバー側で確定させ、props で流す**（React Context は廃止＝`src/contexts/` は無い）。クライアントで選ばせないので「未選択」状態が存在せず、分岐が消える。**Context 時代は企業を `useEffect` で入れており、SSRのHTMLが「企業未選択」になって公式Q&AがHTMLに載らない**という不具合を生んだ（#113 で解消）。
 - route.ts → server.py へ `companyTicker / companyName / datastoreId` を送る。
 - `run_agent_stream(query, company)` が:
   - 企業名＋利用可能データを差し込んだ**企業別プロンプト**で Agent を構築
@@ -128,6 +151,8 @@ FactCard = { metric, metricKey, period, value, valueNumeric, unit, yoy?, consoli
 - エージェントの Vertex/Discovery Engine 認証は Cloud Run ランタイムSA（デフォルトCompute SAが既に権限保有）。
 
 ## 既知の設計上の注意（ハマりどころ）
+- **クライアント状態を SSR に持ち込まない**: 公開したいデータ（公式Q&A）を `useEffect` 後に決まる状態へ依存させると、**サーバーが返すHTMLに載らない**。props は RSC ペイロード（`<script>` 内のJS文字列）には出るが、それはクローラーが本文として読む場所ではない。**`curl` で実HTMLを見て確認する**こと。
+- **z-index は積み重ねコンテキストを作る**: 親に `z-*` を付けると、その中の `z-50` は親の値でしか外と競えない。Q&Aパネル（`z-50`）をヘッダー（`z-30`）より上に出すため、チャット領域には z を**付けない**。同種の不具合でピッカーのドロップダウンがクリックできなくなったことがある。**JSの `.click()` はヒットテストを迂回するので検証にならない**（実クリック＋`elementFromPoint` で確認する）。
 - Discovery Engine データストアが **chunking config** のため、検索リクエストに `extractive_content_spec` を入れると **400**。**snippet_spec のみ**にする（`tools.py` 済）。
 - FAQ(faq.csv)は **structData{question,answer}** として取り込まれる。`search_disclosures` は structData を最優先で読む。
 - ローカルで discoveryengine API を叩くには ADC に quota project 設定が必要（`gcloud auth application-default set-quota-project`）。Cloud Run 上はランタイムSAなので不要。

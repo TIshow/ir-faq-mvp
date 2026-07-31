@@ -33,7 +33,11 @@
 ## 3. リポジトリ構成
 ```
 src/                      フロント（Next.js）
-  app/page.tsx, layout    画面
+  app/page.tsx            トップ＝**銘柄を選ぶ入口**（対話はしない。将来ここを横断チャットの総合窓口に）
+  app/c/[ticker]/page.tsx **銘柄URL**（例 /c/7561）＝その銘柄に固定したチャットUI＋公式Q&Aパネル。
+                          AIに引用させるための実体（SSG・JSON-LD FAQPage・sr-only h1）。#113
+  app/robots.ts / sitemap.ts / llms.txt/route.ts  AIクローラー向け導線（GPTBot等を明示的に許可）
+  app/layout              画面
   app/api/chat/route.ts   エージェントへの SSE プロキシ（companies.ts から企業コンテキスト送信）
   app/api/doc/route.ts    出典PDFのプロキシ配信（非公開GCSをSA権限で中継・許可バケットのみ）
   app/api/ir/metrics/route.ts  IRダッシュボードの集計API（BQ集計・Firebase認証＋企業スコープ強制。5クエリ並列＝KPI/前期間比/IR要対応/話題/週次）
@@ -42,13 +46,20 @@ src/                      フロント（Next.js）
   app/ir/page.tsx, app/ir/login/page.tsx  IR向け管理画面（KPI/話題トレンド/IR要対応/FAQ管理/週次チャート）＋ログイン（痛み②・ポップエディトリアル）
   lib/firebase.ts / firebase-admin.ts  Firebase Auth（マルチテナント。custom claims=company/admin。owner=全社アクセス）
   lib/gcp.ts              GCP_PROJECT_ID 等の集約（ハードコード排除）
-  components/ChatInterface.tsx  チャットUI（SSE受信・ストリーミング表示・読者レベル・次質問サジェスト）
+  components/ChatInterface.tsx  チャットUI（SSE受信・ストリーミング表示・読者レベル・次質問サジェスト・吹き出しガーデン）
+                          企業は props で受ける（銘柄URLがサーバー側で確定＝「未選択」状態は無い）
+  components/QaPanel.tsx        公式Q&Aのサイドパネル（デスクトップ=右に二画面／スマホ=右から全面）。
+                          **常時DOMに描画し開閉はCSSのみ**＝閉じていてもHTMLに答え全文が載る（#113の肝）
+  components/CompanyEntry.tsx   トップの「続きから」＋旧 `?c=` を銘柄URLへ転送
+  components/RememberCompany.tsx 銘柄URLを開いたことを記憶（描画なし）
   components/FactCard.tsx       評決カード/TrendCard（決定論チャート）/出典チップ/scope分岐/蔦レイアウト
   components/CompanyPicker.tsx  企業選択ピッカー（モノグラム＋ティッカー）
   components/Markdown.tsx       回答散文のMarkdown描画（マーカー強調・💡注目ポイント・CJK太字救済）
   components/BrandLogo.tsx      Naruhodo IR ロゴ（「！の芽」マーク＋ワードマーク）
-  config/companies.ts     企業マスター（id/name/ticker/datastoreId）＝唯一の正
-  contexts/CompanyContext.tsx
+  config/companies.ts     企業マスター（id/name/ticker/datastoreId/fiscalYearEndMonth）＝唯一の正
+  lib/public-facts.ts     **公式Q&Aのデータ層**: 層1(facts.json)から質問＋答え＋出典を決定論で組み立てる（LLM不使用）
+  lib/last-company.ts     「前回みていた銘柄」の記憶（企業IDのみ。会話本文は保存しない）
+  lib/site.ts             公開URL（sitemap/llms.txt/JSON-LD 用）
   lib/agent-types.ts      AgentResponse 等の型（契約）
   lib/agent-auth.ts       ir-agent呼び出しのIDトークン取得（#88・localhostはスキップ）
   lib/rate-limit.ts       /api/chat のIP単位レート制限（既定10回/分）
@@ -118,17 +129,18 @@ gcloud run services update ir-frontend --region us-central1 \
 - **PR作成後はマージせず一旦停止し、ユーザーのレビュー/承認を待ってからマージする**（merge の手前で必ず確認を取る）。
 - 秘密情報はコミットしない（`.env*` は gitignore、`agent/.env.example` のみ追跡）。
 
-## 7. 現状サマリ（2026-07-12）
+## 7. 現状サマリ（2026-07-31）
 - ✅ 全GCPで実稼働（Vercel廃止）。マルチテナント切替・ガードレール・**層2の実FAQ/PDF回答（出典付き）**。
 - ✅ **層1（数値）はハークスレイ(7561)を旗艦に深掘り点灯**＝FY25/26実績＋3セグメント＋FY27会社予想（EDINET有報XBRLから決定論抽出、31件）。ヴィス(5071)も10件。**派生指標**（全社/セグメント利益率・売上構成比・利益寄与度）もコード計算でカード化。
 - ✅ **生成IR（既定 `ANSWER_MODE=synthesis`）**: 表＋セグメント分析＋会社予想の洞察まで生成。**層2は2角度並列検索**（質問＋「背景・要因・会社の説明」）で過去資料/想定問答の根拠も補足材料に。本文末尾に**💡注目ポイント**（開示事実の気づき・意見/予測は禁止）。**読者レベル**（カジュアル/スタンダード）で説明の翻訳度のみ調整（専門性は共通）。本文ストリーミング＋短期メモリ、カード過多は上限8枚に自動抑制。数値はコード計算済みデータシート由来でLLM非経由＝決定論。eval関門（数値100%/コンプラ0）維持。LLMは **gemini-3-flash-preview（global）**＝thinking最小化で先頭トークン≒半減。
 - ✅ **痛み②の堀**: escalation→FAQ複利ループ（冪等upsert）＋IRダッシュボード＝**KPI4枚（総質問数＋前期間比/自動回答率/IR要対応/回答対象外）**＋**話題トレンド**（話題×件数・原文非表示・タクソノミー別アイコン）＋**IR要対応**（CTA同意分のみ・×Nグループ化・削除可）＋**週次チャート**＋FAQ管理（新規追加/修正/削除）＋Firebase認証（owner全社）。**/ir もポップエディトリアルへ刷新済み（#111）**。
 - ✅ **信頼・プライバシー**: 誹謗中傷の入口ガード（拒否・CTA非表示・記録マスク）。会話の**本文はどこにも保存しない**（メタデータのみ。チャットUIに明示）。
-- ✅ **UIX/ブランド（Naruhodo IR）**: クリーム×インク×ポップの全面リブランド（`docs/DESIGN.md`）＝評決カード＋**決定論チャート**（同一指標×複数期のカードを自動で棒グラフ化・予想は点線）・マーカー強調のエディトリアル散文・**蔦の成長演出**（茎＋枝＋芽でカードを接続・末端は双葉）・**芽吹くカーソル**・「！の芽」ロゴ/favicon。読者レベルはlocalStorage永続・reduced-motionで全演出静止。gemini-3のPLAN JSON揺らぎは堅牢パース（_parse_plan_json）で恒久対処。
+- ✅ **#113 銘柄URL＝AIに引用させる実体（第1弾・PR #117）**: `/c/<ticker>` を**その銘柄に固定したチャットUI**にし、公式Q&Aは**サイドパネル**（デスクトップ=右に二画面／スマホ=右から全面）。**別UIの「銘柄ページ」は作らない**（数値一覧は四季報/IR Bankで足り、我々の価値は対話での深掘り）。独立URLが要るのはAI向けの理由だけ＝トップは企業をクライアント側で決めるためクローラーには空のシェルに見える。パネルは**常時DOMに描画し開閉はCSSのみ**＝閉じていても質問＋**答え全文**がHTMLに載る（JSを実行しないクローラーが読める。クリックで開ける正当なUIなので隠しテキストではない）。Q&Aは層1から**コードが**組み立て**LLM非経由**。JSON-LD(FAQPage)＋`robots.ts`（GPTBot/OAI-SearchBot/PerplexityBot/ClaudeBot/Google-Extended/CCBot等を明示許可、`/ir` `/api` は拒否）＋`sitemap.ts`＋`llms.txt`。**トップは「銘柄を選ぶ入口」に役割分離**（対話は引用できるURL上だけで起きる。`/` で話すとURLを共有した相手には別の銘柄が開いてしまうため）。
+- ✅ **UIX/ブランド（Naruhodo IR）**: クリーム×インク×ポップの全面リブランド（`docs/DESIGN.md`）＝評決カード＋**決定論チャート**（同一指標×複数期のカードを自動で棒グラフ化・予想は点線）・マーカー強調のエディトリアル散文・**蔦の成長演出**（茎＋枝＋芽でカードを接続・末端は双葉）・**芽吹くカーソル**・「！の芽」ロゴ/favicon。読者レベルはlocalStorage永続・reduced-motionで全演出静止。gemini-3のPLAN JSON揺らぎは堅牢パース（_parse_plan_json）で恒久対処。初期画面は**吹き出しガーデン**（順位で大きさ・色が決まる決定論。回転はかけず幅と縦位置の段差で散らす。**件数は出さない**＝会話本文を保存しない設計上、質問単位の集計が存在せず書けば捏造になる）。
 - ✅ **セキュリティ #88 完了**: ir-agent は非公開（invoker=フロントSAのみ）。フロントがIDトークンで呼ぶ（`src/lib/agent-auth.ts`・localhostはスキップ）＋ `/api/chat` にIP単位レート制限（既定10回/分・`CHAT_RATE_LIMIT_PER_MIN`）。投資家UXは無変化（ログイン不要のまま）。
-- ⚠️ 未了: フィル/ピアズの層1・ヴィスのYoY/セグメント・層2本文数値の実在照合・BQ東京(#89)。gemini-3 は thinking 最小化で先頭〜12s に短縮（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` へ即戻し）。
+- ⚠️ 未了: **#113 の続き**（実績データ＝`interactions.topic` による人気順の並べ替え／層2のFAQをQ&Aパネルに載せる）・**#118**（SSEのエラー応答から例外メッセージを外す＝`py/stack-trace-exposure`）・フィル/ピアズの層1・ヴィスのYoY/セグメント・層2本文数値の実在照合・BQ東京(#89)。gemini-3 は thinking 最小化で先頭〜12s に短縮（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` へ即戻し）。
 - 詳細・残課題は **`docs/HANDOFF.md`**、戦略は **Issue #77**（尖らせ方=#85-87／インフラ=#88-92）。
 ```
-GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#111 マージ済）
+GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#117 マージ済）
 GCP project: hallowed-trail-462613-v1 / region us-central1（Vertexはglobal）
 ```
