@@ -359,7 +359,7 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
                     <div className="whitespace-nowrap text-[10.5px] font-bold text-mute">
                       {headline.period}
                     </div>
-                    {/* パネルを開く実アクションなので、脚注ではなくピルにする（サジェストピルと同じ語彙）。
+                    {/* パネルを開く実アクションなので、脚注ではなく主アクションのピル（PILL_INK）にする。
                         件数は**パネルに実際に入る配列から数える**。`headline.qaCount` も同じ値だが、
                         別経路の数を表示に使うと、ずれたとき「N件をみる」と中身が食い違う。 */}
                     {qa.length > 0 && (
