@@ -56,7 +56,7 @@ src/                      フロント（Next.js）
   components/CompanyPicker.tsx  企業選択ピッカー（モノグラム＋ティッカー）
   components/Markdown.tsx       回答散文のMarkdown描画（マーカー強調・💡注目ポイント・CJK太字救済）
   components/BrandLogo.tsx      Naruhodo IR ロゴ（「！の芽」マーク＋ワードマーク）
-  config/companies.ts     企業マスター（id/name/ticker/datastoreId/fiscalYearEndMonth）＝唯一の正
+  config/companies.ts     企業マスター（id/name/ticker/datastoreId/fiscalYearEndMonth/publishOfficialQa）＝唯一の正
   lib/public-facts.ts     **公式Q&Aのデータ層**: 層1(facts.json)から質問＋答え＋出典を決定論で組み立てる（LLM不使用）
   lib/last-company.ts     「前回みていた銘柄」の記憶（企業IDのみ。会話本文は保存しない）
   lib/site.ts             公開URL（sitemap/llms.txt/JSON-LD 用）
@@ -135,7 +135,7 @@ gcloud run services update ir-frontend --region us-central1 \
 - ✅ **生成IR（既定 `ANSWER_MODE=synthesis`）**: 表＋セグメント分析＋会社予想の洞察まで生成。**層2は2角度並列検索**（質問＋「背景・要因・会社の説明」）で過去資料/想定問答の根拠も補足材料に。本文末尾に**💡注目ポイント**（開示事実の気づき・意見/予測は禁止）。**読者レベル**（カジュアル/スタンダード）で説明の翻訳度のみ調整（専門性は共通）。本文ストリーミング＋短期メモリ、カード過多は上限8枚に自動抑制。数値はコード計算済みデータシート由来でLLM非経由＝決定論。eval関門（数値100%/コンプラ0）維持。LLMは **gemini-3-flash-preview（global）**＝thinking最小化で先頭トークン≒半減。
 - ✅ **痛み②の堀**: escalation→FAQ複利ループ（冪等upsert）＋IRダッシュボード＝**KPI4枚（総質問数＋前期間比/自動回答率/IR要対応/回答対象外）**＋**話題トレンド**（話題×件数・原文非表示・タクソノミー別アイコン）＋**IR要対応**（CTA同意分のみ・×Nグループ化・削除可）＋**週次チャート**＋FAQ管理（新規追加/修正/削除）＋Firebase認証（owner全社）。**/ir もポップエディトリアルへ刷新済み（#111）**。
 - ✅ **信頼・プライバシー**: 誹謗中傷の入口ガード（拒否・CTA非表示・記録マスク）。会話の**本文はどこにも保存しない**（メタデータのみ。チャットUIに明示）。
-- ✅ **#113 銘柄URL＝AIに引用させる実体（第1弾・PR #117）**: `/c/<ticker>` を**その銘柄に固定したチャットUI**にし、公式Q&Aは**サイドパネル**（デスクトップ=右に二画面／スマホ=右から全面）。**別UIの「銘柄ページ」は作らない**（数値一覧は四季報/IR Bankで足り、我々の価値は対話での深掘り）。独立URLが要るのはAI向けの理由だけ＝トップは企業をクライアント側で決めるためクローラーには空のシェルに見える。パネルは**常時DOMに描画し開閉はCSSのみ**＝閉じていても質問＋**答え全文**がHTMLに載る（JSを実行しないクローラーが読める。クリックで開ける正当なUIなので隠しテキストではない）。Q&Aは層1から**コードが**組み立て**LLM非経由**。JSON-LD(FAQPage)＋`robots.ts`（GPTBot/OAI-SearchBot/PerplexityBot/ClaudeBot/Google-Extended/CCBot等を明示許可、`/ir` `/api` は拒否）＋`sitemap.ts`＋`llms.txt`。**トップは「銘柄を選ぶ入口」に役割分離**（対話は引用できるURL上だけで起きる。`/` で話すとURLを共有した相手には別の銘柄が開いてしまうため）。
+- ✅ **#113 銘柄URL＝AIに引用させる実体（第1弾・PR #117）**: `/c/<ticker>` を**その銘柄に固定したチャットUI**にし、公式Q&Aは**サイドパネル**（デスクトップ=右に二画面／スマホ=右から全面）。**別UIの「銘柄ページ」は作らない**（数値一覧は四季報/IR Bankで足り、我々の価値は対話での深掘り）。独立URLが要るのはAI向けの理由だけ＝トップは企業をクライアント側で決めるためクローラーには空のシェルに見える。パネルは**常時DOMに描画し開閉はCSSのみ**＝閉じていても質問＋**答え全文**がHTMLに載る（JSを実行しないクローラーが読める。クリックで開ける正当なUIなので隠しテキストではない）。Q&Aは層1から**コードが**組み立て**LLM非経由**。JSON-LD(FAQPage)＋`robots.ts`（GPTBot/OAI-SearchBot/PerplexityBot/ClaudeBot/Google-Extended/CCBot等を明示許可、`/ir` `/api` は拒否）＋`sitemap.ts`＋`llms.txt`。**トップは「銘柄を選ぶ入口」に役割分離**（対話は引用できるURL上だけで起きる。`/` で話すとURLを共有した相手には別の銘柄が開いてしまうため）。**公開ゲート `publishOfficialQa`（既定false）**＝「公式」は発行体の承認を含意するので、**現場で使われている企業だけ**を sitemap/llms.txt/JSON-LD に載せindexさせる。他社はページ自体は動く（開発・デモ用）が noindex。現在の公開はハークスレイ(7561)のみ。
 - ✅ **UIX/ブランド（Naruhodo IR）**: クリーム×インク×ポップの全面リブランド（`docs/DESIGN.md`）＝評決カード＋**決定論チャート**（同一指標×複数期のカードを自動で棒グラフ化・予想は点線）・マーカー強調のエディトリアル散文・**蔦の成長演出**（茎＋枝＋芽でカードを接続・末端は双葉）・**芽吹くカーソル**・「！の芽」ロゴ/favicon。読者レベルはlocalStorage永続・reduced-motionで全演出静止。gemini-3のPLAN JSON揺らぎは堅牢パース（_parse_plan_json）で恒久対処。初期画面は**吹き出しガーデン**（順位で大きさ・色が決まる決定論。回転はかけず幅と縦位置の段差で散らす。**件数は出さない**＝会話本文を保存しない設計上、質問単位の集計が存在せず書けば捏造になる）。
 - ✅ **セキュリティ #88 完了**: ir-agent は非公開（invoker=フロントSAのみ）。フロントがIDトークンで呼ぶ（`src/lib/agent-auth.ts`・localhostはスキップ）＋ `/api/chat` にIP単位レート制限（既定10回/分・`CHAT_RATE_LIMIT_PER_MIN`）。投資家UXは無変化（ログイン不要のまま）。
 - ⚠️ 未了: **#113 の続き**（実績データ＝`interactions.topic` による人気順の並べ替え／層2のFAQをQ&Aパネルに載せる）・**#118**（SSEのエラー応答から例外メッセージを外す＝`py/stack-trace-exposure`）・フィル/ピアズの層1・ヴィスのYoY/セグメント・層2本文数値の実在照合・BQ東京(#89)。gemini-3 は thinking 最小化で先頭〜12s に短縮（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` へ即戻し）。

@@ -22,7 +22,7 @@
 | 分析ログ（痛み②） | BigQuery `ir_analytics.interactions` | `ANALYTICS_ENABLED=1` で記録。**本文レス＝メタデータのみ**（ts/企業/scope/カード・引用数/話題）。話題はPLAN相乗りで分類（タクソノミー14分類・agent/analytics.py） |
 | IR要対応ワークリスト | BigQuery `ir_analytics.ir_requests`（ts/company_ticker/question） | **ユーザーがCTA「IR窓口へ問い合わせる」を押した質問のみ**。`/api/ir/contact`(未認証)が記録。自動エスカレは入れない |
 | 解決マーカー | BigQuery `ir_analytics.ir_resolved` | ダッシュボードの「削除」＝`/api/ir/resolve`(要認証)がマーカーINSERT→一覧から除外（同一質問の重複もまとめて消える。ハード削除はstreaming bufferで不可のため） |
-| 投資家向けURL | `/`（銘柄を選ぶ入口）・**`/c/<ticker>`（銘柄URL＝対話の場＋公式Q&Aパネル）** | #113/PR #117。`/c/` はSSG（ビルド時生成・実行時クエリゼロ）。AI向け配管= `robots.txt`（GPTBot等を明示許可）/ `sitemap.xml` / `llms.txt` / JSON-LD FAQPage。公式Q&Aは `lib/public-facts.ts` が層1から決定論生成（LLM不使用） |
+| 投資家向けURL | `/`（銘柄を選ぶ入口）・**`/c/<ticker>`（銘柄URL＝対話の場＋公式Q&Aパネル）** | #113/PR #117。`/c/` はSSG（ビルド時生成・実行時クエリゼロ）。AI向け配管= `robots.txt`（GPTBot等を明示許可）/ `sitemap.xml` / `llms.txt` / JSON-LD FAQPage。公式Q&Aは `lib/public-facts.ts` が層1から決定論生成（LLM不使用）。**AIへの公開は `publishOfficialQa`（既定false）でゲート＝現在はハークスレイ(7561)のみ**。他社は noindex（開発・デモ用に動きはする） |
 | IR管理画面 | `/ir`（ダッシュボード）・`/ir/login` | **ポップエディトリアル刷新済み(#111)**: KPI4枚（総質問数＋前期間比/自動回答率/IR要対応/回答対象外）＋話題トレンド（タクソノミー別アイコン・色分けバー）＋**IR要対応**＋FAQ管理（新規追加/修正/削除）＋**週次チャート**。`/api/ir/metrics`(BQ集計・5クエリ並列・`prev_total`/`weekly`含む)・`/api/ir/faq`(CRUD) |
 | 認証 | **Firebase Auth / Identity Platform**（既存プロジェクトに追加、表示名 ir-bot-mvp） | メール/パスワード。custom claims=company/admin。owner=全社アクセス。`lib/firebase*.ts` |
 | CI/CD | GitHub Actions（`.github/workflows/ci.yml`・`security.yml`）＋ **main ブランチ保護**＋ Dependabot | frontend(型/lint/build)＋agent(ruff/format/eval)＋gitleaks＋CodeQL。緑必須・PR経由 |
@@ -105,7 +105,7 @@ curl -s -N -X POST https://ir-frontend-255752121803.us-central1.run.app/api/chat
 - 3経路とも**回答の一貫性**（同じ層1・同じ承認済みFAQ）と**流入元の識別**（interactions にメタデータ）を共通設計とする。会話本文を保存しない設計は不変。
 
 **経路1（#113）の内訳**
-- ✅ **1.2-1 段階B: 銘柄URL＋公式Q&Aパネル** = 完了（PR #117・本番デプロイ済）。`/c/<ticker>` はその銘柄に固定したチャットUIで、公式Q&Aは**常時DOMに描画・開閉はCSSのみ**（閉じていても答え全文がHTMLに載る）。層1由来の決定論Q&A＋JSON-LD＋robots/sitemap/llms.txt。**トップ `/` は銘柄を選ぶ入口に分離**。
+- ✅ **1.2-1 段階B: 銘柄URL＋公式Q&Aパネル** = 完了（PR #117・本番デプロイ済）。**公開はハークスレイのみ**（`publishOfficialQa`）＝現場テストが動いている企業だけ「公式」として出す。ヴィス/フィル/ピアズは開発用でデータをリセット予定のため noindex。`/c/<ticker>` はその銘柄に固定したチャットUIで、公式Q&Aは**常時DOMに描画・開閉はCSSのみ**（閉じていても答え全文がHTMLに載る）。層1由来の決定論Q&A＋JSON-LD＋robots/sitemap/llms.txt。**トップ `/` は銘柄を選ぶ入口に分離**。
 - **1.2-2 段階C: 人気順の並べ替え** — `interactions.topic`（BQ・話題別件数）で吹き出しと公式Q&Aを実績順に。**利用が少ないうちは自動更新しない**方針（企業数・投資家数が増えたら1日1回更新）。現状の並びは `companies.ts` の `guidedQuestions`（＝IR/我々の判断）で実測ではない。
 - **1.2-3 段階C: 層2のFAQをパネルに載せる** — いまは層1（数値）由来のみ。想定問答（faq.csv）が入れば定性Q&Aも公開対象（Tier 0-1 待ち）。
 - **1.2-4 効果測定** — AI経由の流入・引用の有無をどう観測するか（Search Console への sitemap 登録／リファラ／公開前後で同じ質問をAIに投げて比較）。**未着手だが #113 の価値を示す唯一の手段**なので優先度は高い。

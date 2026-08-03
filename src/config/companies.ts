@@ -18,6 +18,17 @@ export interface Company {
   /** 決算期の末月（例: 3 = 3月期）。公開Q&Aページ(#113)で「2026FY」を「2026年3月期」と
    *  表記するために使う。**出典資料で確認できた企業にだけ設定する**（不明なら未設定＝FY表記のまま）。 */
   fiscalYearEndMonth?: number;
+  /**
+   * **その企業の「公式Q&A」をAIに向けて公開してよいか**（#113）。既定 false。
+   *
+   * true にすると sitemap / llms.txt に載り、JSON-LD(FAQPage) を出し、
+   * クローラーにインデックスさせる。**「公式」は発行体の承認を含意する表現**なので、
+   * 実際に話が進んでいる（＝現場で使われている）企業だけ true にすること。
+   *
+   * false でも `/c/<ticker>` は動く（開発・デモ用）。ただし noindex で、
+   * sitemap・llms.txt・JSON-LD からは外れる＝AIに「公式」として案内しない。
+   */
+  publishOfficialQa?: boolean;
 }
 
 export const companies: Company[] = [
@@ -68,6 +79,9 @@ export const companies: Company[] = [
     isActive: true,
     // 層1の出典が「2026年3月期 決算補足説明資料」＝2026FY は 2026年3月期（確認済み）
     fiscalYearEndMonth: 3,
+    // 現場テスト中の唯一の企業。ここだけAIに「公式Q&A」として公開する。
+    // 他社は開発・デモ用でデータをリセットする予定のため公開しない（既定 false）。
+    publishOfficialQa: true,
     guidedQuestions: [
       '営業利益は前年と比べてどう？',
       'セグメント別の売上は？',
@@ -86,6 +100,15 @@ export function getCompanyById(companyId: string): Company | undefined {
 /** 有効な企業リストを取得 */
 export function getActiveCompanies(): Company[] {
   return companies.filter((company) => company.isActive);
+}
+
+/**
+ * **AIに「公式Q&A」として公開してよい企業**（#113）。
+ * sitemap / llms.txt / JSON-LD / index 可否は必ずここを通す
+ * （露出面ごとに条件を書くと、いつか片方だけ直し忘れて意図せず公開される）。
+ */
+export function getPublishedCompanies(): Company[] {
+  return getActiveCompanies().filter((c) => c.publishOfficialQa && c.ticker);
 }
 
 /** 表示用の短縮社名（「株式会社」を除去） */
