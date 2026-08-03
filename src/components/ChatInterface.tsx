@@ -7,6 +7,7 @@ import { AgentAnswer } from '@/components/FactCard';
 import { Markdown } from '@/components/Markdown';
 import { NaruhodoMark } from '@/components/BrandLogo';
 import { QaPanel } from '@/components/QaPanel';
+import { PILL_INK, PILL_QUIET } from '@/components/ui';
 import type { CompanyHeadline, PublicQa } from '@/lib/public-facts';
 
 // ガイド付き入口（企業はピッカーで選択するため企業名は含めない＝スコープ安全）
@@ -306,7 +307,7 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
           {messages.length > 0 && (
             <button
               onClick={clearChat}
-              className="shrink-0 rounded-full border-[1.5px] border-line bg-paper px-3 py-1 text-xs font-bold text-ink-soft transition hover:border-ink hover:text-ink"
+              className={`shrink-0 ${PILL_QUIET}`}
             >
               新しいチャット
             </button>
@@ -358,13 +359,13 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
                     <div className="whitespace-nowrap text-[10.5px] font-bold text-mute">
                       {headline.period}
                     </div>
-                    {/* パネルを開く実アクションなので、脚注ではなくピルにする（サジェストピルと同じ語彙）。
+                    {/* パネルを開く実アクションなので、脚注ではなく主アクションのピル（PILL_INK）にする。
                         件数は**パネルに実際に入る配列から数える**。`headline.qaCount` も同じ値だが、
                         別経路の数を表示に使うと、ずれたとき「N件をみる」と中身が食い違う。 */}
                     {qa.length > 0 && (
                       <button
                         onClick={() => setQaOpen(true)}
-                        className="shrink-0 rounded-full border-[1.5px] border-ink bg-paper px-3.5 py-1.5 text-[11.5px] font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream"
+                        className={`shrink-0 ${PILL_INK}`}
                       >
                         {`公式Q&A ${qa.length}件をみる →`}
                       </button>

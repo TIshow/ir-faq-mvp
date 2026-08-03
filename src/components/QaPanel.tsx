@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { PILL_QUIET } from '@/components/ui';
 import type { PublicQa } from '@/lib/public-facts';
 
 /**
@@ -60,7 +61,7 @@ export function QaPanel({
             ref={closeRef}
             onClick={onClose}
             aria-label="公式Q&Aを閉じる"
-            className="shrink-0 rounded-full border-[1.5px] border-line bg-paper px-3 py-1 text-xs font-bold text-ink-soft transition hover:border-ink hover:text-ink"
+            className={`shrink-0 ${PILL_QUIET}`}
           >
             閉じる
           </button>
