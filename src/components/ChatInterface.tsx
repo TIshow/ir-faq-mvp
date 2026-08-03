@@ -427,9 +427,16 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
             会話を始めた瞬間に消えてしまうが、これは会話中こそ開きたいもの
             （「その数字の出どころは？」と思ったときに手が届く）。 */}
         {qa.length > 0 && (
-          <div className="mb-2 flex justify-end px-1">
-            <button onClick={() => setQaOpen(true)} className={PILL_INK}>
-              {`公式Q&A ${qa.length}件をみる →`}
+          <div className="mb-2 flex justify-end">
+            {/* 開閉の**トグル**にする。開いている間も出しっぱなしなので、押しても何も
+                起きない（＝画面にあるものを指す死んだボタン）状態を作らない。
+                隠すとレイアウトが跳ねるので、ラベルの方を状態に合わせる。 */}
+            <button
+              onClick={() => setQaOpen((o) => !o)}
+              aria-expanded={qaOpen}
+              className={PILL_INK}
+            >
+              {qaOpen ? '公式Q&Aを閉じる' : `公式Q&A ${qa.length}件をみる →`}
             </button>
           </div>
         )}
