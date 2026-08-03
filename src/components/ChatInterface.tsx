@@ -345,22 +345,40 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
                 ))}
               </div>
 
-              {/* おもな数字（層1の検証済み実績）＋公式Q&Aへの導線 */}
+              {/* おもな数字（層1の検証済み実績）＋公式Q&Aへの導線。
+                  数字とCTAを別ブロックにする（1つの flex-wrap に混ぜると、数字が
+                  幅を埋めたときにCTAだけが次行へ落ち、カード内に空白の帯ができる）。 */}
               {headline && (
-                <div className="mt-7 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-3xl bg-paper px-6 py-4 shadow-e2">
-                  <div className="text-[10.5px] font-bold leading-[1.6] text-mute">
-                    {headline.period}
-                    <br />
-                    おもな数字
+                <div className="mt-7 rounded-3xl bg-paper px-6 py-5 shadow-e2">
+                  {/* 見出し行にCTAを置く。数値と同じ行に混ぜると数値の幅を奪って折り返し、
+                      カード内に中途半端な余白ができる（この行は元々空いている）。 */}
+                  <div className="flex items-center justify-between gap-4">
+                    {/* ラベルは期間だけ。「おもな数字」は各数値にラベルが付いている以上
+                        情報として重複で、スマホでCTAと取り合って切れる原因になる。 */}
+                    <div className="whitespace-nowrap text-[10.5px] font-bold text-mute">
+                      {headline.period}
+                    </div>
+                    {/* パネルを開く実アクションなので、脚注ではなくピルにする（サジェストピルと同じ語彙）。
+                        件数は**パネルに実際に入る配列から数える**。`headline.qaCount` も同じ値だが、
+                        別経路の数を表示に使うと、ずれたとき「N件をみる」と中身が食い違う。 */}
+                    {qa.length > 0 && (
+                      <button
+                        onClick={() => setQaOpen(true)}
+                        className="shrink-0 rounded-full border-[1.5px] border-ink bg-paper px-3.5 py-1.5 text-[11.5px] font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream"
+                      >
+                        {`公式Q&A ${qa.length}件をみる →`}
+                      </button>
+                    )}
                   </div>
-                  {headline.numbers.map((n) => (
-                    <div key={n.label}>
-                      <div className="text-[10.5px] font-medium text-mute">{n.label}</div>
-                      <div className="font-num mt-0.5 text-[19px] font-bold text-ink">
-                        {n.value}
+                  {/* 数値はカード幅をフルに使える＝3項目が1行に収まる */}
+                  <div className="mt-2.5 flex flex-wrap items-baseline gap-x-7 gap-y-2">
+                    {headline.numbers.map((n) => (
+                      <div key={n.label} className="flex items-baseline gap-1.5">
+                        <span className="text-[10.5px] font-medium text-mute">{n.label}</span>
+                        <span className="font-num text-[19px] font-bold text-ink">{n.value}</span>
                         {n.yoy && (
                           <span
-                            className={`ml-1.5 text-[11px] font-bold ${
+                            className={`text-[11px] font-bold ${
                               n.yoy.startsWith('+') ? 'text-pop' : 'text-coral-deep'
                             }`}
                           >
@@ -368,14 +386,8 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
                           </span>
                         )}
                       </div>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => setQaOpen(true)}
-                    className="ml-auto border-b-[1.5px] border-line pb-0.5 text-[10.5px] font-bold text-mute transition hover:border-ink hover:text-ink"
-                  >
-                    {`公式Q&A ${headline.qaCount}件をみる →`}
-                  </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
