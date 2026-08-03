@@ -13,12 +13,15 @@
 import Link from 'next/link';
 import { BrandLogo } from '@/components/BrandLogo';
 import { CompanyEntry } from '@/components/CompanyEntry';
-import { getActiveCompanies, companyShortName } from '@/config/companies';
+import { getActiveCompanies, getPublishedCompanies, companyShortName } from '@/config/companies';
 import { headlineNumbersByTicker } from '@/lib/public-facts';
 
 export default function Home() {
+  // 一覧には対応中の全社を出す（人が選べないと使えない）。
+  // ただし**数字と「公式Q&A N件」は公開を承認した企業だけ**。このページは index 可能で
+  // sitemap にも載るため、ここに出すと銘柄ページのゲートを迂回して主張が外へ出る。
   const companies = getActiveCompanies().filter((c) => c.ticker);
-  const headline = headlineNumbersByTicker(companies);
+  const headline = headlineNumbersByTicker(getPublishedCompanies());
 
   return (
     <div className="min-h-screen bg-cream text-ink">

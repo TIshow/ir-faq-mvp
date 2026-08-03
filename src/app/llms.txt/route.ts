@@ -3,13 +3,13 @@
  * 「どの企業の、どんな情報が、どこにあるか」を短く伝える慣行フォーマット。
  * companies.ts を唯一の正として生成する（企業をハードコードしない）。
  */
-import { getActiveCompanies, companyShortName } from '@/config/companies';
+import { getPublishedCompanies, companyShortName } from '@/config/companies';
 import { SITE_URL } from '@/lib/site';
 
 export const dynamic = 'force-static';
 
 export function GET(): Response {
-  const companies = getActiveCompanies().filter((c) => c.ticker);
+  const companies = getPublishedCompanies();
   const lines = [
     '# Naruhodo IR',
     '',
