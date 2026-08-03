@@ -15,12 +15,15 @@ fact_cards の最終合成は agent.py がツール戻り値を捕捉して行�
 from __future__ import annotations
 
 import html
+import logging
 import re
 from typing import Any
 
 from google.adk.tools import ToolContext
 
 from . import config, store
+
+_log = logging.getLogger("ir-agent.tools")
 
 # DB に無く、構成要素から計算する派生指標（同一期の比率）: key -> (分子, 分母, 表示名)
 DERIVED_METRICS: dict[str, tuple[str, str, str]] = {
@@ -331,8 +334,11 @@ def search_disclosures(query: str, tool_context: ToolContext = None) -> dict[str
                             "quote": cleaned[:300],
                         }
                     )
-    except Exception as e:
-        return {"passages": [], "error": str(e)}
+    except Exception:
+        # 例外文は返さない: legacy モードではツール戻り値をLLMが読むため、
+        # 内部エンドポイントやデータストアIDが回答本文に混ざりうる。
+        _log.exception("search_disclosures failed")
+        return {"passages": []}
 
     return {"passages": passages}
 
@@ -352,10 +358,10 @@ def escalate_to_ir(
     company_id = store.resolve_company_id(ticker) if ticker else None
     try:
         store.insert_escalation(company_id, question, reason, "escalated")
-    except Exception as e:
+    except Exception:
+        _log.exception("escalate_to_ir failed")  # 詳細はサーバーログのみ
         return {
             "escalated": False,
-            "error": str(e),
             "message": "申し訳ありません、ただいまお取り次ぎに失敗しました。",
         }
     return {
