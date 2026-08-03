@@ -12,6 +12,7 @@ Next.js の /api/chat から呼ぶ。SSE(Server-Sent Events)で:
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from fastapi import FastAPI
@@ -22,6 +23,7 @@ from .agent import run_agent_stream
 from .synthesize import normalize_audience
 
 app = FastAPI(title="IR Agent")
+_log = logging.getLogger("ir-agent.server")
 
 
 class Turn(BaseModel):
@@ -80,7 +82,12 @@ async def chat(req: ChatRequest) -> StreamingResponse:
                     yield _sse("status", {"stage": chunk["stage"]})
                 elif chunk["type"] == "final":
                     yield _sse("final", chunk["response"])
-        except Exception as e:  # 失敗も前進: ユーザーに丁寧なエラー＋ログ
+        except Exception:  # 失敗も前進: ユーザーには丁寧な文面、詳細はサーバーログへ
+            # **例外の文面をレスポンスに載せない**（py/stack-trace-exposure）。
+            # Vertex/Discovery Engine の例外にはプロジェクトIDやデータストアID、
+            # 内部エンドポイントが含まれうる。投資家向け画面はログイン不要で誰でも開ける。
+            # デバッグ性は Cloud Run のログ（スタックトレース付き）で担保する。
+            _log.exception("chat stream failed (ticker=%s)", req.companyTicker)
             yield _sse(
                 "final",
                 {
@@ -89,7 +96,6 @@ async def chat(req: ChatRequest) -> StreamingResponse:
                     "citations": [],
                     "scope_status": "escalated",
                     "scope_reason": "unknown",
-                    "error": str(e),
                 },
             )
 

@@ -28,7 +28,7 @@
 | CI/CD | GitHub Actions（`.github/workflows/ci.yml`・`security.yml`）＋ **main ブランチ保護**＋ Dependabot | frontend(型/lint/build)＋agent(ruff/format/eval)＋gitleaks＋CodeQL。緑必須・PR経由 |
 | Firestore / 旧フロント / Vercel | (default) / ir-bot-mvp / — | 未使用 / **削除済み** / **削除済み**（全GCP集約） |
 
-GitHub: https://github.com/TIshow/ir-faq-mvp （main、PR #1〜#119 マージ済）。Issue: #3 経緯と残課題 / #42 FAQサジェスト(A本実装) / #46 IRインテリジェンス epic / #67 派生指標Phase2(CAGR・ROE/ROIC=B1データ投入待ち) / **#77 戦略（足りないもの・moat・残タスクTier）** / #86-87 尖らせ方(話題フォロー・フェデレーション) / **#88-92 インフラ（#88 ir-agent非公開化=✅完了、#89 BQ東京=データ空の今が好機、#90 SA分離、#91 モデル世代管理、#92 小規模ハードニング）** / **#97 Tier A（ハークスレイ実トラフィックで複利ループ1周）** / **#98 B1（層1縦深化: 多年度+BS/CF→ROE/ROIC解禁）** / **#107 層2精度（評価セット50〜100問＋取り込み方式比較: raw/digital/layout/手動MD/XBRL併用）** / **#118 SSEのエラー応答から例外メッセージを外す（`py/stack-trace-exposure`）**。
+GitHub: https://github.com/TIshow/ir-faq-mvp （main、PR #1〜#119 マージ済）。Issue: #3 経緯と残課題 / #42 FAQサジェスト(A本実装) / #46 IRインテリジェンス epic / #67 派生指標Phase2(CAGR・ROE/ROIC=B1データ投入待ち) / **#77 戦略（足りないもの・moat・残タスクTier）** / #86-87 尖らせ方(話題フォロー・フェデレーション) / **#88-92 インフラ（#88 ir-agent非公開化=✅完了、#89 BQ東京=データ空の今が好機、#90 SA分離、#91 モデル世代管理、#92 小規模ハードニング）** / **#97 Tier A（ハークスレイ実トラフィックで複利ループ1周）** / **#98 B1（層1縦深化: 多年度+BS/CF→ROE/ROIC解禁）** / **#107 層2精度（評価セット50〜100問＋取り込み方式比較: raw/digital/layout/手動MD/XBRL併用）**。
 **配信3経路（下記 Tier 1.2）**: **#113 AI引用可能な公開IRページ＝✅第1弾デプロイ済（PR #117・段階Cが残）** / **#85 MCP/APIエンドポイント（中核へ格上げ・未着手）** / **#114 埋め込みウィジェット（未着手）**。
 
 ## 3. 今の挙動（ブラウザで確認可能）
@@ -130,7 +130,7 @@ curl -s -N -X POST https://ir-frontend-255752121803.us-central1.run.app/api/chat
 - **4-2 ハークスレイをケーススタディ化**（反応・before/after）。 **4-3 課金/契約モデル**（発行体課金・データ分離を売りに）。
 - **4-4 方向性の検証基準**（#97 実施時に観察）: IR担当者が**ダッシュボードに食いつく**→重心移動は正解／**チャットの見た目だけ褒めてダッシュボードを開かない**→業務価値が不足・作り直し／**どちらも反応が薄い**→事業として要再検討。
 
-> 推奨スタート: 配信は **#113 の効果測定（1.2-4）**＝第1弾を本番に出した以上、AIが実際に引くかを測らないと次の投資判断ができない（sitemap の Search Console 登録＋公開前後で同じ質問をAIに投げて比較）。事業は **#97（Tier A: FAQ投入→ハークスレイで複利ループを1周）**＝堀は実利用でしか育たない（#77）。機能は **#98（B1: 層1の多年度＋BS/CF投入→CAGR/ROE/ROIC解禁。#67が下流）**。品質は **#107（層2の評価セット＋取り込み方式比較＝定性版eval関門の土台）**。インフラは #89（BQ東京・データが空の今だけ移行ゼロ）。小粒では **#118**（SSEのエラー応答から `str(e)` を外す。フロント未参照なので安全）。gemini-3 は thinking 最小化で先頭〜12s（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` に即戻す）。
+> 推奨スタート: 配信は **#113 の効果測定（1.2-4）**＝第1弾を本番に出した以上、AIが実際に引くかを測らないと次の投資判断ができない（sitemap の Search Console 登録＋公開前後で同じ質問をAIに投げて比較）。事業は **#97（Tier A: FAQ投入→ハークスレイで複利ループを1周）**＝堀は実利用でしか育たない（#77）。機能は **#98（B1: 層1の多年度＋BS/CF投入→CAGR/ROE/ROIC解禁。#67が下流）**。品質は **#107（層2の評価セット＋取り込み方式比較＝定性版eval関門の土台）**。インフラは #89（BQ東京・データが空の今だけ移行ゼロ）。gemini-3 は thinking 最小化で先頭〜12s（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` に即戻す）。
 
 ## 6. よく使う調査コマンド
 ```bash
@@ -166,5 +166,6 @@ gcloud run services logs read ir-agent --region us-central1 --limit 50
 | 公開したいテキストがHTMLに出ない | 値が `useEffect` 後に決まる状態（Context等）に依存していた | サーバー側で確定させ props で渡す。props は RSC ペイロード（`<script>` 内のJS文字列）には出るがクローラーの読む本文ではない。**`curl` で実HTMLを見て確認する**（対処済・#113） |
 | パネルがヘッダーの下に潜る／ドロップダウンが押せない | 親に `z-*` を付けると積み重ねコンテキストができ、中の `z-50` が外と競えない | 上に出したい要素の**親に z を付けない**。検証は**実クリック＋`elementFromPoint`**で（JSの `.click()` はヒットテストを迂回するので検証にならない）（対処済） |
 | `noindex` にしたのにAIに取られる | `noindex` は**検索インデックス向け**の指示。学習・アーカイブ型（GPTBot / CCBot / meta-externalagent 等）が取得済み本文を破棄する保証はない | 学習系に効くのは robots.txt の **Disallow**。`/c/` を既定拒否＋公開銘柄だけ Allow（対処済み・#113）。取得済みのコピーは消せないので、気づいた時点で以後を止めるしかない |
+| 例外文がユーザーに届く | `except Exception as e` の `str(e)` を応答に載せていた（Vertex/Discovery Engine の例外にはプロジェクトIDやデータストアIDが入りうる） | 応答から外し `logging.exception` でサーバーログへ（対処済み・#118）。ツール戻り値も同様（legacyではLLMが読むため本文に混ざりうる） |
 | CodeQL `js/file-access-to-http` | facts.json 由来の質問文が fetch body に流れる | **false positive として dismiss 済**（読むのは開示済みデータで秘密情報なし・送信先は同一オリジンの自社API・送るのはユーザーが押した質問文1本） |
 | gemini-3 に切替えたら 404 | 素の `gemini-3-flash` は存在しない・preview は us-central1 に無い | 実在IDは `gemini-3-flash-preview`＋`GCP_VERTEX_AI_LOCATION=global`。本番は Cloud Run env の MODEL_NAME が config 既定を上書きしている点にも注意 |
