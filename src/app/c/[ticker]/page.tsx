@@ -25,7 +25,12 @@ import ChatInterface from '@/components/ChatInterface';
 import { CompanyPicker } from '@/components/CompanyPicker';
 import { RememberCompany } from '@/components/RememberCompany';
 import { BrandLogo } from '@/components/BrandLogo';
-import { getActiveCompanies, companyShortName, type Company } from '@/config/companies';
+import {
+  getActiveCompanies,
+  isPublishedCompany,
+  companyShortName,
+  type Company,
+} from '@/config/companies';
 import { companyHeadline, companyQa } from '@/lib/public-facts';
 
 /** 静的生成（Phase 1: デプロイ時のみ生成・実行時のクエリはゼロ） */
@@ -55,7 +60,7 @@ export async function generateMetadata({
     description: `${company.name}の開示済み情報にもとづく公式Q&A。出典つきで、さらに詳しくは対話で質問できます。`,
     // 公開を承認していない企業は noindex（ページ自体は開発・デモ用に動かしたまま）。
     // 「公式」は発行体の承認を含意するので、勝手にAI/検索へ載せない。
-    ...(company.publishOfficialQa ? {} : { robots: { index: false, follow: false } }),
+    robots: isPublishedCompany(company) ? undefined : { index: false, follow: false },
   };
 }
 
@@ -73,46 +78,44 @@ export default async function CompanyChatPage({
   const qa = companyQa(company);
   const headline = companyHeadline(company);
 
-  // 機械専用の経路: schema.org/FAQPage に答え全文を入れる。
-  // **公開を承認した企業だけ**（構造化データは「公式回答」の機械可読な主張そのもの）。
-  const published = !!company.publishOfficialQa;
-  const faqJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    name: `${company.name}の公式Q&A`,
-    mainEntity: qa.map((q) => ({
-      '@type': 'Question',
-      name: q.question,
-      acceptedAnswer: { '@type': 'Answer', text: q.answer },
-    })),
-  };
-  const orgJsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Organization',
-    name: company.name,
-    alternateName: company.nameEn,
-    tickerSymbol: ticker,
-    description: company.description,
-    url: company.websiteUrl,
-  };
+  // 機械専用の経路: schema.org に答え全文を入れる。**公開を承認した企業だけ**
+  //（構造化データは「これは公式回答である」という機械可読な主張そのもの）。
+  const jsonLd = isPublishedCompany(company)
+    ? [
+        {
+          '@context': 'https://schema.org',
+          '@type': 'FAQPage',
+          name: `${company.name}の公式Q&A`,
+          mainEntity: qa.map((q) => ({
+            '@type': 'Question',
+            name: q.question,
+            acceptedAnswer: { '@type': 'Answer', text: q.answer },
+          })),
+        },
+        {
+          '@context': 'https://schema.org',
+          '@type': 'Organization',
+          name: company.name,
+          alternateName: company.nameEn,
+          tickerSymbol: ticker,
+          description: company.description,
+          url: company.websiteUrl,
+        },
+      ]
+    : [];
 
   return (
     <div className="relative flex h-screen flex-col bg-cream text-ink">
       {/* 「前回みていた銘柄」を覚える（トップの「続きから」が読む）。描画はしない */}
       <RememberCompany companyId={company.id} />
 
-      {published && (
-        <>
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
-          />
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
-          />
-        </>
-      )}
+      {jsonLd.map((ld) => (
+        <script
+          key={ld['@type']}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+        />
+      ))}
 
       {/* このURLが何のページかを機械にも人（スクリーンリーダー）にも明示する。
           画面ではチャットの見出しが同じ役割を果たすので視覚的には出さない。 */}

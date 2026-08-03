@@ -103,12 +103,18 @@ export function getActiveCompanies(): Company[] {
 }
 
 /**
- * **AIに「公式Q&A」として公開してよい企業**（#113）。
- * sitemap / llms.txt / JSON-LD / index 可否は必ずここを通す
- * （露出面ごとに条件を書くと、いつか片方だけ直し忘れて意図せず公開される）。
+ * **AIに「公式Q&A」として公開してよい企業か**（#113）。
+ * sitemap / llms.txt / JSON-LD / index可否 / トップの数値表示は、
+ * すべてこの述語を通すこと。**条件を露出面ごとに書き写さない**
+ * （片方だけ直し忘れて意図せず公開される。実際にトップの「公式Q&A N件」で起きた）。
  */
+export function isPublishedCompany(company: Company): boolean {
+  return !!company.publishOfficialQa && !!company.ticker && company.isActive;
+}
+
+/** 公開してよい企業の一覧。 */
 export function getPublishedCompanies(): Company[] {
-  return getActiveCompanies().filter((c) => c.publishOfficialQa && c.ticker);
+  return companies.filter(isPublishedCompany);
 }
 
 /** 表示用の短縮社名（「株式会社」を除去） */
