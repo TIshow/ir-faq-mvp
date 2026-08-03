@@ -358,13 +358,17 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
                     <div className="whitespace-nowrap text-[10.5px] font-bold text-mute">
                       {headline.period}
                     </div>
-                    {/* パネルを開く実アクションなので、脚注ではなくピルにする（サジェストピルと同じ語彙） */}
-                    <button
-                      onClick={() => setQaOpen(true)}
-                      className="shrink-0 rounded-full border-[1.5px] border-ink bg-paper px-3.5 py-1.5 text-[11.5px] font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream"
-                    >
-                      {`公式Q&A ${headline.qaCount}件をみる →`}
-                    </button>
+                    {/* パネルを開く実アクションなので、脚注ではなくピルにする（サジェストピルと同じ語彙）。
+                        件数は**パネルに実際に入る配列から数える**。`headline.qaCount` も同じ値だが、
+                        別経路の数を表示に使うと、ずれたとき「N件をみる」と中身が食い違う。 */}
+                    {qa.length > 0 && (
+                      <button
+                        onClick={() => setQaOpen(true)}
+                        className="shrink-0 rounded-full border-[1.5px] border-ink bg-paper px-3.5 py-1.5 text-[11.5px] font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream"
+                      >
+                        {`公式Q&A ${qa.length}件をみる →`}
+                      </button>
+                    )}
                   </div>
                   {/* 数値はカード幅をフルに使える＝3項目が1行に収まる */}
                   <div className="mt-2.5 flex flex-wrap items-baseline gap-x-7 gap-y-2">
