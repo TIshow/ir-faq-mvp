@@ -6,6 +6,7 @@ import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { getActiveCompanies, companyShortName } from '@/config/companies';
 import { NaruhodoMark } from '@/components/BrandLogo';
+import { PILL_INK } from '@/components/ui';
 
 // /api/ir/metrics の戻り値（#46 1-2b）
 interface Metrics {
@@ -485,7 +486,7 @@ function FaqHeader({
         </div>
         <button
           onClick={() => setOpen(!open)}
-          className="rounded-full border-[1.5px] border-ink bg-paper px-3.5 py-1.5 text-[11.5px] font-bold text-ink transition hover:bg-ink hover:text-cream"
+          className={PILL_INK}
         >
           {open ? '閉じる' : '＋ 新規追加'}
         </button>

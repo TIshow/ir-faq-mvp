@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { AgentResponse, Citation, FactCard, ScopeStatus } from '@/lib/agent-types';
 import { Markdown } from '@/components/Markdown';
+import { PILL_INK_MD } from '@/components/ui';
 
 /**
  * gs:// の出典URLを、署名URLを発行する内部ルート /api/doc?... に変換する。
@@ -433,7 +434,7 @@ export const AgentAnswer: React.FC<{
                 key={i}
                 style={{ animationDelay: `${nodeIndex * VINE_STEP_MS + 300 + i * 60}ms` }}
                 onClick={() => onSuggestion(s)}
-                className="animate-fade-slide-in rounded-full border-[1.5px] border-ink bg-paper px-3.5 py-2 text-xs font-bold text-ink transition-all duration-200 hover:-translate-y-px hover:bg-ink hover:text-cream active:translate-y-0"
+                className={`animate-fade-slide-in ${PILL_INK_MD}`}
               >
                 {s} →
               </button>
