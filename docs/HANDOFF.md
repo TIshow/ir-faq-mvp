@@ -165,5 +165,6 @@ gcloud run services logs read ir-agent --region us-central1 --limit 50
 | BQ の DELETE が "streaming buffer" エラー | streaming insert 直後の行は〜90分削除不可 | テスト行は時間をおいて DELETE（DML INSERT 分は即削除可） |
 | 公開したいテキストがHTMLに出ない | 値が `useEffect` 後に決まる状態（Context等）に依存していた | サーバー側で確定させ props で渡す。props は RSC ペイロード（`<script>` 内のJS文字列）には出るがクローラーの読む本文ではない。**`curl` で実HTMLを見て確認する**（対処済・#113） |
 | パネルがヘッダーの下に潜る／ドロップダウンが押せない | 親に `z-*` を付けると積み重ねコンテキストができ、中の `z-50` が外と競えない | 上に出したい要素の**親に z を付けない**。検証は**実クリック＋`elementFromPoint`**で（JSの `.click()` はヒットテストを迂回するので検証にならない）（対処済） |
+| `noindex` にしたのにAIに取られる | `noindex` は**検索インデックス向け**の指示。学習・アーカイブ型（GPTBot / CCBot / meta-externalagent 等）が取得済み本文を破棄する保証はない | 学習系に効くのは robots.txt の **Disallow**。`/c/` を既定拒否＋公開銘柄だけ Allow（対処済み・#113）。取得済みのコピーは消せないので、気づいた時点で以後を止めるしかない |
 | CodeQL `js/file-access-to-http` | facts.json 由来の質問文が fetch body に流れる | **false positive として dismiss 済**（読むのは開示済みデータで秘密情報なし・送信先は同一オリジンの自社API・送るのはユーザーが押した質問文1本） |
 | gemini-3 に切替えたら 404 | 素の `gemini-3-flash` は存在しない・preview は us-central1 に無い | 実在IDは `gemini-3-flash-preview`＋`GCP_VERTEX_AI_LOCATION=global`。本番は Cloud Run env の MODEL_NAME が config 既定を上書きしている点にも注意 |

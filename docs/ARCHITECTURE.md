@@ -109,7 +109,8 @@ FactCard = { metric, metricKey, period, value, valueNumeric, unit, yoy?, consoli
 - **パネルは常時DOMに描画し、開閉はCSSだけで行う**（条件レンダリングにしない）。これは見た目の都合ではなく機能の目的そのもの: AIクローラーはJSを実行せずHTMLを読むため、**閉じている間もHTMLに答え全文が無ければ引用されない**。クリックで開ける正当なUIなので隠しテキスト（クローキング）には当たらない。
 - 機械専用の経路として **JSON-LD `FAQPage`**（同じ答え全文）と `sr-only` の `h1`（このURLが何のページか）を持つ。
 - **公開ゲート `publishOfficialQa`（`companies.ts`・既定 false）**: 「公式」は発行体の承認を含意する表現なので、**実際に現場で使われている企業だけ**を公開する。true の企業だけが sitemap / llms.txt / JSON-LD に載り index される。false の企業も `/c/<ticker>` は動く（開発・デモ用）が `noindex, nofollow`。判定は必ず `isPublishedCompany()` / `getPublishedCompanies()` を通す。**露出面は銘柄ページだけではない**——トップ `/` も index 可能で sitemap に載るため、そこに出す「公式Q&A N件」や層1の数値も同じゲートを通す（実装時に実際ここが漏れており、`curl` で検出した）。
-- 露出の配管: `app/robots.ts`（GPTBot / OAI-SearchBot / ChatGPT-User / PerplexityBot / ClaudeBot / Claude-Web / Google-Extended / CCBot / Applebot-Extended を**明示的に許可**、`/ir/` `/api/` は拒否）・`app/sitemap.ts`・`app/llms.txt/route.ts`。
+- **`noindex` だけでは学習クローラーを止められない**: `noindex` は*検索インデックス*向けの指示で、学習・アーカイブ型（GPTBot / CCBot / meta-externalagent 等）が取得済み本文を破棄する保証はない。学習系に確実に効くのは robots.txt の Disallow。したがって `/c/` は**既定で Disallow し、公開銘柄のパスだけ Allow** する（`app/robots.ts`）。noindex は検索向けの二重防御として併用する。
+- 露出の配管: `app/robots.ts`（GPTBot / OAI-SearchBot / ChatGPT-User / PerplexityBot / ClaudeBot / Claude-Web / Google-Extended / CCBot / Applebot-Extended を**明示的に許可**、`/ir/` `/api/` と**未公開の `/c/`** は拒否）・`app/sitemap.ts`・`app/llms.txt/route.ts`。
 
 > 段階B（実装済み）=層1由来の決定論Q&A。**段階C（未実装）**=`interactions.topic` の実績で並べ替え／層2のFAQをパネルに載せる。利用が少ないうちは自動更新しない方針（費用と鮮度の釣り合い）。
 
