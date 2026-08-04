@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import os
 import time
-import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
