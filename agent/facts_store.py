@@ -1,8 +1,10 @@
 """
-層1（financial_facts）の JSON ファイル・バックエンド（PoC）。
+層1（financial_facts）の JSON ファイル・バックエンド。**1社1ファイル**（`data/facts/<ticker>.json`）。
 
-Cloud SQL は必須ではない。必須なのは「検証済みの構造化ソースから決定論的に数値を引く」原則。
-PoC（1社・数十件・読み取り専用）はこの JSON で十分。本番は db.py（Cloud SQL）に切替（config.FACTS_BACKEND）。
+必須なのは「検証済みの構造化ソースから決定論的に数値を引く」原則であって、DBそのものではない。
+層1の参照は「ティッカー1件 → 十数件」の完全なキー引きなので、常時起動DBを持つ理由が無い
+（#135 で計測のうえ Cloud SQL / BigQuery を採らないと決めた。経緯は docs/edinet-ingest.md §6-2）。
+`config.FACTS_BACKEND=cloudsql` にすれば db.py へ切替できる口は残してある。
 
 db.query_facts / resolve_company_id / insert_escalation と同じ契約を提供する。
 """
@@ -19,9 +21,9 @@ _DATA_DIR = pathlib.Path(__file__).with_name("data")
 _DEFAULT_FACTS_DIR = _DATA_DIR / "facts"
 _ESCALATIONS = _DATA_DIR / "escalations.jsonl"
 
-# ティッカー -> そのファイル。プロセス内で1回だけ読む。
-# 以前は単一 facts.json を **クエリのたびに全部再パース**していた（1問で3回）。
-# 41件なら誤差だが、EDINET全社（実測3,900社=40MB）では1問1.3秒の純粋な無駄になる。
+# ティッカー -> そのファクト。読んだものだけ、プロセス内で1回だけ。
+# 以前は単一 facts.json を **クエリのたびに全部再パース**していた（実測 1問9.0回）。
+# 41件なら誤差だが、EDINET全社（実測3,900社=40MB）では1問あたり約3.9秒の純粋な無駄になる。
 _cache: dict[str, list[dict[str, Any]]] = {}
 
 # ティッカー -> 実ファイル。層1ディレクトリを1回だけ列挙して作る。
@@ -29,7 +31,7 @@ _index: dict[str, pathlib.Path] | None = None
 
 
 def _facts_dir() -> pathlib.Path:
-    return pathlib.Path(config.FACTS_JSON_PATH) if config.FACTS_JSON_PATH else _DEFAULT_FACTS_DIR
+    return pathlib.Path(config.FACTS_DIR) if config.FACTS_DIR else _DEFAULT_FACTS_DIR
 
 
 def _file_index() -> dict[str, pathlib.Path]:
@@ -71,6 +73,20 @@ def _load(ticker: str) -> list[dict[str, Any]]:
     return rows
 
 
+def _verified_rows(ticker: str) -> list[dict[str, Any]]:
+    """その企業の**採用してよい**ファクトだけ。層1の採用条件をここ1か所に集約する。
+
+    - `verified` — 人が確認した数値だけを出す（CLAUDE.md の鉄則）。EDINET抽出は
+      `verified: false` で出るので、取り込んだだけのものはここで落ちる。
+    - `ticker` — ファイル名だけでなく中身でも確認する。取り違えたファイルを置いても
+      「別の会社の数字を返す」のではなく「何も返さない」で落ちるようにするため。
+
+    フィルタ済みの新しいリストを返すので、`_cache` の中身が呼び出し側に漏れない。
+    """
+    tk = str(ticker)
+    return [r for r in _load(tk) if str(r.get("ticker")) == tk and r.get("verified", False)]
+
+
 def resolve_company_id(ticker: str) -> str:
     """JSONバックエンドでは ticker をそのまま識別子に使う（db版は int を返す）。"""
     return ticker
@@ -87,18 +103,12 @@ def query_facts(
     is_forecast = basis == "forecast"
     mks, ps = set(metric_keys), set(periods)
     out: list[dict[str, Any]] = []
-    for r in _load(company_id):
-        # ファイルが企業別になった今も ticker は確認する。取り違えたファイルを置いても
-        # 「別の会社の数字を返す」のではなく「何も返さない」で落ちるようにするため。
-        if str(r.get("ticker")) != str(company_id):
-            continue
+    for r in _verified_rows(company_id):
         if r.get("metric_key") not in mks or r.get("period_label") not in ps:
             continue
         if bool(r.get("consolidated", True)) != consolidated:
             continue
         if bool(r.get("is_forecast", False)) != is_forecast:
-            continue
-        if not r.get("verified", False):
             continue
         out.append(dict(r))
     out.sort(key=lambda r: (r.get("fiscal_year", 0), r.get("fiscal_quarter") or 0))
@@ -108,9 +118,7 @@ def query_facts(
 def summary(ticker: str) -> dict[str, Any]:
     """その企業で利用可能な期間・指標キーを返す（プロンプト接地用）。"""
     periods_actual, periods_forecast, metrics = [], [], {}
-    for r in _load(ticker):
-        if str(r.get("ticker")) != str(ticker) or not r.get("verified", False):
-            continue
+    for r in _verified_rows(ticker):
         p = r.get("period_label")
         if r.get("is_forecast"):
             if p not in periods_forecast:
@@ -130,7 +138,7 @@ def doc_label_for_url(url: str, ticker: str) -> str | None:
     層2（検索）の表示名がファイル名由来で素っ気ない場合に、検証済みの資料名へ整える用途。"""
     if not url or not ticker:
         return None
-    for r in _load(ticker):
+    for r in _verified_rows(ticker):
         if r.get("source_url") == url and r.get("source_doc_label"):
             return str(r["source_doc_label"])
     return None

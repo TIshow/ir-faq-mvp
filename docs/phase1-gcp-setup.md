@@ -53,7 +53,7 @@ gcloud discovery-engine data-stores list --location=global 2>/dev/null || echo "
 | 資産 | 判定 | 対応 |
 |---|---|---|
 | Discovery Engine `vis-ir-data_…` | ✅ そのまま再利用 | 層2リトリーバ。投入済みデータを使う |
-| Cloud SQL `ir-faq-db` | ❌ 消滅（`Listed 0 items`） | **PoCは不要**。層1は JSON(`agent/data/facts.json`) で代替。Cloud SQL/BigQuery は本番で新設 |
+| Cloud SQL `ir-faq-db` | ❌ 消滅（`Listed 0 items`） | **PoCは不要**。層1は JSON(`agent/data/facts/<ticker>.json`) で代替。Cloud SQL/BigQuery は本番で新設 |
 | Vertex AI（aiplatform=Agent Platform API） | ✅ 再利用 | モデルを Gemini 3 に差し替え（B-3で確認） |
 | SA `ir-faq-service` | ✅ 再利用 | 不足ロールを**追加**（B-4） |
 | Cloud Run `ir-bot-mvp` | ✅ 稼働中 | フロント再デプロイ先。エージェントは別サービス追加 |
@@ -61,7 +61,8 @@ gcloud discovery-engine data-stores list --location=global 2>/dev/null || echo "
 | Firestore (default) | ⏸ 不要化 | 新設計で未使用。**放置可** |
 
 > **層1は Cloud SQL 必須ではない。** 必須なのは「検証済みの構造化ソースから決定論的に数値を引く」原則で、
-> PoC（1社・数十件・読取専用）は JSON ファイル(`agent/data/facts.json`, `FACTS_BACKEND=json`)で十分。
+> 層1は JSON ファイル(`agent/data/facts/<ticker>.json`・1社1ファイル, `FACTS_BACKEND=json`)。
+> #135 で計測のうえ Cloud SQL / BigQuery は採らないと決定（docs/edinet-ingest.md §6-2）。
 > Cloud SQL は本番（多発行体・大量・同時書込・集計）で `FACTS_BACKEND=cloudsql` に切替。
 
 ---
@@ -90,7 +91,7 @@ printf '%s' 'NEW_ROTATED_PASSWORD' | \
 ```
 
 ### B-2.（本番のみ）層1スキーマを Cloud SQL に適用
-> PoCはJSON(`agent/data/facts.json`)なのでスキップ。本番でCloud SQL新設時に適用。
+> 層1はJSON(`agent/data/facts/<ticker>.json`)なのでスキップ。本番でCloud SQL新設時に適用。
 
 ```bash
 export DB_PASSWORD="$(gcloud secrets versions access latest --secret=ir-faq-db-password)"
@@ -151,7 +152,7 @@ gcloud storage cp ./vis-pdfs/*.pdf "${BUCKET}/vis/"
 
 ## C. データ投入（人手・PoC＝JSON）
 
-1. **`agent/data/facts.json`** にヴィス直近2〜3期を投入（売上高/営業利益/経常利益/純利益/配当 ＋ セグメント別、実績/予想を区別）。各ファクトに `source_doc_label`/`source_page`/`source_url`/`source_quote`/`verified=true` を必ず付与（利益率はコード計算なので元値だけでよい）。**現状は空（ダミー禁止）。実際の短信/有報の検証済み数値のみ投入する**。
+1. **`agent/data/facts/5071.json`** にヴィス直近2〜3期を投入（売上高/営業利益/経常利益/純利益/配当 ＋ セグメント別、実績/予想を区別）。各ファクトに `source_doc_label`/`source_page`/`source_url`/`source_quote`/`verified=true` を必ず付与（利益率はコード計算なので元値だけでよい）。**現状は空（ダミー禁止）。実際の短信/有報の検証済み数値のみ投入する**。
 2. `eval/golden_set.vis.jsonl` の `gold_numbers`（現在空・`note`付き）を投入値と同時に埋める。
 
 ---

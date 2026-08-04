@@ -43,7 +43,8 @@ DB_PASSWORD = os.environ.get("DB_PASSWORD")
 # 'json'  = PoC。構造化JSONファイル（無料・インフラ不要）。
 # 'cloudsql' = 本番。Cloud SQL / Postgres（多発行体・大量・同時書込・集計）。
 FACTS_BACKEND = os.environ.get("FACTS_BACKEND", "json")
-FACTS_JSON_PATH = os.environ.get("FACTS_JSON_PATH", "")  # 空ならパッケージ同梱の既定
+# 層1の置き場（**ディレクトリ**。中身は 1社1ファイルの <ticker>.json）。空ならパッケージ同梱の既定。
+FACTS_DIR = os.environ.get("FACTS_DIR", "")
 
 # --- 取得パラメータ ----------------------------------------------------------
 MAX_DISCLOSURE_RESULTS = int(os.environ.get("MAX_DISCLOSURE_RESULTS", "8"))

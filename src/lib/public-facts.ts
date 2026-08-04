@@ -74,7 +74,7 @@ function fileIndex(): Map<string, string> {
   index = new Map();
   if (fs.existsSync(dir)) {
     for (const name of fs.readdirSync(dir)) {
-      if (name.endsWith('.json')) index.set(name.slice(0, -'.json'.length), path.join(dir, name));
+      if (name.endsWith('.json')) index.set(path.basename(name, '.json'), path.join(dir, name));
     }
   }
   return index;
