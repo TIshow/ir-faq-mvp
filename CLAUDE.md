@@ -57,7 +57,7 @@ src/                      フロント（Next.js）
   components/Markdown.tsx       回答散文のMarkdown描画（マーカー強調・💡注目ポイント・CJK太字救済）
   components/BrandLogo.tsx      Naruhodo IR ロゴ（「！の芽」マーク＋ワードマーク）
   config/companies.ts     企業マスター（id/name/ticker/datastoreId/fiscalYearEndMonth/publishOfficialQa）＝唯一の正
-  lib/public-facts.ts     **公式Q&Aのデータ層**: 層1(facts.json)から質問＋答え＋出典を決定論で組み立てる（LLM不使用）
+  lib/public-facts.ts     **公式Q&Aのデータ層**: 層1(data/facts/)から質問＋答え＋出典を決定論で組み立てる（LLM不使用）
   lib/last-company.ts     「前回みていた銘柄」の記憶（企業IDのみ。会話本文は保存しない）
   lib/site.ts             公開URL（sitemap/llms.txt/JSON-LD 用）
   lib/agent-types.ts      AgentResponse 等の型（契約）
@@ -77,10 +77,11 @@ agent/                    エージェント（Python / ADK）
   store.py / facts_store.py / db.py  層1ストア（json=PoC / cloudsql=本番 を FACTS_BACKEND で切替）
   server.py               FastAPI（/chat の SSE, /health）
   config.py               環境設定（.env 読込）
-  data/facts.json     層1の実データ（ハークスレイ(7561)旗艦＋ヴィス(5071)。検証済み実値のみ／ティッカー別。捏造禁止）
+  data/facts/<ticker>.json  層1の実データ（**1社1ファイル**。ハークスレイ(7561)旗艦＋ヴィス(5071)。
+                          検証済み実値のみ＝`verified:true` だけが採用される。捏造禁止）
   .env.example            ローカル設定例
 scripts/
-  extract_facts.py        層1取り込み（GeminiでPDF→構造化ファクト草案。人手検証後 facts.json へ）
+  extract_facts.py        層1取り込み（GeminiでPDF→構造化ファクト草案。人手検証後 data/facts/<ticker>.json へ）
   edinet/client.py        EDINET API v2 クライアント（書類一覧・XBRL zip 取得。キャッシュ優先）
   edinet/parse.py         層1取り込み（有報XBRL→決定論抽出・**全社対応**。日本基準/IFRS・連結/単体・
                           セグメント自動検出。数値はタグから読むだけでLLMは通さない。詳細 docs/edinet-ingest.md）

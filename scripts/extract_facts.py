@@ -4,7 +4,7 @@
 
 Gemini(Vertex) multimodal に GCS のPDFを直接読ませ、明示された数値のみを
 構造化JSONで抽出する。出力は verified:false の「草案」。人手検証後に
-agent/data/facts.json へ反映する（捏造ゼロの鉄則：AI抽出は検証前提）。
+agent/data/facts/<ticker>.json へ反映する（捏造ゼロの鉄則：AI抽出は検証前提）。
 
 使い方:
   uv run python scripts/extract_facts.py \
@@ -29,7 +29,7 @@ PROJECT = "hallowed-trail-462613-v1"
 LOCATION = "us-central1"
 MODEL = "gemini-2.5-flash"
 
-# 抽出する指標の統制語彙（facts.json の metric_key と一致させる）
+# 抽出する指標の統制語彙（層1の metric_key と一致させる）
 METRIC_VOCAB = """
 - revenue（売上高）
 - gross_profit（売上総利益）
@@ -110,7 +110,7 @@ def main() -> int:
 
     out = {
         "note": f"【草案・未検証】{args.company}({args.ticker}) を {MODEL} で {args.gcs} から抽出。"
-        f"人手で値を検証し、verified=true にして agent/data/facts.json へ反映すること。",
+        f"人手で値を検証し、verified=true にして agent/data/facts/<ticker>.json へ反映すること。",
         "facts": facts,
     }
     with open(args.out, "w", encoding="utf-8") as fp:
