@@ -57,24 +57,37 @@ const HEADLINE_METRICS = [
 /** ティッカー -> そのファクト。プロセス内で1回だけ読む。 */
 const cache = new Map<string, Fact[]>();
 
-/** ティッカーは**ファイル名になる**ので英数字だけに限る（`/c/<ticker>` はURL由来）。
- *  区切り文字を1つも許さないことで `../` によるパス外への脱出を成立させない。
- *  証券コードは4桁（新形式の `135A` を含む）、EDINETの secCode は5桁。 */
-const TICKER_RE = /^[0-9A-Za-z]{1,10}$/;
+/** ティッカー -> 実ファイル。層1ディレクトリを1回だけ列挙して作る。 */
+let index: Map<string, string> | null = null;
+
+/**
+ * `agent/data/facts/*.json` を列挙して「ティッカー -> パス」を作る（1回だけ）。
+ *
+ * **ティッカーからパスを組み立てない。** ticker は `/c/<ticker>` のURL由来なので、
+ * `${ticker}.json` と繋ぐと `../` でディレクトリの外を読める。実在するファイルだけを
+ * 引く形にすれば、読める対象が層1ディレクトリの中身に限定される
+ * （エージェント側 `agent/facts_store.py` の `_file_index` と同じ考え方）。
+ */
+function fileIndex(): Map<string, string> {
+  if (index) return index;
+  const dir = path.join(process.cwd(), 'agent', 'data', 'facts');
+  index = new Map();
+  if (fs.existsSync(dir)) {
+    for (const name of fs.readdirSync(dir)) {
+      if (name.endsWith('.json')) index.set(name.slice(0, -'.json'.length), path.join(dir, name));
+    }
+  }
+  return index;
+}
 
 /** 指定企業の層1ファイルを読む（`agent/data/facts/<ticker>.json`）。 */
 function loadTicker(ticker: string): Fact[] {
   const hit = cache.get(ticker);
   if (hit) return hit;
-  if (!TICKER_RE.test(ticker)) {
-    cache.set(ticker, []);
-    return [];
-  }
-  const file = path.join(process.cwd(), 'agent', 'data', 'facts', `${ticker}.json`);
-  let rows: Fact[] = [];
-  if (fs.existsSync(file)) {
-    rows = (JSON.parse(fs.readFileSync(file, 'utf8')) as { facts?: Fact[] }).facts ?? [];
-  }
+  const file = fileIndex().get(ticker);
+  const rows: Fact[] = file
+    ? ((JSON.parse(fs.readFileSync(file, 'utf8')) as { facts?: Fact[] }).facts ?? [])
+    : [];
   cache.set(ticker, rows);
   return rows;
 }

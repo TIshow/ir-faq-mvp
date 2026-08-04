@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import pathlib
-import re
 from typing import Any
 
 from . import config
@@ -25,33 +24,28 @@ _ESCALATIONS = _DATA_DIR / "escalations.jsonl"
 # 41件なら誤差だが、EDINET全社（実測3,900社=40MB）では1問1.3秒の純粋な無駄になる。
 _cache: dict[str, list[dict[str, Any]]] = {}
 
-# ティッカーは**ファイル名になる**ので、英数字だけに限る。
-# 証券コードは4桁（新形式の `135A` を含む）、EDINETの secCode は5桁。
-# 区切り文字を1つも許さないことで、`../` によるパス外への脱出を成立させない
-# （エージェントは呼び出し元を信用しない。#88 で非公開にしたのとは別の層の防御）。
-_TICKER_RE = re.compile(r"^[0-9A-Za-z]{1,10}$")
+# ティッカー -> 実ファイル。層1ディレクトリを1回だけ列挙して作る。
+_index: dict[str, pathlib.Path] | None = None
 
 
 def _facts_dir() -> pathlib.Path:
     return pathlib.Path(config.FACTS_JSON_PATH) if config.FACTS_JSON_PATH else _DEFAULT_FACTS_DIR
 
 
-def _safe_facts_file(ticker: str) -> pathlib.Path | None:
-    """`data/facts/<ticker>.json` の実パス。層1ディレクトリの外を指すなら None。
+def _file_index() -> dict[str, pathlib.Path]:
+    """`data/facts/*.json` を列挙して「ティッカー -> パス」を作る（1回だけ）。
 
-    ティッカーはリクエスト（エージェント）とURL（`/c/<ticker>`）に由来するので、
-    そのままファイル名にすると `../` でディレクトリの外を読める。
-    **エージェントは呼び出し元を信用しない**（#88 の非公開化は別の層の防御であって、
-    入力を信じてよい理由にはならない）。二重に止める:
-
-      1. 許可文字だけ — 区切り文字を1つも許さない
-      2. 解決後の包含確認 — シンボリックリンク等で外に出ていないか実パスで確かめる
+    **ティッカーからパスを組み立てない。** ティッカーはリクエスト（エージェント）と
+    URL（`/c/<ticker>`）に由来するので、`f"{ticker}.json"` と繋ぐと `../` で
+    ディレクトリの外を読める。ディレクトリに実在するファイルだけを引く形にすれば、
+    読める対象が層1ディレクトリの中身そのものに限定され、脱出する経路が無くなる。
+    （#88 でエージェントを非公開にしたのは別の層の防御で、入力を信じてよい理由にはならない。）
     """
-    if not _TICKER_RE.match(ticker):
-        return None
-    base = _facts_dir().resolve()
-    p = (base / f"{ticker}.json").resolve()
-    return p if p.parent == base else None
+    global _index
+    if _index is None:
+        d = _facts_dir()
+        _index = {p.stem: p for p in sorted(d.glob("*.json"))} if d.is_dir() else {}
+    return _index
 
 
 def _load(ticker: str) -> list[dict[str, Any]]:
@@ -65,8 +59,8 @@ def _load(ticker: str) -> list[dict[str, Any]]:
     if key in _cache:
         return _cache[key]
     rows: list[dict[str, Any]] = []
-    p = _safe_facts_file(key)
-    if p is not None and p.exists():
+    p = _file_index().get(key)
+    if p is not None:
         data = json.loads(p.read_text(encoding="utf-8"))
         # ファイルは [..facts..] でも {"facts":[..]} でも可
         rows = data["facts"] if isinstance(data, dict) else data
