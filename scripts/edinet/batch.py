@@ -9,7 +9,7 @@
     それまでの行は残る。zipもキャッシュ済みなので再取得は発生しない。
   - **資料側の失敗では止めない** — XBRLが無い等は理由を台帳に書いて次へ進む。
     **どの企業がなぜ取れなかったかが、カバレッジ評価そのもの**（#131）。
-  - **通信起因では止める** — ネットが切れたら残りを失敗として刻まずに中断する。
+  - **環境起因では止める** — 通信断やディスク満杯では、残りを失敗として刻まずに中断する。
     台帳に載せた時点で「処理済み」になり、再開時に飛ばされて**データが黙って欠ける**。
     「取れなかったものは台帳に残さない＝次回また取りに行く」が不変条件。
   - **配信ディレクトリには書かない** — 出力先は `agent/data/facts/` とは別。
@@ -32,11 +32,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import socket
 import statistics
 import sys
 import time
-import urllib.error
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
@@ -58,9 +56,13 @@ RUN_META_NAME = "_run.json"  # 所要時間など、1書類に紐づかない情
 PDF_URL = "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/{doc_id}.pdf"
 
 
-# ネットワーク起因＝**その書類の問題ではない**もの。資料側の問題（XBRLが無い・
-# 会計基準が判定できない）とは扱いを分ける必要がある: 前者は次回取りに行けば取れる。
-TRANSIENT_ERRORS = (urllib.error.URLError, TimeoutError, ConnectionError, socket.timeout)
+# **環境の失敗**（通信・ディスク）。その書類の問題ではないので台帳に記録しない。
+# `OSError` 一つで足りる: URLError / HTTPError / TimeoutError / ConnectionError は
+# すべてそのサブクラスで、`socket.timeout` は `TimeoutError` そのもの（3.10以降）。
+# しかも 3.2GB を書き出す処理なので、**ディスク満杯（ENOSPC）も同じ扱いにしたい**。
+# 書類側の問題（BadZipFile / ParseError / KeyError 等）は OSError ではないので、
+# 従来どおり理由つきで台帳に残り、カバレッジ評価に効く。
+TRANSIENT_ERRORS = (OSError,)
 
 
 # --------------------------------------------------------------------- 重複規則
@@ -145,7 +147,7 @@ def process_one(client: EdinetClient, ref: DocRef, out_dir: Path) -> dict[str, A
             json.dumps({"facts": merged}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
     except TRANSIENT_ERRORS:
-        # **通信起因は台帳に書かない。** 載せると「処理済み」として再開時に飛ばされ、
+        # **環境起因は台帳に書かない。** 載せると「処理済み」として再開時に飛ばされ、
         # ネットが切れていた間の数百社が二度と取得されない。データが黙って欠けるのが
         # 最悪なので、行を書かずにそのまま投げて（包まずに＝原因を隠さずに）バッチを止める。
         raise
@@ -155,7 +157,7 @@ def process_one(client: EdinetClient, ref: DocRef, out_dir: Path) -> dict[str, A
 
 
 # ----------------------------------------------------------------------- 本体
-def run(start: date, end: date, out_dir: Path, cache_dir: Path, limit: int | None) -> Path:
+def run(start: date, end: date, out_dir: Path, cache_dir: Path, limit: int | None) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     ledger = out_dir / LEDGER_NAME
 
@@ -187,10 +189,13 @@ def run(start: date, end: date, out_dir: Path, cache_dir: Path, limit: int | Non
                 if limit and n >= limit:
                     break
         except TRANSIENT_ERRORS as e:
-            # 通信が切れたら**進み続けない**。残り全部を失敗として台帳に刻むと、
+            # 環境が壊れたら**進み続けない**。残り全部を失敗として台帳に刻むと、
             # 再開時に飛ばされてデータが黙って欠ける。ここで止めれば、
             # 未処理は台帳に無いまま＝次回そのまま続きから取りに行ける。
-            stopped = f"\n⚠ 通信が途切れたため中断（{type(e).__name__}: {e}）。同じコマンドで続きから再開できます。"
+            stopped = (
+                f"\n⚠ 中断（{type(e).__name__}: {e}）。通信かディスクの問題です。"
+                "\n  未処理は台帳に残していないので、同じコマンドで続きから再開できます。"
+            )
         except KeyboardInterrupt:
             stopped = "\n中断しました。同じコマンドで続きから再開できます。"
     elapsed = time.time() - t0
@@ -214,7 +219,6 @@ def run(start: date, end: date, out_dir: Path, cache_dir: Path, limit: int | Non
         + "\n",
         encoding="utf-8",
     )
-    return ledger
 
 
 # --------------------------------------------------------------------- レポート
@@ -326,12 +330,11 @@ def main() -> None:
     ap.add_argument("--report-only", action="store_true", help="取得せず台帳からレポートのみ")
     args = ap.parse_args()
 
-    ledger = args.out / LEDGER_NAME
     if not args.report_only:
         if not (args.start and args.end):
             ap.error("--start と --end が要る（--report-only なら不要）")
-        ledger = run(args.start, args.end, args.out, args.cache, args.limit)
-    report(ledger)
+        run(args.start, args.end, args.out, args.cache, args.limit)
+    report(args.out / LEDGER_NAME)
 
 
 if __name__ == "__main__":

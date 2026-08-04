@@ -131,7 +131,7 @@ class EdinetClient:
                 if e.code != 429 and e.code < 500:
                     raise  # 4xx は粘っても変わらない
                 last = e
-            except (urllib.error.URLError, TimeoutError, OSError) as e:
+            except OSError as e:  # URLError も TimeoutError もこのサブクラス
                 last = e
             if attempt < _MAX_RETRIES:
                 time.sleep(_RETRY_BACKOFF_SEC * (2**attempt))  # 2, 4, 8秒
