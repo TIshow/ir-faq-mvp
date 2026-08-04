@@ -346,32 +346,14 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
                 ))}
               </div>
 
-              {/* おもな数字（層1の検証済み実績）＋公式Q&Aへの導線。
-                  数字とCTAを別ブロックにする（1つの flex-wrap に混ぜると、数字が
-                  幅を埋めたときにCTAだけが次行へ落ち、カード内に空白の帯ができる）。 */}
+              {/* おもな数字（層1の検証済み実績）。公式Q&AのCTAは入力欄の上に常設するので
+                  ここには置かない（初期画面にしか無いと、会話を始めた瞬間に消えてしまう）。 */}
               {headline && (
                 <div className="mt-7 rounded-3xl bg-paper px-6 py-5 shadow-e2">
-                  {/* 見出し行にCTAを置く。数値と同じ行に混ぜると数値の幅を奪って折り返し、
-                      カード内に中途半端な余白ができる（この行は元々空いている）。 */}
-                  <div className="flex items-center justify-between gap-4">
-                    {/* ラベルは期間だけ。「おもな数字」は各数値にラベルが付いている以上
-                        情報として重複で、スマホでCTAと取り合って切れる原因になる。 */}
-                    <div className="whitespace-nowrap text-[10.5px] font-bold text-mute">
-                      {headline.period}
-                    </div>
-                    {/* パネルを開く実アクションなので、脚注ではなく主アクションのピル（PILL_INK）にする。
-                        件数は**パネルに実際に入る配列から数える**。`headline.qaCount` も同じ値だが、
-                        別経路の数を表示に使うと、ずれたとき「N件をみる」と中身が食い違う。 */}
-                    {qa.length > 0 && (
-                      <button
-                        onClick={() => setQaOpen(true)}
-                        className={`shrink-0 ${PILL_INK}`}
-                      >
-                        {`公式Q&A ${qa.length}件をみる →`}
-                      </button>
-                    )}
+                  {/* ラベルは期間だけ。「おもな数字」は各数値にラベルが付いている以上、情報として重複。 */}
+                  <div className="whitespace-nowrap text-[10.5px] font-bold text-mute">
+                    {headline.period}
                   </div>
-                  {/* 数値はカード幅をフルに使える＝3項目が1行に収まる */}
                   <div className="mt-2.5 flex flex-wrap items-baseline gap-x-7 gap-y-2">
                     {headline.numbers.map((n) => (
                       <div key={n.label} className="flex items-baseline gap-1.5">
@@ -441,6 +423,23 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
 
       {/* 入力 */}
       <div className="px-4 pb-5 pt-1">
+        {/* 公式Q&Aの導線は**入力欄の上に常設**する。初期画面の数字カードに置くと
+            会話を始めた瞬間に消えてしまうが、これは会話中こそ開きたいもの
+            （「その数字の出どころは？」と思ったときに手が届く）。 */}
+        {qa.length > 0 && (
+          <div className="mb-2 flex justify-end">
+            {/* 開閉の**トグル**にする。開いている間も出しっぱなしなので、押しても何も
+                起きない（＝画面にあるものを指す死んだボタン）状態を作らない。
+                隠すとレイアウトが跳ねるので、ラベルの方を状態に合わせる。 */}
+            <button
+              onClick={() => setQaOpen((o) => !o)}
+              aria-expanded={qaOpen}
+              className={PILL_INK}
+            >
+              {qaOpen ? '公式Q&Aを閉じる' : `公式Q&A ${qa.length}件をみる →`}
+            </button>
+          </div>
+        )}
         <form
           onSubmit={(e) => { e.preventDefault(); send(inputValue); }}
           className="flex items-center gap-2 rounded-full bg-paper p-2 pl-5 shadow-e2 transition-shadow duration-300 focus-within:shadow-e4"
