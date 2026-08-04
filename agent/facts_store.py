@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 from typing import Any
 
 from . import config
@@ -23,6 +24,12 @@ _ESCALATIONS = _DATA_DIR / "escalations.jsonl"
 # 以前は単一 facts.json を **クエリのたびに全部再パース**していた（1問で3回）。
 # 41件なら誤差だが、EDINET全社（実測3,900社=40MB）では1問1.3秒の純粋な無駄になる。
 _cache: dict[str, list[dict[str, Any]]] = {}
+
+# ティッカーは**ファイル名になる**ので、英数字だけに限る。
+# 証券コードは4桁（新形式の `135A` を含む）、EDINETの secCode は5桁。
+# 区切り文字を1つも許さないことで、`../` によるパス外への脱出を成立させない
+# （エージェントは呼び出し元を信用しない。#88 で非公開にしたのとは別の層の防御）。
+_TICKER_RE = re.compile(r"^[0-9A-Za-z]{1,10}$")
 
 
 def _facts_dir() -> pathlib.Path:
@@ -39,6 +46,9 @@ def _load(ticker: str) -> list[dict[str, Any]]:
     key = str(ticker)
     if key in _cache:
         return _cache[key]
+    if not _TICKER_RE.match(key):
+        _cache[key] = []
+        return []
     p = _facts_dir() / f"{key}.json"
     rows: list[dict[str, Any]] = []
     if p.exists():

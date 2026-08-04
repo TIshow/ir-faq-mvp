@@ -57,10 +57,19 @@ const HEADLINE_METRICS = [
 /** ティッカー -> そのファクト。プロセス内で1回だけ読む。 */
 const cache = new Map<string, Fact[]>();
 
+/** ティッカーは**ファイル名になる**ので英数字だけに限る（`/c/<ticker>` はURL由来）。
+ *  区切り文字を1つも許さないことで `../` によるパス外への脱出を成立させない。
+ *  証券コードは4桁（新形式の `135A` を含む）、EDINETの secCode は5桁。 */
+const TICKER_RE = /^[0-9A-Za-z]{1,10}$/;
+
 /** 指定企業の層1ファイルを読む（`agent/data/facts/<ticker>.json`）。 */
 function loadTicker(ticker: string): Fact[] {
   const hit = cache.get(ticker);
   if (hit) return hit;
+  if (!TICKER_RE.test(ticker)) {
+    cache.set(ticker, []);
+    return [];
+  }
   const file = path.join(process.cwd(), 'agent', 'data', 'facts', `${ticker}.json`);
   let rows: Fact[] = [];
   if (fs.existsSync(file)) {
