@@ -79,6 +79,41 @@ SEG_METRICS = {
 
 PERIOD_IDS = {"CurrentYearDuration": "current", "Prior1YearDuration": "prior1"}
 
+# 単体決算の文脈は無次元IDに `_NonConsolidatedMember` が付く。
+_NC_SUFFIX = "_NonConsolidatedMember"
+
+
+def detect_consolidated(root: ET.Element, headline: dict[str, tuple[str, str, str]]) -> bool | None:
+    """この書類の主たる財務諸表が**連結か単体か**を判定する（#133）。
+
+    **「_NonConsolidatedMember が有るか」では判定できない。** 連結企業も有報に単体諸表を
+    載せるため、両方の文脈を持つ（実測: ハークスレイは無次元14件・単体文脈6件）。
+
+    正しい基準は「**無次元の文脈にヘッドラインの値が入っているか**」:
+      - 入っている  → 連結（単体文脈は参考として併載されているだけ）
+      - 入っていない → 連結を作らない企業。値は単体側にある（実測で60社中6社）
+
+    どちらにも無ければ **None を返す**（推測でラベルを付けない。`CLAUDE.md` の捏造禁止）。
+    """
+    has_bare = has_nc = False
+    for el in root.iter():
+        if _ln(el.tag) not in headline:
+            continue
+        text = (el.text or "").strip()
+        if not text.lstrip("-").isdigit():
+            continue
+        cref = el.get("contextRef") or ""
+        if cref in PERIOD_IDS:
+            has_bare = True
+        elif cref.endswith(_NC_SUFFIX) and cref[: -len(_NC_SUFFIX)] in PERIOD_IDS:
+            has_nc = True
+    if has_bare:
+        return True
+    if has_nc:
+        return False
+    return None
+
+
 # 事業セグメントではないメンバー（合計・単体・調整）。事業として数えると二重計上になる。
 _NOT_A_SEGMENT = re.compile(
     r"^(NonConsolidated|ReportableSegments|OperatingSegmentsNotIncludedIn"
@@ -117,6 +152,7 @@ class ParseResult:
     facts: list[dict[str, Any]] = field(default_factory=list)
     standard: str = "unknown"  # jp | ifrs | unknown
     segment_count: int = 0
+    consolidated: bool | None = None  # True=連結 / False=単体のみ / None=判定不能
     reason: FailReason | None = None  # None なら成功
 
 
@@ -211,6 +247,16 @@ def extract(
     else:
         return ParseResult(standard="unknown", reason=FailReason.UNKNOWN_STANDARD)
 
+    consolidated = detect_consolidated(root, headline)
+    if consolidated is None:
+        # 連結にも単体にも値が無い。**推測でラベルを付けず**、取れなかったものとして返す。
+        return ParseResult(standard=standard, reason=FailReason.NO_VALUES)
+
+    # 単体決算のみの企業は、値も文脈IDも `_NonConsolidatedMember` 側に入っている。
+    # 期間の解決（enddates）は無次元IDで引くので、対応表を持って読み替える。
+    suffix = "" if consolidated else _NC_SUFFIX
+    period_ctx = {pid + suffix: pid for pid in PERIOD_IDS}
+
     labels = segment_labels(zip_path)
     facts: list[dict[str, Any]] = []
     segments: set[str] = set()
@@ -236,7 +282,7 @@ def extract(
                 "fiscal_quarter": None,
                 "value_numeric": val,
                 "unit": unit,
-                "consolidated": True,
+                "consolidated": consolidated,
                 "is_forecast": False,
                 "source_doc_label": doc_label,
                 "source_url": source_url,
@@ -255,16 +301,16 @@ def extract(
         if not raw.lstrip("-").isdigit():
             continue
 
-        # 1) 連結ヘッドライン（無次元の当期/前期コンテキストのみ）
-        if name in headline and cref in PERIOD_IDS:
+        # 1) ヘッドライン（当期/前期。連結なら無次元、単体のみの企業なら単体文脈）
+        if name in headline and cref in period_ctx:
             mk, label, kind = headline[name]
-            add(mk, label, cref, raw, kind)
+            add(mk, label, period_ctx[cref], raw, kind)
             continue
 
         # 2) セグメント（当期/前期 × 報告セグメント）。メンバーは自動検出。
         if name in SEG_METRICS:
             for pid in PERIOD_IDS:
-                prefix = pid + "_"
+                prefix = pid + suffix + "_"
                 if not cref.startswith(prefix) or not cref.endswith(_SEGMENT_SUFFIX):
                     continue
                 member = cref[len(prefix) :]
@@ -294,22 +340,12 @@ def extract(
         seen.add(key)
         uniq.append(f)
 
-    reason: FailReason | None = None
-    if not uniq:
-        # 無次元の文脈に値が無く、単体（_NonConsolidatedMember）側にだけ入っている企業。
-        # 連結子会社を持たない会社は普通にあり、実測では60社中6社（10%）がこれだった。
-        # ここを「タグが無い」と一緒にすると、**全体の1割を取りこぼしている事実**が隠れる。
-        has_nonconsolidated = any(
-            (el.get("contextRef") or "").startswith(pid + "_NonConsolidated")
-            for el in root.iter()
-            for pid in PERIOD_IDS
-            if el.text and el.text.strip().lstrip("-").isdigit() and _ln(el.tag) in headline
-        )
-        reason = FailReason.NON_CONSOLIDATED_ONLY if has_nonconsolidated else FailReason.NO_VALUES
-
+    # 単体のみかどうかは detect_consolidated が判定済みなので、ここでの再判定は不要。
+    # 値が1件も取れないのは、対象の文脈に該当タグが無かった場合だけになる。
     return ParseResult(
         facts=uniq,
         standard=standard,
         segment_count=len(segments),
-        reason=reason,
+        consolidated=consolidated,
+        reason=None if uniq else FailReason.NO_VALUES,
     )
