@@ -7,8 +7,11 @@
   - **再開できる** — 3,900件を最初からやり直せない。処理済みの docID を台帳
     （`_coverage.jsonl`・追記のみ）に残し、2回目以降は飛ばす。途中で落ちても
     それまでの行は残る。zipもキャッシュ済みなので再取得は発生しない。
-  - **1社の失敗で止めない** — 例外は握って理由を台帳に書き、次へ進む。
+  - **資料側の失敗では止めない** — XBRLが無い等は理由を台帳に書いて次へ進む。
     **どの企業がなぜ取れなかったかが、カバレッジ評価そのもの**（#131）。
+  - **通信起因では止める** — ネットが切れたら残りを失敗として刻まずに中断する。
+    台帳に載せた時点で「処理済み」になり、再開時に飛ばされて**データが黙って欠ける**。
+    「取れなかったものは台帳に残さない＝次回また取りに行く」が不変条件。
   - **配信ディレクトリには書かない** — 出力先は `agent/data/facts/` とは別。
     あちらは人が確認した数値だけを置く場所で、取り込んだだけのもの
     （`verified: false`）を混ぜない（#135 の決定・docs/edinet-ingest.md §6-2）。
@@ -29,9 +32,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import socket
 import statistics
 import sys
 import time
+import urllib.error
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
@@ -51,6 +56,15 @@ RUN_META_NAME = "_run.json"  # 所要時間など、1書類に紐づかない情
 # そのまま投資家に見せる出典リンクにできる（`FactCard.toDocHref` は https を素通しする）。
 # 実在する docID は 200 / application/pdf、架空の docID は 404 を返すことを確認済み。
 PDF_URL = "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/{doc_id}.pdf"
+
+
+# ネットワーク起因＝**その書類の問題ではない**もの。資料側の問題（XBRLが無い・
+# 会計基準が判定できない）とは扱いを分ける必要がある: 前者は次回取りに行けば取れる。
+TRANSIENT_ERRORS = (urllib.error.URLError, TimeoutError, ConnectionError, socket.timeout)
+
+
+class TransientFailure(RuntimeError):
+    """通信起因の失敗。台帳に載せずにバッチを止めるための合図。"""
 
 
 # --------------------------------------------------------------------- 重複規則
@@ -134,7 +148,12 @@ def process_one(client: EdinetClient, ref: Any, out_dir: Path) -> dict[str, Any]
         path.write_text(
             json.dumps({"facts": merged}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
-    except Exception as e:  # 1社の失敗で全体を落とさない
+    except TRANSIENT_ERRORS as e:
+        # **通信起因は台帳に書かない。** 載せると「処理済み」として再開時に飛ばされ、
+        # ネットが切れていた間の数百社が二度と取得されない。データが黙って欠けるのが
+        # 最悪なので、行を書かずに上へ投げてバッチ自体を止める。
+        raise TransientFailure(f"{type(e).__name__}: {ref.doc_id}") from e
+    except Exception as e:  # 資料そのものの問題。1社の失敗で全体を落とさない
         row["reason"] = f"例外: {type(e).__name__}"
     return row
 
@@ -154,22 +173,33 @@ def run(start: date, end: date, out_dir: Path, cache_dir: Path, limit: int | Non
     client = EdinetClient(load_api_key(), cache_dir)
     t0 = time.time()
     n = 0
+    stopped = ""
     with ledger.open("a", encoding="utf-8") as fp:
-        for ref in client.iter_annual_reports(start, end):
-            if ref.doc_id in done:
-                continue
-            row = process_one(client, ref, out_dir)
-            fp.write(json.dumps(row, ensure_ascii=False) + "\n")
-            fp.flush()  # 途中で落ちても直前までは残す
-            n += 1
-            mark = "✓" if row["facts"] else "✗"
-            print(
-                f"  {mark} {row['ticker']} {row['filer_name'][:16]:<16} {row['facts']:>3}件",
-                flush=True,
-            )
-            if limit and n >= limit:
-                break
+        try:
+            for ref in client.iter_annual_reports(start, end):
+                if ref.doc_id in done:
+                    continue
+                row = process_one(client, ref, out_dir)
+                fp.write(json.dumps(row, ensure_ascii=False) + "\n")
+                fp.flush()  # 途中で落ちても直前までは残す
+                n += 1
+                mark = "✓" if row["facts"] else "✗"
+                print(
+                    f"  {mark} {row['ticker']} {row['filer_name'][:16]:<16} {row['facts']:>3}件",
+                    flush=True,
+                )
+                if limit and n >= limit:
+                    break
+        except (TransientFailure, *TRANSIENT_ERRORS) as e:
+            # 通信が切れたら**進み続けない**。残り全部を失敗として台帳に刻むと、
+            # 再開時に飛ばされてデータが黙って欠ける。ここで止めれば、
+            # 未処理は台帳に無いまま＝次回そのまま続きから取りに行ける。
+            stopped = f"\n⚠ 通信が途切れたため中断（{type(e).__name__}）。同じコマンドで続きから再開できます。"
+        except KeyboardInterrupt:
+            stopped = "\n中断しました。同じコマンドで続きから再開できます。"
     elapsed = time.time() - t0
+    if stopped:
+        print(stopped, flush=True)
     print(f"\n{n}件を処理（{elapsed:.1f}秒）")
     # 所要時間は台帳（1行=1書類）に置き場が無いので別ファイルに残す。
     # これが無いと `--report-only` で所要時間が出せない。
