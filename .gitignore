@@ -55,3 +55,6 @@ __pycache__/
 agent/data/escalations.jsonl
 # 層1抽出の未検証草案（人手検証後に facts.json へ反映）
 agent/data/*.draft.json
+
+# EDINET 取り込みのローカルキャッシュ（生zip・書類一覧）。再取得可能なのでコミットしない。
+data/edinet-cache/
