@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-# エージェント本体（agent/data/vis_facts.json も含む＝FACTS_BACKEND=json）
+# エージェント本体（層1 agent/data/facts/<ticker>.json も含む＝FACTS_BACKEND=json）
 COPY agent ./agent
 
 # Cloud Run は $PORT を注入（既定8080）。0.0.0.0 で listen。

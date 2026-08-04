@@ -1,18 +1,23 @@
 /**
- * 公開Q&Aページ（#113）のデータ層。層1（`agent/data/facts.json`）を読み、
+ * 公開Q&Aページ（#113）のデータ層。層1（`agent/data/facts/<ticker>.json`）を読み、
  * **決定論的に**「質問＋答え＋出典」を組み立てる。
  *
  * 設計の背骨（CLAUDE.md）をここでも守る:
- *  - 数値は facts.json の検証済み実データをそのまま使う（LLMを一切通さない）
+ *  - 数値は層1の検証済み実データをそのまま使う（LLMを一切通さない）
  *  - 計算するのは前年比だけ（同一 metric_key の前年度との単純比較）
- *  - 出典が無いファクトは公開しない
+ *  - 出典が無いファクト・**未検証のファクトは公開しない**
  *
- * ビルド時に fs で読む（facts.json はフロントの Docker イメージに同梱される）。
+ * このファイルが作るのは**AIクローラーに読ませるための面**なので、
+ * 採用条件はエージェント（`agent/facts_store.py`）と同じかそれ以上に厳しくする。
+ * 取り込んだだけで未検証のデータ（EDINET抽出は `verified: false` で出る）が
+ * 「公式Q&A」として出ていくと、取り消せない形でAIに配られる（docs/edinet-ingest.md §8）。
+ *
+ * ビルド時に fs で読む（層1はフロントの Docker イメージに同梱される）。
  */
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** facts.json の1レコード（層1の検証済みファクト） */
+/** 層1の1レコード（検証済みファクト） */
 interface Fact {
   ticker: string;
   metric_key: string;
@@ -49,20 +54,29 @@ const HEADLINE_METRICS = [
   'dividend_per_share',
 ] as const;
 
-let cache: Fact[] | null = null;
+/** ティッカー -> そのファクト。プロセス内で1回だけ読む。 */
+const cache = new Map<string, Fact[]>();
 
-/** facts.json を読む（プロセス内で1回だけ）。 */
-function allFacts(): Fact[] {
-  if (cache) return cache;
-  const file = path.join(process.cwd(), 'agent', 'data', 'facts.json');
-  const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as { facts?: Fact[] };
-  cache = parsed.facts ?? [];
-  return cache;
+/** 指定企業の層1ファイルを読む（`agent/data/facts/<ticker>.json`）。 */
+function loadTicker(ticker: string): Fact[] {
+  const hit = cache.get(ticker);
+  if (hit) return hit;
+  const file = path.join(process.cwd(), 'agent', 'data', 'facts', `${ticker}.json`);
+  let rows: Fact[] = [];
+  if (fs.existsSync(file)) {
+    rows = (JSON.parse(fs.readFileSync(file, 'utf8')) as { facts?: Fact[] }).facts ?? [];
+  }
+  cache.set(ticker, rows);
+  return rows;
 }
 
-/** 指定企業の、出典を持つファクトだけを返す（出典なしは公開しない）。 */
+/** 公開してよいファクトだけを返す。
+ *  ticker はファイル名だけでなく中身でも確認する（取り違えたファイルを置いたとき、
+ *  別の会社の数字を出すのではなく何も出さないで落ちるようにするため）。 */
 function factsFor(ticker: string): Fact[] {
-  return allFacts().filter((f) => f.ticker === ticker && !!f.source_doc_label);
+  return loadTicker(ticker).filter(
+    (f) => f.ticker === ticker && !!f.source_doc_label && f.verified === true,
+  );
 }
 
 /** 数値の整形（サーバ側の _fmt_value と同じ規則: %は小数1桁、それ以外は3桁区切り）。 */

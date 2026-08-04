@@ -232,12 +232,12 @@ def _clean(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _doc_label(title: str, link: str | None) -> str:
-    """層2の表示名を整える。facts.json の検証済み資料名（source_url 一致）があれば優先し、
+def _doc_label(title: str, link: str | None, ticker: str) -> str:
+    """層2の表示名を整える。層1の検証済み資料名（source_url 一致）があれば優先し、
     無ければ派生title（ファイル名由来）にフォールバックする。"""
     if link:
         try:
-            label = store.doc_label_for_url(link)
+            label = store.doc_label_for_url(link, ticker)
         except Exception:
             label = None
         if label:
@@ -328,7 +328,7 @@ def search_disclosures(query: str, tool_context: ToolContext = None) -> dict[str
                     passages.append(
                         {
                             "text": cleaned,
-                            "doc": _doc_label(title, link),
+                            "doc": _doc_label(title, link, str(company.get("ticker") or "")),
                             "page": page,
                             "url": link,
                             "quote": cleaned[:300],
