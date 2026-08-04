@@ -28,6 +28,7 @@ import re
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +97,19 @@ def bare_member(name: str) -> str:
     return _PREFIX.sub("", name)
 
 
+class FailReason(StrEnum):
+    """抽出できなかった理由（#131）。
+
+    「0件でした」で片付けると、IFRS未対応なのか様式違いなのか本当にタグが無いのかが
+    区別できず、カバレッジの意味が読めない。**対処が異なるものは別の値にする**。
+    """
+
+    NO_PUBLIC_XBRL = "public_xbrl_なし"  # zip に PublicDoc の .xbrl が無い
+    UNKNOWN_STANDARD = "会計基準_判定不能"  # 日本基準にもIFRSにも該当する要素が無い
+    NON_CONSOLIDATED_ONLY = "単体決算のみ"  # 連結を作らない企業。値は単体側にある（#133）
+    NO_VALUES = "該当タグに数値なし"  # 基準は判ったが値が取れない（真の未対応）
+
+
 @dataclass
 class ParseResult:
     """1書類の抽出結果。失敗も「なぜ」を持って返す（黙って空にしない）。"""
@@ -103,7 +117,7 @@ class ParseResult:
     facts: list[dict[str, Any]] = field(default_factory=list)
     standard: str = "unknown"  # jp | ifrs | unknown
     segment_count: int = 0
-    reason: str = ""  # 空でなければ未抽出の理由
+    reason: FailReason | None = None  # None なら成功
 
 
 def _context_enddates(root: ET.Element) -> dict[str, str]:
@@ -195,7 +209,7 @@ def extract(
     elif present & set(HEADLINE_IFRS):
         standard, headline = "ifrs", HEADLINE_IFRS
     else:
-        return ParseResult(standard="unknown", reason="ヘッドライン要素が見つからない")
+        return ParseResult(standard="unknown", reason=FailReason.UNKNOWN_STANDARD)
 
     labels = segment_labels(zip_path)
     facts: list[dict[str, Any]] = []
@@ -280,9 +294,22 @@ def extract(
         seen.add(key)
         uniq.append(f)
 
+    reason: FailReason | None = None
+    if not uniq:
+        # 無次元の文脈に値が無く、単体（_NonConsolidatedMember）側にだけ入っている企業。
+        # 連結子会社を持たない会社は普通にあり、実測では60社中6社（10%）がこれだった。
+        # ここを「タグが無い」と一緒にすると、**全体の1割を取りこぼしている事実**が隠れる。
+        has_nonconsolidated = any(
+            (el.get("contextRef") or "").startswith(pid + "_NonConsolidated")
+            for el in root.iter()
+            for pid in PERIOD_IDS
+            if el.text and el.text.strip().lstrip("-").isdigit() and _ln(el.tag) in headline
+        )
+        reason = FailReason.NON_CONSOLIDATED_ONLY if has_nonconsolidated else FailReason.NO_VALUES
+
     return ParseResult(
         facts=uniq,
         standard=standard,
         segment_count=len(segments),
-        reason="" if uniq else "数値が1件も取れなかった",
+        reason=reason,
     )
