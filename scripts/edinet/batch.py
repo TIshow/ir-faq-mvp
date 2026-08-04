@@ -243,6 +243,7 @@ def report(ledger: Path) -> None:
     print(f"  対象書類      {len(rows):,}")
     print(f"  抽出成功      {len(ok):,} ({len(ok) / len(rows):.1%})")
     print(f"  抽出0件       {len(ng):,}")
+    print(f"  銘柄数        {len({r['ticker'] for r in ok}):,}")
     print(f"  取得量        {total_bytes / 1e9:.2f} GB")
 
     if ng:
@@ -267,6 +268,25 @@ def report(ledger: Path) -> None:
         print(f"\n  セグメント検出: {with_seg:,}/{len(ok):,} 社 ({with_seg / len(ok):.1%})")
         if with_seg:
             print(f"    のべ {sum(segs):,} 事業 / 平均 {sum(segs) / with_seg:.1f} 事業")
+
+    # **どの決算期を持っているか**は台帳では分からない（台帳は書類の話で、
+    # 1つの有報は当期と前期の2期ぶんを含む）。実際に出力したファクトから数える。
+    # 取得の窓は「提出日」で切るので、コーパスに入る決算期は自動では揃わない
+    # （EDINETは書類情報が編集されると古い書類を再掲するため、数年前の有報も混ざる）。
+    years: Counter[int] = Counter()
+    for p in sorted(ledger.parent.glob("*.json")):
+        if p.name.startswith("_"):
+            continue
+        try:
+            for f in json.loads(p.read_text(encoding="utf-8")).get("facts") or []:
+                if f.get("fiscal_year"):
+                    years[int(f["fiscal_year"])] += 1
+        except Exception:  # 出力が壊れていてもレポートは出す
+            continue
+    if years:
+        print("\n  決算期の分布（ファクト数）:")
+        for y, c in sorted(years.items()):
+            print(f"    {y}FY{' ' * 20} {c:>6,}")
 
     dates = sorted({r["submit_date"] for r in rows if r.get("submit_date")})
     if dates:

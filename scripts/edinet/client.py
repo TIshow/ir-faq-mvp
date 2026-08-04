@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -28,6 +29,10 @@ API_BASE = "https://api.edinet-fsa.go.jp/api/v2"
 
 # 有価証券報告書。半期(160)や訂正(130)は今回の対象外（まず1年分の本体で評価する）。
 DOC_TYPE_ANNUAL = "120"
+
+# 一時的な失敗をどれだけ粘るか。3,900件を1本で流すので、瞬断で全体を止めない。
+_MAX_RETRIES = 3
+_RETRY_BACKOFF_SEC = 2.0
 
 
 def load_api_key(env_file: str = ".env.local") -> str:
@@ -105,10 +110,32 @@ class EdinetClient:
         self._last_call = time.monotonic()
 
     def _get(self, url: str) -> bytes:
-        self._throttle()
-        req = urllib.request.Request(url, headers={"Ocp-Apim-Subscription-Key": self._key})
-        with urllib.request.urlopen(req, timeout=self._timeout) as res:  # noqa: S310
-            return res.read()
+        """1件取得。**一時的な失敗はここで吸収する。**
+
+        3,900件を1本の実行で流すので、瞬断1回で全体を止めるのは割に合わない
+        （実測: 2,000件付近で2回起きた）。ここで数回粘れば、呼び出し側が中断を
+        考えるのは「本当に繋がらないとき」だけになる。
+
+        **リトライしてよいものだけリトライする。** 404（その書類が無い）を粘っても
+        永遠に無駄で、しかも「取れないもの」を「通信障害」と誤って扱うことになる。
+        429（レート制限）と5xx（サーバ側）と、HTTP応答が返らない類だけ粘る。
+        """
+        last: Exception | None = None
+        for attempt in range(_MAX_RETRIES + 1):
+            self._throttle()
+            try:
+                req = urllib.request.Request(url, headers={"Ocp-Apim-Subscription-Key": self._key})
+                with urllib.request.urlopen(req, timeout=self._timeout) as res:  # noqa: S310
+                    return res.read()
+            except urllib.error.HTTPError as e:
+                if e.code != 429 and e.code < 500:
+                    raise  # 4xx は粘っても変わらない
+                last = e
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                last = e
+            if attempt < _MAX_RETRIES:
+                time.sleep(_RETRY_BACKOFF_SEC * (2**attempt))  # 2, 4, 8秒
+        raise last if last else RuntimeError(f"取得に失敗: {url}")
 
     # ------------------------------------------------------------------ 一覧
     def list_documents(self, day: date) -> list[dict[str, Any]]:
