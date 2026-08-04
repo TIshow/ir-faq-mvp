@@ -85,6 +85,8 @@ scripts/
   edinet/client.py        EDINET API v2 クライアント（書類一覧・XBRL zip 取得。キャッシュ優先）
   edinet/parse.py         層1取り込み（有報XBRL→決定論抽出・**全社対応**。日本基準/IFRS・連結/単体・
                           セグメント自動検出。数値はタグから読むだけでLLMは通さない。詳細 docs/edinet-ingest.md）
+  edinet/batch.py         一括取り込み＋カバレッジレポート（再開可能・重複は新しい提出が勝つ。
+                          出力は data/facts-corpus/＝**配信用の agent/data/facts/ とは別**）
 eval/
   eval_harness.py         評価ハーネス（数値=決定論比較・コンプラ=ゼロ許容CI関門・--company で企業別）
   golden_set.vis.jsonl / golden_set.7561.jsonl  ゴールデンセット（vis / ハークスレイ）

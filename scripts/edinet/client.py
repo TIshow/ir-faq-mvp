@@ -54,6 +54,7 @@ class DocRef:
     filer_name: str
     doc_description: str
     submit_date: str
+    period_end: str = ""  # 決算期末日 YYYY-MM-DD（一覧APIの periodEnd）
 
     @property
     def ticker(self) -> str:
@@ -62,6 +63,19 @@ class DocRef:
         新形式の英数字コード（例 135A）にも耐えるよう、末尾除去ではなく先頭4桁を取る。
         """
         return self.sec_code[:4]
+
+    @property
+    def doc_label(self) -> str:
+        """出典チップに出す資料名。**投資家が読む文字列**なので生のまま使わない。
+
+        一覧APIの docDescription は `有価証券報告書－第78期(2025/04/01－2026/03/31)` の形で、
+        正確ではあるが出典表示には冗長。期末日から `2026年3月期 有価証券報告書` に整える
+        （人手で入れた既存データの表記とも揃う）。期末が取れなければ元の文字列に落とす。
+        """
+        if len(self.period_end) >= 7:
+            y, m = self.period_end[:4], self.period_end[5:7]
+            return f"{y}年{int(m)}月期 有価証券報告書"
+        return self.doc_description or "有価証券報告書"
 
 
 class EdinetClient:
@@ -134,6 +148,7 @@ class EdinetClient:
                     filer_name=r.get("filerName") or "",
                     doc_description=r.get("docDescription") or "",
                     submit_date=(r.get("submitDateTime") or "")[:10],
+                    period_end=r.get("periodEnd") or "",
                 )
             day += timedelta(days=1)
 

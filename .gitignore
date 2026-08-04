@@ -58,3 +58,6 @@ agent/data/*.draft.json
 
 # EDINET 取り込みのローカルキャッシュ（生zip・書類一覧）。再取得可能なのでコミットしない。
 data/edinet-cache/
+
+# EDINET全社コーパス（#136の出力。git ではなく GCS に置く＝docs/edinet-ingest.md §6-2）
+data/facts-corpus/
