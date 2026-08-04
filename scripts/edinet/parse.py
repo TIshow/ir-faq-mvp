@@ -1,9 +1,10 @@
 """EDINET XBRL → 層1ファクトの決定論抽出（全社対応版）。
 
-`scripts/extract_facts_xbrl.py` の抽出部を、企業を選ばない形に一般化したもの。
 **LLMは一切通さない**。タグと文脈IDから読むだけなので、値の捏造は原理的に起こらない。
 
-1社専用版から一般化するために解いた3点:
+前身は1社専用の `extract_facts_xbrl.py`（セグメントを手書きで登録する必要があり、
+日本基準・連結決め打ち・百万円を四捨五入していた）。同じ出力schemaのまま一般化し、
+本モジュールに置き換えた。一般化のために解いた3点:
 
   1. **セグメントのハードコード廃止**
      セグメントのメンバー名は企業ごとに違う（`jpcrp030000-asr_E05137-000
@@ -24,6 +25,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import xml.etree.ElementTree as ET
 import zipfile
@@ -287,11 +289,30 @@ def segment_labels(zip_path: Path) -> dict[str, str]:
     return labels
 
 
+# slug の最大長。metric_key は識別子であって表示名ではない（表示は metric_label_ja）ので、
+# 読みやすさのための上限にすぎない。長さより**一意性**が優先される。
+_SLUG_MAX = 60
+
+
 def _slug(member: str) -> str:
-    """メンバー名から安定した英小文字スラグ。提出者接頭辞と接尾辞を落とす。"""
+    """メンバー名から安定した英小文字スラグ。提出者接頭辞と接尾辞を落とす。
+
+    メンバー名だけから決まる純関数なので、同じ有報を何度流しても同じ slug になる。
+
+    **切り詰めるときはハッシュを付ける。** 単に先頭を残すだけだと、先頭が同じ長い
+    事業名を持つ2事業が同一キーに潰れ、別の事業の数値が静かに混ざる。
+    実測（231社）では衝突0件だが、既に上限に達した企業が居る
+    （5941=`manufacturing_and_sales_of_general_commercial_kitchen_equipm`＝
+    "equipment" が途中で切れている）ので、3,900社では起こりうる。
+    """
     base = bare_member(member)
     base = _strip_segment_suffix(base) or base
-    return re.sub(r"(?<!^)(?=[A-Z])", "_", base).lower()[:60] or "segment"
+    slug = re.sub(r"(?<!^)(?=[A-Z])", "_", base).lower()
+    if len(slug) > _SLUG_MAX:
+        # 組み込み hash() は実行ごとに変わる（PYTHONHASHSEED）ので使わない。
+        digest = hashlib.sha1(slug.encode("utf-8")).hexdigest()[:6]
+        slug = f"{slug[: _SLUG_MAX - len(digest) - 1]}_{digest}"
+    return slug or "segment"
 
 
 def extract(

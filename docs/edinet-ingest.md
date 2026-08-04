@@ -49,7 +49,8 @@ scripts/edinet/
 - **レート制限** — 官公庁の公開APIなので既定 0.5秒間隔
 - **失敗しても止めない** — 1社の失敗で全体を落とさず理由を記録して次へ（どの企業がなぜ取れないかがカバレッジ評価そのもの）
 
-`parse.py` で、1社専用版（`scripts/extract_facts_xbrl.py`）から一般化するために解いたこと:
+`parse.py` で、1社専用版（旧 `scripts/extract_facts_xbrl.py`・**#134 で削除**）から
+一般化するために解いたこと:
 
 1. **セグメントのハードコード廃止** — メンバー名は企業ごとに違う（`jpcrp030000-asr_E05137-000...Member` と提出者IDが接頭辞に入る）。文脈IDから自動検出し、日本語名は同梱の `_lab.xml` から引く＝**表示名も推測しない**
 2. **集計メンバーの除外** — `ReportableSegmentsMember`（合計）/ `NonConsolidatedMember`（単体）/ 調整額を事業として数えると二重計上になる
@@ -199,11 +200,43 @@ scripts/edinet/
 
 ## 6. 未決の設計判断
 
-### 6-1. セグメントの slug 命名
+### 6-1. ~~セグメントの slug 命名~~ → **#134 で決定（自動生成に統一）**
 
-自動生成（`takeout_lunch_business`）と既存の手作業（`takeout_lunch`）が食い違う。
-**自動に寄せて既存2社を移行する**のが素直だが、`facts.json` を書き換えることになる。
-決めてから1年分を回すこと（後から変えると全件再生成）。
+**`metric_key` は識別子であって表示名ではない。** 画面にもLLMのデータシートにも出るのは
+`metric_label_ja`（`_lab.xml` 由来の「中食事業（売上高）」）なので、slug の読みやすさは
+実は誰にも影響しない。3,900社を手で命名することはできない以上、自動が正になる。
+
+移行コストは実測でほぼゼロだった:
+
+| 確認したこと | 結果 |
+|---|---|
+| slug 文字列をハードコードしている箇所 | **0件**。参照はすべて構造的（`startswith("segment.")` / `endswith(".revenue")`） |
+| ゴールデンセット | 事業名（日本語）で問い合わせており slug に非依存 |
+| 派生指標の表示名 | 分子の `metric_label_ja` から組む（`_derived_label`）ので slug 非依存 |
+| `facts.json` の書き換え | 7561 の12行のみ。**キー名だけ**を置換し、値のフィンガープリントが不変であることを検証 |
+
+```
+segment.takeout_lunch.        -> segment.takeout_lunch_business.
+segment.store_asset_solution. -> segment.store_asset_and_solution_business.
+segment.logistics_food.       -> segment.logistics_food_processing_business.
+```
+
+**旧 `scripts/extract_facts_xbrl.py` は削除した。** 手書きslugを再生成するため、
+残すと再実行で移行が巻き戻る。加えて `round()`（§4の切り捨て問題）・IFRS非対応・
+連結決め打ちと、既に直した不具合を丸ごと抱えていた。出力schemaは `parse.py` と同一で、
+能力は完全に上位互換なので失うものは無い。
+
+**slug の安定性（#134の要件）**: `_slug()` はメンバー名だけから決まる純関数なので、
+同じ有報を何度流しても同じ slug になる。ただし**切り詰めが一意性を壊す**経路があったので塞いだ:
+
+> 60文字上限で先頭を残すだけだと、先頭が同じ長い事業名を持つ2事業が同一キーに潰れ、
+> **別の事業の数値が静かに混ざる**。231社の実測では衝突0件だが、既に上限に達した企業が居る
+> （5941 中西製作所＝`..._general_commercial_kitchen_equipm` で "equipment" が途中で切れている）。
+> 3,900社では起こりうるので、切り詰める場合は元の名前の SHA-1 先頭6桁を付けて一意にする。
+> 組み込み `hash()` は実行ごとに変わる（`PYTHONHASHSEED`）ので使わない。
+
+実測（231社・567セグメント）: 衝突 **0件** / 切り詰め発生 **1件**。
+`ＳＰＥ`/`ＧＡ`/`ＦＴ`（7735 SCREEN）のような2〜3文字 slug は発行体自身の略称で、正常。
 
 ### 6-2. 保存先（DB構成）
 

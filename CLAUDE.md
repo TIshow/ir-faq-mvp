@@ -81,7 +81,9 @@ agent/                    エージェント（Python / ADK）
   .env.example            ローカル設定例
 scripts/
   extract_facts.py        層1取り込み（GeminiでPDF→構造化ファクト草案。人手検証後 facts.json へ）
-  extract_facts_xbrl.py   層1取り込み（EDINET有報XBRL→決定論抽出。連結ヘッドライン＋セグメント）
+  edinet/client.py        EDINET API v2 クライアント（書類一覧・XBRL zip 取得。キャッシュ優先）
+  edinet/parse.py         層1取り込み（有報XBRL→決定論抽出・**全社対応**。日本基準/IFRS・連結/単体・
+                          セグメント自動検出。数値はタグから読むだけでLLMは通さない。詳細 docs/edinet-ingest.md）
 eval/
   eval_harness.py         評価ハーネス（数値=決定論比較・コンプラ=ゼロ許容CI関門・--company で企業別）
   golden_set.vis.jsonl / golden_set.7561.jsonl  ゴールデンセット（vis / ハークスレイ）

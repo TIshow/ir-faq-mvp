@@ -106,7 +106,7 @@
       "verified": true
     },
     {
-      "ticker": "7561", "metric_key": "segment.takeout_lunch.revenue", "metric_label_ja": "中食事業（売上高）",
+      "ticker": "7561", "metric_key": "segment.takeout_lunch_business.revenue", "metric_label_ja": "中食事業（売上高）",
       "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
       "value_numeric": 17325, "unit": "百万円", "consolidated": true, "is_forecast": false,
       "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
@@ -114,7 +114,7 @@
       "verified": true
     },
     {
-      "ticker": "7561", "metric_key": "segment.takeout_lunch.revenue", "metric_label_ja": "中食事業（売上高）",
+      "ticker": "7561", "metric_key": "segment.takeout_lunch_business.revenue", "metric_label_ja": "中食事業（売上高）",
       "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
       "value_numeric": 16764, "unit": "百万円", "consolidated": true, "is_forecast": false,
       "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
@@ -122,7 +122,7 @@
       "verified": true
     },
     {
-      "ticker": "7561", "metric_key": "segment.takeout_lunch.operating_profit", "metric_label_ja": "中食事業（営業利益）",
+      "ticker": "7561", "metric_key": "segment.takeout_lunch_business.operating_profit", "metric_label_ja": "中食事業（営業利益）",
       "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
       "value_numeric": -72, "unit": "百万円", "consolidated": true, "is_forecast": false,
       "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
@@ -130,7 +130,7 @@
       "verified": true
     },
     {
-      "ticker": "7561", "metric_key": "segment.takeout_lunch.operating_profit", "metric_label_ja": "中食事業（営業利益）",
+      "ticker": "7561", "metric_key": "segment.takeout_lunch_business.operating_profit", "metric_label_ja": "中食事業（営業利益）",
       "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
       "value_numeric": 320, "unit": "百万円", "consolidated": true, "is_forecast": false,
       "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
@@ -138,7 +138,7 @@
       "verified": true
     },
     {
-      "ticker": "7561", "metric_key": "segment.store_asset_solution.revenue", "metric_label_ja": "店舗アセット＆ソリューション事業（売上高）",
+      "ticker": "7561", "metric_key": "segment.store_asset_and_solution_business.revenue", "metric_label_ja": "店舗アセット＆ソリューション事業（売上高）",
       "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
       "value_numeric": 12190, "unit": "百万円", "consolidated": true, "is_forecast": false,
       "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
@@ -146,7 +146,7 @@
       "verified": true
     },
     {
-      "ticker": "7561", "metric_key": "segment.store_asset_solution.revenue", "metric_label_ja": "店舗アセット＆ソリューション事業（売上高）",
+      "ticker": "7561", "metric_key": "segment.store_asset_and_solution_business.revenue", "metric_label_ja": "店舗アセット＆ソリューション事業（売上高）",
       "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
       "value_numeric": 14331, "unit": "百万円", "consolidated": true, "is_forecast": false,
       "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
@@ -154,7 +154,7 @@
       "verified": true
     },
     {
-      "ticker": "7561", "metric_key": "segment.store_asset_solution.operating_profit", "metric_label_ja": "店舗アセット＆ソリューション事業（営業利益）",
+      "ticker": "7561", "metric_key": "segment.store_asset_and_solution_business.operating_profit", "metric_label_ja": "店舗アセット＆ソリューション事業（営業利益）",
       "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
       "value_numeric": 1734, "unit": "百万円", "consolidated": true, "is_forecast": false,
       "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
@@ -162,7 +162,7 @@
       "verified": true
     },
     {
-      "ticker": "7561", "metric_key": "segment.store_asset_solution.operating_profit", "metric_label_ja": "店舗アセット＆ソリューション事業（営業利益）",
+      "ticker": "7561", "metric_key": "segment.store_asset_and_solution_business.operating_profit", "metric_label_ja": "店舗アセット＆ソリューション事業（営業利益）",
       "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
       "value_numeric": 2228, "unit": "百万円", "consolidated": true, "is_forecast": false,
       "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
@@ -170,7 +170,7 @@
       "verified": true
     },
     {
-      "ticker": "7561", "metric_key": "segment.logistics_food.revenue", "metric_label_ja": "物流・食品加工事業（売上高）",
+      "ticker": "7561", "metric_key": "segment.logistics_food_processing_business.revenue", "metric_label_ja": "物流・食品加工事業（売上高）",
       "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
       "value_numeric": 18091, "unit": "百万円", "consolidated": true, "is_forecast": false,
       "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
@@ -178,7 +178,7 @@
       "verified": true
     },
     {
-      "ticker": "7561", "metric_key": "segment.logistics_food.revenue", "metric_label_ja": "物流・食品加工事業（売上高）",
+      "ticker": "7561", "metric_key": "segment.logistics_food_processing_business.revenue", "metric_label_ja": "物流・食品加工事業（売上高）",
       "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
       "value_numeric": 23758, "unit": "百万円", "consolidated": true, "is_forecast": false,
       "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
@@ -186,7 +186,7 @@
       "verified": true
     },
     {
-      "ticker": "7561", "metric_key": "segment.logistics_food.operating_profit", "metric_label_ja": "物流・食品加工事業（営業利益）",
+      "ticker": "7561", "metric_key": "segment.logistics_food_processing_business.operating_profit", "metric_label_ja": "物流・食品加工事業（営業利益）",
       "period_label": "2025FY", "fiscal_year": 2025, "fiscal_quarter": null,
       "value_numeric": 888, "unit": "百万円", "consolidated": true, "is_forecast": false,
       "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
@@ -194,7 +194,7 @@
       "verified": true
     },
     {
-      "ticker": "7561", "metric_key": "segment.logistics_food.operating_profit", "metric_label_ja": "物流・食品加工事業（営業利益）",
+      "ticker": "7561", "metric_key": "segment.logistics_food_processing_business.operating_profit", "metric_label_ja": "物流・食品加工事業（営業利益）",
       "period_label": "2026FY", "fiscal_year": 2026, "fiscal_quarter": null,
       "value_numeric": 835, "unit": "百万円", "consolidated": true, "is_forecast": false,
       "source_doc_label": "2026年3月期 決算補足説明資料", "source_page": 6,
