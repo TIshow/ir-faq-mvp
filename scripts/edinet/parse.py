@@ -58,6 +58,9 @@ HEADLINE_JP: dict[str, tuple[str, str, str]] = {
 # IFRS採用企業（国内で250社超）。日本基準と要素名が異なる。
 HEADLINE_IFRS: dict[str, tuple[str, str, str]] = {
     "RevenueIFRS": ("revenue", "売上収益", _MONEY),
+    # IFRSでも売上の要素名は一つではない（実測: KDDI は NetSalesIFRS = 6,071,915百万円）。
+    # 同義なので同じ metric_key に寄せる。重複排除は metric_key×period で効く。
+    "NetSalesIFRS": ("revenue", "売上高", _MONEY),
     "OperatingProfitLossIFRS": ("operating_profit", "営業利益", _MONEY),
     "ProfitLossBeforeTaxIFRS": ("ordinary_profit", "税引前利益", _MONEY),
     "ProfitLossAttributableToOwnersOfParentIFRS": (
@@ -83,34 +86,56 @@ PERIOD_IDS = {"CurrentYearDuration": "current", "Prior1YearDuration": "prior1"}
 _NC_SUFFIX = "_NonConsolidatedMember"
 
 
-def detect_consolidated(root: ET.Element, headline: dict[str, tuple[str, str, str]]) -> bool | None:
-    """この書類の主たる財務諸表が**連結か単体か**を判定する（#133）。
-
-    **「_NonConsolidatedMember が有るか」では判定できない。** 連結企業も有報に単体諸表を
-    載せるため、両方の文脈を持つ（実測: ハークスレイは無次元14件・単体文脈6件）。
-
-    正しい基準は「**無次元の文脈にヘッドラインの値が入っているか**」:
-      - 入っている  → 連結（単体文脈は参考として併載されているだけ）
-      - 入っていない → 連結を作らない企業。値は単体側にある（実測で60社中6社）
-
-    どちらにも無ければ **None を返す**（推測でラベルを付けない。`CLAUDE.md` の捏造禁止）。
-    """
-    has_bare = has_nc = False
+def _has_values(root: ET.Element, elements: set[str], *, consolidated: bool) -> bool:
+    """指定の要素群が、指定の文脈（連結=無次元 / 単体=_NonConsolidatedMember）に
+    実際の**数値**として入っているかどうか。"""
+    suffix = "" if consolidated else _NC_SUFFIX
+    wanted = {pid + suffix for pid in PERIOD_IDS}
     for el in root.iter():
-        if _ln(el.tag) not in headline:
+        if _ln(el.tag) not in elements:
             continue
         text = (el.text or "").strip()
-        if not text.lstrip("-").isdigit():
-            continue
-        cref = el.get("contextRef") or ""
-        if cref in PERIOD_IDS:
-            has_bare = True
-        elif cref.endswith(_NC_SUFFIX) and cref[: -len(_NC_SUFFIX)] in PERIOD_IDS:
-            has_nc = True
-    if has_bare:
-        return True
-    if has_nc:
-        return False
+        if text.lstrip("-").isdigit() and (el.get("contextRef") or "") in wanted:
+            return True
+    return False
+
+
+def detect_basis(root: ET.Element) -> tuple[str, dict[str, tuple[str, str, str]], bool] | None:
+    """**会計基準と連結/単体を同時に**判定する（#132 / #133）。
+
+    この2つは同じ問い——「**どのタグ群が主たる財務諸表を担っているか**」——なので、
+    別々に判定してはいけない。分けたことで実際に事故を起こした（下記）。
+
+    ## 要素の「存在」で基準を判定してはいけない
+
+    **IFRS採用企業でも、有報の親会社単独（単体）の財務諸表は日本基準で作られる。**
+    そのため IFRS 企業の XBRL にも `NetSales` 等が単体文脈に存在する。
+
+    実測（武田薬品 4502）:
+        NetSales @ CurrentYearDuration_NonConsolidatedMember = 591,604百万円  ← 単体
+        RevenueIFRS @ CurrentYearDuration                    = 4,505,720百万円 ← 連結の実数
+
+    存在だけで見ると「日本基準」と誤断定し、続く連結判定が無次元に値を見つけられず
+    「単体のみ」に落ちて、**親会社単独の59万百万円を全社の売上高として出力**していた。
+    値の捏造ではないが**意味がまったく違う数字**で、`CLAUDE.md` の背骨に反する。
+
+    ## 正しい判定
+
+    「値がどの (基準 × 文脈) に入っているか」で決める。優先順位:
+
+      1. IFRS × 連結（無次元）   → 主たる財務諸表がIFRS連結
+      2. 日本基準 × 連結（無次元） → 主たる財務諸表が日本基準連結
+      3. IFRS × 単体            → 稀だが一応拾う
+      4. 日本基準 × 単体         → 連結を作らない企業（実測10%）
+
+    どれにも当たらなければ **None**（推測しない）。
+    """
+    for standard, headline in (("ifrs", HEADLINE_IFRS), ("jp", HEADLINE_JP)):
+        if _has_values(root, set(headline), consolidated=True):
+            return standard, headline, True
+    for standard, headline in (("ifrs", HEADLINE_IFRS), ("jp", HEADLINE_JP)):
+        if _has_values(root, set(headline), consolidated=False):
+            return standard, headline, False
     return None
 
 
@@ -140,8 +165,9 @@ class FailReason(StrEnum):
     """
 
     NO_PUBLIC_XBRL = "public_xbrl_なし"  # zip に PublicDoc の .xbrl が無い
-    UNKNOWN_STANDARD = "会計基準_判定不能"  # 日本基準にもIFRSにも該当する要素が無い
-    NON_CONSOLIDATED_ONLY = "単体決算のみ"  # 連結を作らない企業。値は単体側にある（#133）
+    # どの (基準 × 文脈) にも値が無い。単体のみの企業は detect_basis が正常系として
+    # 扱うので、ここには来ない（#133 で解決済み）。
+    UNKNOWN_STANDARD = "会計基準_判定不能"
     NO_VALUES = "該当タグに数値なし"  # 基準は判ったが値が取れない（真の未対応）
 
 
@@ -238,19 +264,12 @@ def extract(
     """XBRLインスタンスから層1ファクトを抽出する。"""
     root = ET.fromstring(xbrl_bytes)
     enddates = _context_enddates(root)
-    present = {_ln(e.tag) for e in root.iter()}
 
-    if present & set(HEADLINE_JP):
-        standard, headline = "jp", HEADLINE_JP
-    elif present & set(HEADLINE_IFRS):
-        standard, headline = "ifrs", HEADLINE_IFRS
-    else:
-        return ParseResult(standard="unknown", reason=FailReason.UNKNOWN_STANDARD)
-
-    consolidated = detect_consolidated(root, headline)
-    if consolidated is None:
-        # 連結にも単体にも値が無い。**推測でラベルを付けず**、取れなかったものとして返す。
-        return ParseResult(standard=standard, reason=FailReason.NO_VALUES)
+    basis = detect_basis(root)
+    if basis is None:
+        # どの (基準 × 文脈) にも値が無い。**推測でラベルを付けない**。
+        return ParseResult(reason=FailReason.UNKNOWN_STANDARD)
+    standard, headline, consolidated = basis
 
     # 単体決算のみの企業は、値も文脈IDも `_NonConsolidatedMember` 側に入っている。
     # 期間の解決（enddates）は無次元IDで引くので、対応表を持って読み替える。
@@ -269,7 +288,13 @@ def extract(
         value = int(raw)
         val: float
         if kind == _MONEY:
-            val, unit = round(value / 1_000_000), "百万円"
+            # **切り捨て**。日本の開示は百万円単位を切り捨てで表示する慣行で、
+            # 四捨五入すると会社自身の決算資料と1ずれる。
+            # 実測（ヴィス5071）: 営業利益 1,915,894,000円 → 説明資料は 1915百万円。
+            # 四捨五入だと 1916 になり、**出典と食い違う数字を出典つきで出す**ことになる。
+            # 「公式資料と一致する」ことが製品価値なので、丸め方は慣行に合わせる。
+            # 負値も0方向へ切り捨てる（int() の挙動）＝絶対値を大きくしない。
+            val, unit = int(value / 1_000_000), "百万円"
         else:
             val, unit = value, "円"
         facts.append(
