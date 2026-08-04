@@ -30,7 +30,7 @@ import zipfile
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 XLINK = "{http://www.w3.org/1999/xlink}"
 
@@ -39,46 +39,64 @@ def _ln(tag: str) -> str:
     return tag.split("}")[-1]
 
 
-# --- 連結ヘッドライン: 要素ローカル名 -> (metric_key, 日本語, 単位種別) ------------
 # money=円→百万円換算 / yen=そのまま
 _MONEY, _YEN = "money", "yen"
 
-HEADLINE_JP: dict[str, tuple[str, str, str]] = {
-    "NetSales": ("revenue", "売上高", _MONEY),
-    "OperatingIncome": ("operating_profit", "営業利益", _MONEY),
-    "OrdinaryIncome": ("ordinary_profit", "経常利益", _MONEY),
-    "ProfitLossAttributableToOwnersOfParent": (
-        "net_income",
-        "親会社株主に帰属する当期純利益",
-        _MONEY,
+
+class Metric(NamedTuple):
+    """XBRL要素をどの層1指標に写すか。tuple のままだと何番目が何か読めない。"""
+
+    key: str  # metric_key（revenue / operating_profit ...）
+    label_ja: str  # 表示名
+    unit_kind: str  # _MONEY | _YEN
+
+
+HEADLINE_JP: dict[str, Metric] = {
+    "NetSales": Metric("revenue", "売上高", _MONEY),
+    "OperatingIncome": Metric("operating_profit", "営業利益", _MONEY),
+    "OrdinaryIncome": Metric("ordinary_profit", "経常利益", _MONEY),
+    "ProfitLossAttributableToOwnersOfParent": Metric(
+        "net_income", "親会社株主に帰属する当期純利益", _MONEY
     ),
-    "BasicEarningsLossPerShare": ("eps", "1株当たり当期純利益", _YEN),
+    "BasicEarningsLossPerShare": Metric("eps", "1株当たり当期純利益", _YEN),
 }
 
 # IFRS採用企業（国内で250社超）。日本基準と要素名が異なる。
-HEADLINE_IFRS: dict[str, tuple[str, str, str]] = {
-    "RevenueIFRS": ("revenue", "売上収益", _MONEY),
+HEADLINE_IFRS: dict[str, Metric] = {
+    "RevenueIFRS": Metric("revenue", "売上収益", _MONEY),
     # IFRSでも売上の要素名は一つではない（実測: KDDI は NetSalesIFRS = 6,071,915百万円）。
     # 同義なので同じ metric_key に寄せる。重複排除は metric_key×period で効く。
-    "NetSalesIFRS": ("revenue", "売上高", _MONEY),
-    "OperatingProfitLossIFRS": ("operating_profit", "営業利益", _MONEY),
-    "ProfitLossBeforeTaxIFRS": ("ordinary_profit", "税引前利益", _MONEY),
-    "ProfitLossAttributableToOwnersOfParentIFRS": (
-        "net_income",
-        "親会社の所有者に帰属する当期利益",
-        _MONEY,
+    "NetSalesIFRS": Metric("revenue", "売上高", _MONEY),
+    "OperatingProfitLossIFRS": Metric("operating_profit", "営業利益", _MONEY),
+    "ProfitLossBeforeTaxIFRS": Metric("ordinary_profit", "税引前利益", _MONEY),
+    "ProfitLossAttributableToOwnersOfParentIFRS": Metric(
+        "net_income", "親会社の所有者に帰属する当期利益", _MONEY
     ),
-    "BasicEarningsLossPerShareIFRS": ("eps", "基本的1株当たり当期利益", _YEN),
+    "BasicEarningsLossPerShareIFRS": Metric("eps", "基本的1株当たり当期利益", _YEN),
 }
 
-SEG_METRICS = {
-    "NetSales": ("revenue", "売上高"),
-    "OperatingIncome": ("operating_profit", "営業利益"),
+# セグメント指標も**基準ごとに分ける**。混ぜると、IFRS企業の単体（日本基準）側の
+# 要素を連結セグメントとして拾いかねない。ヘッドラインと同じ理由。
+SEG_METRICS_JP: dict[str, Metric] = {
+    "NetSales": Metric("revenue", "売上高", _MONEY),
+    "OperatingIncome": Metric("operating_profit", "営業利益", _MONEY),
     # セグメント損益を営業利益ではなく経常利益で開示する企業が実在するため両対応
-    "OrdinaryIncome": ("ordinary_profit", "経常利益"),
-    "RevenueIFRS": ("revenue", "売上収益"),
-    "OperatingProfitLossIFRS": ("operating_profit", "営業利益"),
+    "OrdinaryIncome": Metric("ordinary_profit", "経常利益", _MONEY),
 }
+
+# IFRSのセグメントは**専用の要素名**を使う（実測: 日立・KDDI）。
+# ヘッドラインの要素（RevenueIFRS 等）だけを見ていたため、IFRS 6社中5社で
+# セグメントが0件になっていた。
+SEG_METRICS_IFRS: dict[str, Metric] = {
+    "RevenueIFRS": Metric("revenue", "売上収益", _MONEY),
+    "NetSalesIFRS": Metric("revenue", "売上高", _MONEY),
+    "RevenueFromExternalCustomersIFRS": Metric("revenue", "外部顧客への売上収益", _MONEY),
+    "SalesToExternalCustomersIFRS": Metric("revenue", "外部顧客への売上高", _MONEY),
+    "SegmentProfitLossIFRS": Metric("operating_profit", "セグメント利益", _MONEY),
+    "OperatingProfitLossIFRS": Metric("operating_profit", "営業利益", _MONEY),
+}
+
+SEG_METRICS_BY_STANDARD = {"jp": SEG_METRICS_JP, "ifrs": SEG_METRICS_IFRS}
 
 PERIOD_IDS = {"CurrentYearDuration": "current", "Prior1YearDuration": "prior1"}
 
@@ -86,21 +104,32 @@ PERIOD_IDS = {"CurrentYearDuration": "current", "Prior1YearDuration": "prior1"}
 _NC_SUFFIX = "_NonConsolidatedMember"
 
 
-def _has_values(root: ET.Element, elements: set[str], *, consolidated: bool) -> bool:
-    """指定の要素群が、指定の文脈（連結=無次元 / 単体=_NonConsolidatedMember）に
-    実際の**数値**として入っているかどうか。"""
-    suffix = "" if consolidated else _NC_SUFFIX
-    wanted = {pid + suffix for pid in PERIOD_IDS}
+def _headline_hits(root: ET.Element) -> set[tuple[str, bool]]:
+    """(基準, 連結か) の組で、ヘッドラインの**数値**が実在するものを返す。
+
+    XBRLは大きい（実測: 日立 7.4MB）ので、判定のために何度も走査しない。
+    **1回の走査で全パターンを集める**。
+    """
+    ctx_consolidated = {pid: True for pid in PERIOD_IDS}
+    ctx_consolidated |= {pid + _NC_SUFFIX: False for pid in PERIOD_IDS}
+    by_standard = {"jp": set(HEADLINE_JP), "ifrs": set(HEADLINE_IFRS)}
+
+    hits: set[tuple[str, bool]] = set()
     for el in root.iter():
-        if _ln(el.tag) not in elements:
+        consolidated = ctx_consolidated.get(el.get("contextRef") or "")
+        if consolidated is None:
             continue
         text = (el.text or "").strip()
-        if text.lstrip("-").isdigit() and (el.get("contextRef") or "") in wanted:
-            return True
-    return False
+        if not text.lstrip("-").isdigit():
+            continue
+        name = _ln(el.tag)
+        for standard, elements in by_standard.items():
+            if name in elements:
+                hits.add((standard, consolidated))
+    return hits
 
 
-def detect_basis(root: ET.Element) -> tuple[str, dict[str, tuple[str, str, str]], bool] | None:
+def detect_basis(root: ET.Element) -> tuple[str, dict[str, Metric], bool] | None:
     """**会計基準と連結/単体を同時に**判定する（#132 / #133）。
 
     この2つは同じ問い——「**どのタグ群が主たる財務諸表を担っているか**」——なので、
@@ -130,12 +159,12 @@ def detect_basis(root: ET.Element) -> tuple[str, dict[str, tuple[str, str, str]]
 
     どれにも当たらなければ **None**（推測しない）。
     """
-    for standard, headline in (("ifrs", HEADLINE_IFRS), ("jp", HEADLINE_JP)):
-        if _has_values(root, set(headline), consolidated=True):
-            return standard, headline, True
-    for standard, headline in (("ifrs", HEADLINE_IFRS), ("jp", HEADLINE_JP)):
-        if _has_values(root, set(headline), consolidated=False):
-            return standard, headline, False
+    hits = _headline_hits(root)
+    headlines = {"ifrs": HEADLINE_IFRS, "jp": HEADLINE_JP}
+    for consolidated in (True, False):  # 連結を優先（単体は連結が無い企業だけ）
+        for standard in ("ifrs", "jp"):  # IFRSを優先（下記の理由）
+            if (standard, consolidated) in hits:
+                return standard, headlines[standard], consolidated
     return None
 
 
@@ -144,7 +173,19 @@ _NOT_A_SEGMENT = re.compile(
     r"^(NonConsolidated|ReportableSegments|OperatingSegmentsNotIncludedIn"
     r"|Adjustment|Elimination|Total|Consolidated)"
 )
-_SEGMENT_SUFFIX = "ReportableSegmentsMember"
+# 報告セグメントのメンバー名の接尾辞。**単複の揺れがある**（実測: ハークスレイ等は
+# 複数形 ReportableSegmentsMember、日立は単数形 ReportableSegmentMember）。
+# 片方だけで判定すると、ラベルは取れているのにセグメントが0件になる。
+_SEGMENT_SUFFIXES = ("ReportableSegmentsMember", "ReportableSegmentMember")
+
+
+def _strip_segment_suffix(name: str) -> str | None:
+    """報告セグメントのメンバーなら接尾辞を除いた名前を、そうでなければ None。"""
+    for suffix in _SEGMENT_SUFFIXES:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return None
+
 
 # 提出者接頭辞（jpcrp030000-asr_E05137-000）を落として素の要素名にする。
 # **文脈IDとラベル定義で区切りが違う**（文脈=`-000Mobile...` / ラベル=`-000_Mobile...`）ため、
@@ -249,7 +290,7 @@ def segment_labels(zip_path: Path) -> dict[str, str]:
 def _slug(member: str) -> str:
     """メンバー名から安定した英小文字スラグ。提出者接頭辞と接尾辞を落とす。"""
     base = bare_member(member)
-    base = base[: -len(_SEGMENT_SUFFIX)] if base.endswith(_SEGMENT_SUFFIX) else base
+    base = _strip_segment_suffix(base) or base
     return re.sub(r"(?<!^)(?=[A-Z])", "_", base).lower()[:60] or "segment"
 
 
@@ -270,6 +311,7 @@ def extract(
         # どの (基準 × 文脈) にも値が無い。**推測でラベルを付けない**。
         return ParseResult(reason=FailReason.UNKNOWN_STANDARD)
     standard, headline, consolidated = basis
+    seg_metrics = SEG_METRICS_BY_STANDARD[standard]
 
     # 単体決算のみの企業は、値も文脈IDも `_NonConsolidatedMember` 側に入っている。
     # 期間の解決（enddates）は無次元IDで引くので、対応表を持って読み替える。
@@ -328,31 +370,33 @@ def extract(
 
         # 1) ヘッドライン（当期/前期。連結なら無次元、単体のみの企業なら単体文脈）
         if name in headline and cref in period_ctx:
-            mk, label, kind = headline[name]
-            add(mk, label, period_ctx[cref], raw, kind)
+            m = headline[name]
+            add(m.key, m.label_ja, period_ctx[cref], raw, m.unit_kind)
             continue
 
         # 2) セグメント（当期/前期 × 報告セグメント）。メンバーは自動検出。
-        if name in SEG_METRICS:
+        if name in seg_metrics:
             for pid in PERIOD_IDS:
                 prefix = pid + suffix + "_"
-                if not cref.startswith(prefix) or not cref.endswith(_SEGMENT_SUFFIX):
+                if not cref.startswith(prefix):
                     continue
                 member = cref[len(prefix) :]
                 bare = bare_member(member)
+                if _strip_segment_suffix(bare) is None:  # 報告セグメント以外の軸
+                    continue
                 if _NOT_A_SEGMENT.match(bare):  # 合計・単体・調整は事業ではない
                     continue
                 seg_label = labels.get(member) or labels.get(bare)
                 if not seg_label:
                     continue  # 日本語名が取れないものは出さない（表示名を推測しない）
-                sub, sub_label = SEG_METRICS[name]
+                m = seg_metrics[name]
                 segments.add(seg_label)
                 add(
-                    f"segment.{_slug(member)}.{sub}",
-                    f"{seg_label}（{sub_label}）",
+                    f"segment.{_slug(member)}.{m.key}",
+                    f"{seg_label}（{m.label_ja}）",
                     pid,
                     raw,
-                    _MONEY,
+                    m.unit_kind,
                 )
 
     # 重複排除（同一 metric×period が複数コンテキストで一致した場合の保険）
@@ -365,8 +409,8 @@ def extract(
         seen.add(key)
         uniq.append(f)
 
-    # 単体のみかどうかは detect_consolidated が判定済みなので、ここでの再判定は不要。
-    # 値が1件も取れないのは、対象の文脈に該当タグが無かった場合だけになる。
+    # detect_basis が (基準 × 連結/単体) を確定済みなので、ここでの再判定は不要。
+    # 値が1件も取れないのは、その文脈に該当タグが無かった場合だけ。
     return ParseResult(
         facts=uniq,
         standard=standard,
