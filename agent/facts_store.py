@@ -36,6 +36,24 @@ def _facts_dir() -> pathlib.Path:
     return pathlib.Path(config.FACTS_JSON_PATH) if config.FACTS_JSON_PATH else _DEFAULT_FACTS_DIR
 
 
+def _safe_facts_file(ticker: str) -> pathlib.Path | None:
+    """`data/facts/<ticker>.json` の実パス。層1ディレクトリの外を指すなら None。
+
+    ティッカーはリクエスト（エージェント）とURL（`/c/<ticker>`）に由来するので、
+    そのままファイル名にすると `../` でディレクトリの外を読める。
+    **エージェントは呼び出し元を信用しない**（#88 の非公開化は別の層の防御であって、
+    入力を信じてよい理由にはならない）。二重に止める:
+
+      1. 許可文字だけ — 区切り文字を1つも許さない
+      2. 解決後の包含確認 — シンボリックリンク等で外に出ていないか実パスで確かめる
+    """
+    if not _TICKER_RE.match(ticker):
+        return None
+    base = _facts_dir().resolve()
+    p = (base / f"{ticker}.json").resolve()
+    return p if p.parent == base else None
+
+
 def _load(ticker: str) -> list[dict[str, Any]]:
     """その企業のファクトだけを読む（`data/facts/<ticker>.json`）。
 
@@ -46,12 +64,9 @@ def _load(ticker: str) -> list[dict[str, Any]]:
     key = str(ticker)
     if key in _cache:
         return _cache[key]
-    if not _TICKER_RE.match(key):
-        _cache[key] = []
-        return []
-    p = _facts_dir() / f"{key}.json"
     rows: list[dict[str, Any]] = []
-    if p.exists():
+    p = _safe_facts_file(key)
+    if p is not None and p.exists():
         data = json.loads(p.read_text(encoding="utf-8"))
         # ファイルは [..facts..] でも {"facts":[..]} でも可
         rows = data["facts"] if isinstance(data, dict) else data
