@@ -44,7 +44,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from edinet.client import EdinetClient, load_api_key  # noqa: E402
+from edinet.client import DocRef, EdinetClient, load_api_key  # noqa: E402
 from edinet.parse import FailReason, extract  # noqa: E402
 
 DEFAULT_OUT = Path("data/facts-corpus")
@@ -61,10 +61,6 @@ PDF_URL = "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/{doc_id}.pd
 # ネットワーク起因＝**その書類の問題ではない**もの。資料側の問題（XBRLが無い・
 # 会計基準が判定できない）とは扱いを分ける必要がある: 前者は次回取りに行けば取れる。
 TRANSIENT_ERRORS = (urllib.error.URLError, TimeoutError, ConnectionError, socket.timeout)
-
-
-class TransientFailure(RuntimeError):
-    """通信起因の失敗。台帳に載せずにバッチを止めるための合図。"""
 
 
 # --------------------------------------------------------------------- 重複規則
@@ -98,7 +94,7 @@ def merge_facts(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 # --------------------------------------------------------------------- 1社ぶん
-def process_one(client: EdinetClient, ref: Any, out_dir: Path) -> dict[str, Any]:
+def process_one(client: EdinetClient, ref: DocRef, out_dir: Path) -> dict[str, Any]:
     """1書類を取得・抽出し、`<ticker>.json` を更新して台帳の1行を返す。"""
     row: dict[str, Any] = {
         "doc_id": ref.doc_id,
@@ -148,11 +144,11 @@ def process_one(client: EdinetClient, ref: Any, out_dir: Path) -> dict[str, Any]
         path.write_text(
             json.dumps({"facts": merged}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
-    except TRANSIENT_ERRORS as e:
+    except TRANSIENT_ERRORS:
         # **通信起因は台帳に書かない。** 載せると「処理済み」として再開時に飛ばされ、
         # ネットが切れていた間の数百社が二度と取得されない。データが黙って欠けるのが
-        # 最悪なので、行を書かずに上へ投げてバッチ自体を止める。
-        raise TransientFailure(f"{type(e).__name__}: {ref.doc_id}") from e
+        # 最悪なので、行を書かずにそのまま投げて（包まずに＝原因を隠さずに）バッチを止める。
+        raise
     except Exception as e:  # 資料そのものの問題。1社の失敗で全体を落とさない
         row["reason"] = f"例外: {type(e).__name__}"
     return row
@@ -190,11 +186,11 @@ def run(start: date, end: date, out_dir: Path, cache_dir: Path, limit: int | Non
                 )
                 if limit and n >= limit:
                     break
-        except (TransientFailure, *TRANSIENT_ERRORS) as e:
+        except TRANSIENT_ERRORS as e:
             # 通信が切れたら**進み続けない**。残り全部を失敗として台帳に刻むと、
             # 再開時に飛ばされてデータが黙って欠ける。ここで止めれば、
             # 未処理は台帳に無いまま＝次回そのまま続きから取りに行ける。
-            stopped = f"\n⚠ 通信が途切れたため中断（{type(e).__name__}）。同じコマンドで続きから再開できます。"
+            stopped = f"\n⚠ 通信が途切れたため中断（{type(e).__name__}: {e}）。同じコマンドで続きから再開できます。"
         except KeyboardInterrupt:
             stopped = "\n中断しました。同じコマンドで続きから再開できます。"
     elapsed = time.time() - t0
@@ -269,20 +265,36 @@ def report(ledger: Path) -> None:
         if with_seg:
             print(f"    のべ {sum(segs):,} 事業 / 平均 {sum(segs) / with_seg:.1f} 事業")
 
-    # **どの決算期を持っているか**は台帳では分からない（台帳は書類の話で、
-    # 1つの有報は当期と前期の2期ぶんを含む）。実際に出力したファクトから数える。
-    # 取得の窓は「提出日」で切るので、コーパスに入る決算期は自動では揃わない
-    # （EDINETは書類情報が編集されると古い書類を再掲するため、数年前の有報も混ざる）。
+    # ここから先は出力ファイルを読んで数える。**台帳だけでは足りない**:
+    #  - 決算期 — 台帳は書類の記録で、1つの有報が当期＋前期の2期を含む。
+    #    取得の窓は「提出日」で切るため、コーパスに入る決算期は自動では揃わない
+    #    （EDINETは書類情報が編集されると古い書類を再掲するので数年前の有報も混ざる）。
+    #  - 指標ごとの取得率 — **「抽出成功」は「1件でも取れた」でしかない。**
+    #    ヘッドライン4指標のうち1つしか取れていない社を成功に数えると、
+    #    カバレッジを実態より良く見せてしまう。指標ごとに出す。
     years: Counter[int] = Counter()
+    metric_companies: Counter[str] = Counter()
+    n_files = 0
     for p in sorted(ledger.parent.glob("*.json")):
         if p.name.startswith("_"):
             continue
         try:
-            for f in json.loads(p.read_text(encoding="utf-8")).get("facts") or []:
-                if f.get("fiscal_year"):
-                    years[int(f["fiscal_year"])] += 1
+            facts = json.loads(p.read_text(encoding="utf-8")).get("facts") or []
         except Exception:  # 出力が壊れていてもレポートは出す
             continue
+        n_files += 1
+        for f in facts:
+            if f.get("fiscal_year"):
+                years[int(f["fiscal_year"])] += 1
+        for k in {str(f.get("metric_key")) for f in facts}:
+            if not k.startswith("segment."):
+                metric_companies[k] += 1
+
+    if metric_companies and n_files:
+        print(f"\n  指標ごとの取得率（全 {n_files:,} 社）:")
+        for k, c in metric_companies.most_common():
+            print(f"    {k:<24} {c:>6,} ({c / n_files:.1%})")
+
     if years:
         print("\n  決算期の分布（ファクト数）:")
         for y, c in sorted(years.items()):
