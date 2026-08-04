@@ -58,12 +58,15 @@ def _load(ticker: str) -> list[dict[str, Any]]:
     key = str(ticker)
     if key in _cache:
         return _cache[key]
-    rows: list[dict[str, Any]] = []
     p = _file_index().get(key)
-    if p is not None:
-        data = json.loads(p.read_text(encoding="utf-8"))
-        # ファイルは [..facts..] でも {"facts":[..]} でも可
-        rows = data["facts"] if isinstance(data, dict) else data
+    if p is None:
+        # **索引に無いティッカーはキャッシュしない。** ティッカーは外から来るので、
+        # 空振りも覚えると任意の文字列でdictが際限なく育つ。索引引きはO(1)なので
+        # 覚える価値も無い。これで _cache の上限は「層1ディレクトリのファイル数」になる。
+        return []
+    data = json.loads(p.read_text(encoding="utf-8"))
+    # ファイルは [..facts..] でも {"facts":[..]} でも可
+    rows: list[dict[str, Any]] = data["facts"] if isinstance(data, dict) else data
     _cache[key] = rows
     return rows
 

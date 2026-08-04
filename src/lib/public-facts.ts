@@ -85,9 +85,9 @@ function loadTicker(ticker: string): Fact[] {
   const hit = cache.get(ticker);
   if (hit) return hit;
   const file = fileIndex().get(ticker);
-  const rows: Fact[] = file
-    ? ((JSON.parse(fs.readFileSync(file, 'utf8')) as { facts?: Fact[] }).facts ?? [])
-    : [];
+  // 索引に無いティッカーはキャッシュしない（空振りを覚えるとMapが際限なく育つ）。
+  if (!file) return [];
+  const rows = (JSON.parse(fs.readFileSync(file, 'utf8')) as { facts?: Fact[] }).facts ?? [];
   cache.set(ticker, rows);
   return rows;
 }
