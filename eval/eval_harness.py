@@ -89,13 +89,19 @@ class CaseResult:
 # エージェント呼び出し（実装ポイント）
 # --------------------------------------------------------------------------- #
 # 評価対象の企業レジストリ（テスト範囲。実体の正は src/config/companies.ts）
-COMPANIES: dict[str, dict[str, str]] = {
+COMPANIES: dict[str, dict[str, Any]] = {
     "vis": {
         "ticker": "5071",
         "name": "株式会社ヴィス",
         "datastore_id": "vis-ir-data_1752223995110",
+        "is_customer": True,
     },
-    "harux": {"ticker": "7561", "name": "株式会社ハークスレイ", "datastore_id": "harux-ir-data"},
+    "harux": {
+        "ticker": "7561",
+        "name": "株式会社ハークスレイ",
+        "datastore_id": "harux-ir-data",
+        "is_customer": True,
+    },
     # **層2を持たない状態**を評価するための対象（#151 / #145）。
     # 層1は同じハークスレイを使い、開示文書の検索だけを外す＝非顧客企業と同条件。
     # 実在の非顧客企業ではなく既知データで検証するのは、期待値を確定できるようにするため。
@@ -103,6 +109,8 @@ COMPANIES: dict[str, dict[str, str]] = {
         "ticker": "7561",
         "name": "株式会社ハークスレイ",
         "datastore_id": None,
+        # 非顧客企業と同条件（IR窓口へ取り次げない）
+        "is_customer": False,
     },
 }
 # 企業ごとの既定ゴールデンセット

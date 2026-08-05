@@ -28,6 +28,16 @@ export interface Company {
    * WRITE は数値だけの指示に切り替わる）。
    */
   datastoreId?: string;
+  /**
+   * **発行体と関係があるか**（#145）。未設定なら `datastoreId` の有無から導出する。
+   *
+   * 顧客／非顧客を分けているのは技術的な事実ではなく**業務上の関係**（資料の提供と
+   * 承認があるか・IR窓口へ取り次げるか）。将来、非顧客企業の定性情報を当方で収集
+   * するようになると `datastoreId` では区別できなくなるので、そのときここを明示する。
+   * インフラの実体から導出できる間は導出に任せる（**フラグだけ立てて「公式IR」を
+   * 名乗れる状態を作らない**ため）。
+   */
+  isCustomer?: boolean;
   isActive: boolean;             // 有効/無効
   guidedQuestions?: string[];    // 初期画面のガイドチップ。未設定なら汎用にフォールバック
   /** 決算期の末月（例: 3 = 3月期）。公開Q&Aページ(#113)で「2026FY」を「2026年3月期」と
@@ -135,9 +145,15 @@ export function getActiveCompanies(): Company[] {
  *
  * 判定条件を各所に書き写さない。「層2があるか」「CTAを出すか」「公式と名乗るか」は
  * すべて同じ問いなので、**述語1つに集約**する（`isPublishedCompany` と同じ理由）。
+ *
+ * **これは「層2があるか」ではなく「発行体と関係があるか」。**
+ * 今は非顧客が層2を持たないので `datastoreId` の有無で代用できているが、
+ * 非顧客企業の定性情報を当方で収集して食わせるようになると**両者とも層2を持つ**ため
+ * この代用は成立しなくなる。そのときは `isCustomer` を明示的に立てるだけでよい
+ * （**この関数が唯一の切替点**になるよう、呼び出し側は必ずここを通す）。
  */
 export function isCustomerCompany(company: Company): boolean {
-  return !!company.datastoreId;
+  return company.isCustomer ?? !!company.datastoreId;
 }
 
 /**

@@ -695,9 +695,11 @@ def synthesize_stream(
     history が無ければ書き換えをスキップ＝従来と同一挙動。suggestions は agent 側で付与。"""
     ticker = str(company.get("ticker") or "")
     name = company.get("name") or "対象企業"
-    # 層2を持つ＝IR室が導入済み＝取り次ぎ先がある（#145）。同じ事実で
-    # 「なぜを書けるか」と「IR窓口へ案内してよいか」の両方が決まる。
-    can_contact_ir = bool(company.get("datastore_id"))
+    # 取り次ぎ先があるか（#145）。**datastore_id から導出しない。**
+    # 「層2を持つか」と「発行体と関係があるか」は今は一致しているが、
+    # 非顧客企業の定性情報を当方で収集するようになると別々になる。
+    # 判定の正はフロント（companies.ts の isCustomerCompany）。
+    can_contact_ir = bool(company.get("is_customer"))
 
     # A1: 進行段階をフロントへ実況（search→plan→write）。待ち時間を"作業が見える"体験にする。
     yield {"type": "status", "stage": "search"}

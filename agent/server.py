@@ -37,6 +37,10 @@ class ChatRequest(BaseModel):
     companyTicker: str
     companyName: str = "対象企業"
     datastoreId: str | None = None
+    # **発行体と関係があるか**（#145）。datastoreId から再導出しない——
+    # 将来、非顧客企業の定性情報も当方で収集すると両者とも datastoreId を持つ。
+    # 判定の正はフロントの `isCustomerCompany`（companies.ts）。
+    isCustomer: bool = False
     sessionId: str = "s1"
     userId: str = "anon"
     # 短期メモリ: 直近の会話履歴（フォロー質問の書き換え用）。サーバはステートレス。
@@ -61,6 +65,7 @@ async def chat(req: ChatRequest) -> StreamingResponse:
         "ticker": req.companyTicker,
         "name": req.companyName,
         "datastore_id": req.datastoreId,
+        "is_customer": req.isCustomer,
     }
 
     history = [{"role": t.role, "content": t.content} for t in req.history]

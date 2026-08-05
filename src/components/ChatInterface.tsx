@@ -513,6 +513,11 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
       </div>
       </div>
 
+      {/* パネルは**常時DOMに描画する**のが #113 の肝（閉じていても答え全文がHTMLに載り、
+          JSを実行しないAIクローラーが読める）。ただしQ&Aが0件なら中身が無いうえ、
+          「公式Q&A」という語だけがHTMLに残る——非顧客企業では**名乗ってはいけない表現**
+          なので、そのときは描画しない（#145）。 */}
+      {qa.length > 0 && (
       <QaPanel
         qa={qa}
         companyName={companyShortName(company.name)}
@@ -523,6 +528,7 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
           send(question);
         }}
       />
+      )}
     </div>
   );
 }
