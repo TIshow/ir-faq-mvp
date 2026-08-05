@@ -96,11 +96,6 @@ export function searchCompanies(query: string, limit = 20): Company[] {
     .slice(0, limit);
 }
 
-/** レジストリの件数（レポート・動作確認用）。 */
-export function listedCompanyCount(): number {
-  return ALL.length;
-}
-
 /**
  * 検索で到達できる社数（画面に出す数字）。
  *

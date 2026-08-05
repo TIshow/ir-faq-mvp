@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Company, companyShortName, getActiveCompanies } from '@/config/companies';
 import { CompanySearch } from '@/components/CompanySearch';
+import { CHIP_TICKER } from '@/components/ui';
 
 // 銘柄ごとのモノグラム配色（ポップな塗りつぶしスクエア）
 const MONO = [
@@ -109,7 +110,7 @@ export const CompanyPicker: React.FC<{ selected: Company }> = ({ selected }) => 
                       <span className="block truncate text-sm font-bold text-ink">{companyShortName(c.name)}</span>
                       <span className="block truncate text-xs text-mute">{c.sector}</span>
                     </span>
-                    <span className="font-num rounded-md bg-cream px-1.5 py-0.5 text-[11px] font-semibold text-ink-soft">
+                    <span className={CHIP_TICKER}>
                       {c.ticker}
                     </span>
                     {sel && (

@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { BrandLogo } from '@/components/BrandLogo';
 import { CompanyEntry } from '@/components/CompanyEntry';
 import { CompanySearch } from '@/components/CompanySearch';
+import { TierBadge } from '@/components/TierBadge';
 import {
   getActiveCompanies,
   getPublishedCompanies,
@@ -72,11 +73,7 @@ export default function Home() {
                       {companyShortName(c.name)}
                     </span>
                     <span className="font-num text-[12px] font-semibold text-mute">{c.ticker}</span>
-                    {isCustomerCompany(c) && (
-                      <span className="rounded-full bg-pop-soft px-1.5 py-px text-[9.5px] font-black text-ink">
-                        公式IR
-                      </span>
-                    )}
+                    <TierBadge official={isCustomerCompany(c)} size="sm" />
                   </div>
                   {c.description && (
                     <p className="mt-1.5 text-[11.5px] leading-[1.8] text-ink-soft">

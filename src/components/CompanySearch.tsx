@@ -3,19 +3,40 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { companyShortName } from '@/config/companies';
+import { CHIP_TICKER } from '@/components/ui';
+import { TierBadge } from '@/components/TierBadge';
 import type { CompanyHit } from '@/app/api/companies/search/route';
 
 /**
  * 社名・証券コードで銘柄を探す（#154 の続き）。
  *
- * **一覧ではなく検索**なのは、対象が上場3,825社だから。カードで並べる案は元から
- * 成立せず、レジストリ562KBをクライアントに配ることもできない（`/api/companies/search`）。
+ * **一覧ではなく検索**なのは、対象が上場3,829社だから。カードで並べる案は元から
+ * 成立せず、レジストリ562KBをクライアントに配ることもできない（→ `/api/companies/search`）。
  *
  * トップ（大きい入力欄）と銘柄URLのピッカー（コンパクト）の両方で使う。
  */
+
+/** 見え方の違いはここだけ。呼び出し側の条件分岐を増やさない。 */
+const SKIN = {
+  hero: {
+    box: 'px-5 py-3 shadow-e2',
+    icon: 'h-[18px] w-[18px]',
+    input: 'text-[14px]',
+    // トップでは候補が下のカードに重なるので浮かせる
+    list: 'absolute left-0 right-0 z-40 mt-2 rounded-3xl border border-line bg-paper shadow-e4',
+  },
+  compact: {
+    box: 'px-3.5 py-2 shadow-e1',
+    icon: 'h-4 w-4',
+    input: 'text-[13px]',
+    // ピッカーの中では自分が既に浮いた面の上に居るので、流し込みで足りる
+    list: 'mt-1.5 rounded-2xl',
+  },
+} as const;
+
 export interface CompanySearchProps {
   /** 入力欄の見え方。トップ＝`hero` / ピッカー内＝`compact` */
-  variant?: 'hero' | 'compact';
+  variant?: keyof typeof SKIN;
   placeholder?: string;
   autoFocus?: boolean;
   /** 銘柄を選んだとき（ピッカーを閉じる等）。遷移自体はこの中で行う */
@@ -34,6 +55,7 @@ export function CompanySearch({
   const [loading, setLoading] = useState(false);
   const [cursor, setCursor] = useState(0);
   const listId = useId();
+  const skin = SKIN[variant];
 
   // **応答の追い越しを防ぐ。** 入力のたびに投げるので、遅い前の結果が後から
   // 届いて新しい結果を上書きしうる。連番で自分が最新かを確かめてから反映する。
@@ -81,12 +103,10 @@ export function CompanySearch({
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (!hits.length) return;
-    if (e.key === 'ArrowDown') {
+    const move = { ArrowDown: 1, ArrowUp: -1 }[e.key];
+    if (move) {
       e.preventDefault();
-      setCursor((i) => (i + 1) % hits.length);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setCursor((i) => (i - 1 + hits.length) % hits.length);
+      setCursor((i) => (i + move + hits.length) % hits.length);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       go(hits[cursor]);
@@ -95,17 +115,11 @@ export function CompanySearch({
     }
   };
 
-  const hero = variant === 'hero';
-
   return (
     <div className="relative">
-      <div
-        className={`flex items-center gap-2 rounded-full bg-paper ${
-          hero ? 'px-5 py-3 shadow-e2' : 'px-3.5 py-2 shadow-e1'
-        }`}
-      >
+      <div className={`flex items-center gap-2 rounded-full bg-paper ${skin.box}`}>
         <svg
-          className={`${hero ? 'h-[18px] w-[18px]' : 'h-4 w-4'} shrink-0 text-mute`}
+          className={`${skin.icon} shrink-0 text-mute`}
           viewBox="0 0 20 20"
           fill="currentColor"
           aria-hidden="true"
@@ -130,9 +144,7 @@ export function CompanySearch({
           aria-autocomplete="list"
           aria-controls={listId}
           aria-expanded={hits.length > 0}
-          className={`w-full bg-transparent font-medium text-ink outline-none placeholder:text-mute ${
-            hero ? 'text-[14px]' : 'text-[13px]'
-          }`}
+          className={`w-full bg-transparent font-medium text-ink outline-none placeholder:text-mute ${skin.input}`}
         />
         {loading && (
           <span
@@ -152,11 +164,7 @@ export function CompanySearch({
         <ul
           id={listId}
           role="listbox"
-          className={`${
-            hero
-              ? 'absolute left-0 right-0 z-40 mt-2 overflow-hidden rounded-3xl border border-line bg-paper shadow-e4'
-              : 'mt-1.5 overflow-hidden rounded-2xl'
-          } max-h-[19rem] overflow-y-auto p-1.5`}
+          className={`${skin.list} max-h-[19rem] overflow-y-auto p-1.5`}
         >
           {hits.map((h, i) => (
             <li key={h.ticker}>
@@ -175,19 +183,15 @@ export function CompanySearch({
                     <span className="truncate text-[13px] font-bold text-ink">
                       {companyShortName(h.name)}
                     </span>
-                    {h.official && (
-                      <span className="shrink-0 rounded-full bg-pop-soft px-1.5 py-px text-[9.5px] font-black text-ink">
-                        公式IR
-                      </span>
-                    )}
+                    {/* **公式だけを目印に出す。** 3,829件中3,825件が非公式なので、
+                        既定を全行に書いても選ぶ助けにならない（TierBadge 参照）。 */}
+                    {h.official && <TierBadge official size="sm" />}
                   </span>
                   {h.sector && (
                     <span className="block truncate text-[11px] text-mute">{h.sector}</span>
                   )}
                 </span>
-                <span className="font-num shrink-0 rounded-md bg-cream px-1.5 py-0.5 text-[11px] font-semibold text-ink-soft">
-                  {h.ticker}
-                </span>
+                <span className={CHIP_TICKER}>{h.ticker}</span>
               </button>
             </li>
           ))}

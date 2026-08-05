@@ -8,38 +8,8 @@ import { Markdown } from '@/components/Markdown';
 import { NaruhodoMark } from '@/components/BrandLogo';
 import { QaPanel } from '@/components/QaPanel';
 import { PILL_INK, PILL_QUIET } from '@/components/ui';
+import { TierBadge } from '@/components/TierBadge';
 import type { CompanyHeadline, PublicQa } from '@/lib/public-facts';
-
-/**
- * 情報の出所を示すバッジ（#145）。
- *
- * **公式IR** = 発行体が導入済み。EDINETの数値に加えて決算説明資料・想定問答を根拠にでき、
- *   答えられない質問はIR窓口へ取り次げる。
- * **非公式IR** = EDINET提出書類だけ。数値には出典つきで答えられるが、
- *   「なぜ」は会社の説明を持たないため答えられない（推測もしない・#151）。
- *
- * 「公式」は発行体の承認を含意する表現なので（#124）、承認の無い企業に使わない。
- * ただし数値そのものは会社自身が国に提出した正本なので、出せないわけではない——
- * だから隠すのではなく**区別する**。
- */
-function TierBadge({ company }: { company: Company }) {
-  const official = isCustomerCompany(company);
-  return (
-    <span
-      title={
-        official
-          ? 'この企業のIR部門が導入済みです。決算説明資料などの自社資料も根拠にしています。'
-          : 'EDINETに提出された有価証券報告書の数値のみを根拠にしています。会社の説明資料は含みません。'
-      }
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-        official ? 'bg-pop/15 text-pop-deep' : 'border border-line bg-paper text-mute'
-      }`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${official ? 'bg-pop' : 'bg-mute'}`} />
-      {official ? '公式IR' : '非公式IR'}
-    </span>
-  );
-}
 
 // ガイド付き入口（企業はピッカーで選択するため企業名は含めない＝スコープ安全）
 const GUIDED_ENTRIES = [
@@ -314,7 +284,7 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
             ことを意味し、「非公式IR」はEDINET提出書類だけを根拠にしていることを意味する。
             出所の違いは投資家の判断に効くので、隠さずラベルで区別する。 */}
         <span className="flex min-w-0 items-center gap-2 truncate text-sm text-mute">
-          <TierBadge company={company} />
+          <TierBadge official={isCustomerCompany(company)} />
           <span className="hidden truncate font-medium text-ink-soft sm:inline">{`${companyShortName(company.name)} のIR情報`}</span>
         </span>
         <div className="flex shrink-0 items-center gap-2">

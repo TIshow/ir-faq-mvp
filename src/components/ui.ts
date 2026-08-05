@@ -37,3 +37,10 @@ export const PILL_INK_MD = `${PILL_BASE} ${PILL_LIFT} ${PILL_INK_SKIN} px-3.5 py
  * （画面から降りる操作なので、前に出る手触りを付けない）。
  */
 export const PILL_QUIET = `${PILL_BASE} border-line bg-paper px-3 py-1 text-xs text-ink-soft transition hover:border-ink hover:text-ink`;
+
+/**
+ * 証券コードのチップ（銘柄ピッカー・検索候補）。
+ * 数字なので `font-num`（等幅の数字書体）を当てて桁が揺れないようにする。
+ */
+export const CHIP_TICKER =
+  'font-num shrink-0 rounded-md bg-cream px-1.5 py-0.5 text-[11px] font-semibold text-ink-soft';
