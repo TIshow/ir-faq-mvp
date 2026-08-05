@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 
 /**
  * Naruhodo IR のブランドマーク「！の芽」（縦棒＝感嘆符の軸／緑の点＝その芽／2枚の葉）。
@@ -28,12 +29,20 @@ export const NaruhodoMark: React.FC<{ height?: number; className?: string; onDar
 /**
  * ロゴロックアップ: マーク＋ワードマーク「Naruhodo IR」（IR はグリーン）。
  * ワードマークは Zen Maru Gothic 900（globals の --font-round）。
+ *
+ * **トップ（`/`）へのリンクを兼ねる。** 銘柄URLは AI や共有リンクから直接開かれるので、
+ * その人にとってここが入口になる。ロゴが効かないと他の銘柄へ移る道が
+ * 右上のピッカーしか無くなる（ロゴ＝ホームはウェブの共通作法でもある）。
  */
 export const BrandLogo: React.FC<{ markHeight?: number; className?: string }> = ({ markHeight = 30, className }) => (
-  <span className={`flex items-center gap-2.5 ${className ?? ''}`}>
+  <Link
+    href="/"
+    aria-label="Naruhodo IR のトップへ"
+    className={`flex items-center gap-2.5 transition hover:opacity-70 ${className ?? ''}`}
+  >
     <NaruhodoMark height={markHeight} />
     <span className="font-round text-[17px] font-black leading-none tracking-tight text-ink">
       Naruhodo <span className="text-pop">IR</span>
     </span>
-  </span>
+  </Link>
 );

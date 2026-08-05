@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Company, companyShortName, getActiveCompanies } from '@/config/companies';
+import { CompanySearch } from '@/components/CompanySearch';
 
 // 銘柄ごとのモノグラム配色（ポップな塗りつぶしスクエア）
 const MONO = [
@@ -78,10 +79,20 @@ export const CompanyPicker: React.FC<{ selected: Company }> = ({ selected }) => 
 
       {open && (
         <div className="absolute right-0 z-40 mt-2 w-[19rem] overflow-hidden rounded-3xl border border-line bg-paper shadow-e4">
-          <div className="font-round px-4 pb-1.5 pt-3.5 text-[11px] font-black tracking-wider text-mute">
+          {/* **上場全社を検索できる**（#154）。下の一覧は `companies.ts` のぶんだけで、
+              3,825社を並べることはできない。検索が非顧客への唯一の到達経路。 */}
+          <div className="border-b border-line bg-cream/40 p-2.5">
+            <CompanySearch
+              variant="compact"
+              placeholder="社名・証券コードで検索"
+              autoFocus
+              onPicked={() => setOpen(false)}
+            />
+          </div>
+          <div className="font-round px-4 pb-1.5 pt-3 text-[11px] font-black tracking-wider text-mute">
             銘柄を選択
           </div>
-          <ul className="p-1.5" role="listbox">
+          <ul className="max-h-[15rem] overflow-y-auto p-1.5" role="listbox">
             {companies.map((c) => {
               const sel = selected.id === c.id;
               return (

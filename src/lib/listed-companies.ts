@@ -100,3 +100,17 @@ export function searchCompanies(query: string, limit = 20): Company[] {
 export function listedCompanyCount(): number {
   return ALL.length;
 }
+
+/**
+ * 検索で到達できる社数（画面に出す数字）。
+ *
+ * **レジストリの件数そのものではない。** レジストリは顧客企業を除いてあるので、
+ * `companies.ts` 側にしか居ない企業を足す必要がある。逆に非顧客が両方に載ることも
+ * あるので（動作確認用に置いた 4063 がそう）、単純な足し算だと二重に数える。
+ * 画面に出す数字なので、ティッカーの和集合で正確に数える。
+ */
+export function searchableCompanyCount(): number {
+  const tickers = new Set(ALL.map((c) => c.ticker));
+  for (const c of companies) if (c.isActive && c.ticker) tickers.add(c.ticker);
+  return tickers.size;
+}
