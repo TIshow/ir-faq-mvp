@@ -13,8 +13,16 @@
 import Link from 'next/link';
 import { BrandLogo } from '@/components/BrandLogo';
 import { CompanyEntry } from '@/components/CompanyEntry';
-import { getActiveCompanies, getPublishedCompanies, companyShortName } from '@/config/companies';
+import { CompanySearch } from '@/components/CompanySearch';
+import { TierBadge } from '@/components/TierBadge';
+import {
+  getActiveCompanies,
+  getPublishedCompanies,
+  companyShortName,
+  isCustomerCompany,
+} from '@/config/companies';
 import { headlineNumbersByTicker } from '@/lib/public-facts';
+import { searchableCompanyCount } from '@/lib/listed-companies';
 
 export default function Home() {
   // 一覧には対応中の全社を出す（人が選べないと使えない）。
@@ -22,6 +30,8 @@ export default function Home() {
   // sitemap にも載るため、ここに出すと銘柄ページのゲートを迂回して主張が外へ出る。
   const companies = getActiveCompanies().filter((c) => c.ticker);
   const headline = headlineNumbersByTicker(getPublishedCompanies());
+  // 上場全社が検索で引ける（#154）。数字は実データから数える＝手で書かない
+  const searchable = searchableCompanyCount();
 
   return (
     <div className="min-h-screen bg-cream text-ink">
@@ -34,11 +44,21 @@ export default function Home() {
           どの会社の IR に <span className="mk">なるほど！</span>する？
         </h1>
         <p className="mt-3 text-[12.5px] font-medium leading-[1.9] text-ink-soft">
-          会社を選ぶと、その会社の開示資料と公式Q&amp;Aだけを根拠に、出典つきで対話できます。
+          会社を選ぶと、その会社の開示資料だけを根拠に、出典つきで対話できます。
         </p>
+
+        <div className="mt-5">
+          <CompanySearch placeholder="社名・証券コードで検索（例: トヨタ、7203）" />
+          <p className="mt-2 px-1 text-[11px] font-medium text-mute">
+            {`上場${searchable.toLocaleString()}社から探せます。`}
+          </p>
+        </div>
+
         <CompanyEntry />
 
-        <h2 className="font-round mt-9 text-[15px] font-black text-ink">銘柄を選んでください</h2>
+        {/* この一覧は `companies.ts` の企業＝顧客とは限らない（動作確認用の 4063 も居る）。
+            「公式IR」を名乗れるのは顧客だけなので、見出しでは主張せずカード側にバッジを出す。 */}
+        <h2 className="font-round mt-9 text-[15px] font-black text-ink">一覧から選ぶ</h2>
         <ul className="mt-3.5 grid gap-3 sm:grid-cols-2">
           {companies.map((c) => {
             const h = c.ticker ? headline[c.ticker] : undefined;
@@ -53,6 +73,7 @@ export default function Home() {
                       {companyShortName(c.name)}
                     </span>
                     <span className="font-num text-[12px] font-semibold text-mute">{c.ticker}</span>
+                    <TierBadge official={isCustomerCompany(c)} size="sm" />
                   </div>
                   {c.description && (
                     <p className="mt-1.5 text-[11.5px] leading-[1.8] text-ink-soft">
