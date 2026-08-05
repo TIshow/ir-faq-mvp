@@ -73,18 +73,36 @@ def _load(ticker: str) -> list[dict[str, Any]]:
     return rows
 
 
-def _verified_rows(ticker: str) -> list[dict[str, Any]]:
-    """その企業の**採用してよい**ファクトだけ。層1の採用条件をここ1か所に集約する。
+def _is_usable(row: dict[str, Any]) -> bool:
+    """このファクトを回答に使ってよいか。**採用条件をここ1か所に定義する。**
 
-    - `verified` — 人が確認した数値だけを出す（CLAUDE.md の鉄則）。EDINET抽出は
-      `verified: false` で出るので、取り込んだだけのものはここで落ちる。
-    - `ticker` — ファイル名だけでなく中身でも確認する。取り違えたファイルを置いても
-      「別の会社の数字を返す」のではなく「何も返さない」で落ちるようにするため。
+    2つの経路があり、**担保しているものが違う**（#145）:
+
+    - `verified: true` — 人が原本と突き合わせた。PDFからの抽出（LLM経由）は
+      読み違えが起こりうるので、これが要る。
+    - `source_kind == "xbrl"` — 提出企業の正本XBRLからタグを読んだだけ。
+      値の読み違えが原理的に起こらないので、検証すべきは企業ではなく**抽出器**
+      （ハークスレイの人手検証データと突合して不一致0を確認済み・
+      docs/edinet-ingest.md §4）。3,900社を人手検証はできない以上、
+      この道を通さないと非顧客企業には一切答えられない。
+
+    **`verified` を XBRL に流用しない。** 「人が確認した」と「抽出器が検証済み」は
+    別の主張で、UIの表示（公式IR / 非公式IR）もコンプラ上の姿勢も変わる。
+    片方に潰すと後から分けられない。
+    """
+    return bool(row.get("verified", False)) or row.get("source_kind") == "xbrl"
+
+
+def _verified_rows(ticker: str) -> list[dict[str, Any]]:
+    """その企業の**採用してよい**ファクトだけ。
+
+    `ticker` はファイル名だけでなく中身でも確認する。取り違えたファイルを置いても
+    「別の会社の数字を返す」のではなく「何も返さない」で落ちるようにするため。
 
     フィルタ済みの新しいリストを返すので、`_cache` の中身が呼び出し側に漏れない。
     """
     tk = str(ticker)
-    return [r for r in _load(tk) if str(r.get("ticker")) == tk and r.get("verified", False)]
+    return [r for r in _load(tk) if str(r.get("ticker")) == tk and _is_usable(r)]
 
 
 def resolve_company_id(ticker: str) -> str:

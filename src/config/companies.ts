@@ -1,7 +1,14 @@
 /**
  * 企業マスター（フロントの唯一の正）。
  * id/name/ticker/sector/datastoreId をエージェントへ渡す（route.ts）。
- * 新企業はここに追加し、対応する Discovery Engine データストアを用意する。
+ *
+ * **2階層ある**（#145）:
+ *  - **顧客企業**（`datastoreId` あり）= IR室が導入済み。EDINETの数値に加えて
+ *    決算資料・想定問答（層2）を持ち、「なぜ」に会社自身の説明で答えられる。
+ *    答えられないときは IR窓口へ取り次げる。UIは「公式IR」。
+ *  - **非顧客企業**（`datastoreId` なし）= EDINETの数値だけ。数値には答えられるが
+ *    「なぜ」は答えられない（材料が無いので創作もしない・#151）。
+ *    取り次ぎ先が存在しないので IR窓口のCTAは出さない。UIは「非公式IR」。
  */
 
 export interface Company {
@@ -12,7 +19,15 @@ export interface Company {
   sector?: string;               // 業界
   description?: string;          // 企業説明
   websiteUrl?: string;           // 公式サイト
-  datastoreId: string;           // Discovery Engine データストアID（層2の検索先）
+  /**
+   * Discovery Engine データストアID（層2の検索先）。
+   *
+   * **未設定＝非顧客企業**（#145）。EDINETの数値だけで回答し、「なぜ」には答えない。
+   * 3,900社ぶんのデータストアは作れないので、ここが顧客と非顧客の境界になる。
+   * エンジンは未設定に耐える（`search_disclosures` が空を返し、
+   * WRITE は数値だけの指示に切り替わる）。
+   */
+  datastoreId?: string;
   isActive: boolean;             // 有効/無効
   guidedQuestions?: string[];    // 初期画面のガイドチップ。未設定なら汎用にフォールバック
   /** 決算期の末月（例: 3 = 3月期）。公開Q&Aページ(#113)で「2026FY」を「2026年3月期」と
@@ -53,6 +68,19 @@ export const companies: Company[] = [
     websiteUrl: 'https://www.phil-company.com/',
     datastoreId: 'philcompany-ir-data_1752224320775',
     isActive: true,
+  },
+  {
+    // **非顧客企業の例**（#145）。`datastoreId` が無い＝層2を持たない。
+    // EDINET提出書類の数値だけで回答し、「なぜ」には答えない。UIは「非公式IR」。
+    id: 'shinetsu',
+    name: '信越化学工業株式会社',
+    nameEn: 'Shin-Etsu Chemical Co., Ltd.',
+    ticker: '4063',
+    sector: '化学',
+    description: '塩化ビニル・半導体シリコン',
+    websiteUrl: 'https://www.shinetsu.co.jp/jp/ir/',
+    isActive: true,
+    fiscalYearEndMonth: 3,
   },
   {
     id: 'peers',
@@ -100,6 +128,28 @@ export function getCompanyById(companyId: string): Company | undefined {
 /** 有効な企業リストを取得 */
 export function getActiveCompanies(): Company[] {
   return companies.filter((company) => company.isActive);
+}
+
+/**
+ * **IR室が導入済みの顧客企業か**（#145）。
+ *
+ * 判定条件を各所に書き写さない。「層2があるか」「CTAを出すか」「公式と名乗るか」は
+ * すべて同じ問いなので、**述語1つに集約**する（`isPublishedCompany` と同じ理由）。
+ */
+export function isCustomerCompany(company: Company): boolean {
+  return !!company.datastoreId;
+}
+
+/**
+ * UIに出す階層ラベル（#145）。
+ *
+ * **隠さずに区別する。** 非顧客企業の回答は発行体の承認を経ていないので
+ * 「公式」とは名乗れない（#124 の考え方）。一方で数値そのものは
+ * その会社自身がEDINETに提出した正本なので、出せないわけではない。
+ * ユーザーが違いを理解できるようにラベルで示す。
+ */
+export function companyTierLabel(company: Company): '公式IR' | '非公式IR' {
+  return isCustomerCompany(company) ? '公式IR' : '非公式IR';
 }
 
 /**

@@ -231,7 +231,11 @@ const ScopeNotice: React.FC<{
   reason?: string | null;
   contactStatus?: ContactStatus;
   onContactIR?: () => void;
-}> = ({ status, reason, contactStatus, onContactIR }) => {
+  /** IR室が導入済みか（#145）。false なら**取り次ぎ先が存在しない**のでCTAを出さない。 */
+  canContactIR?: boolean;
+  /** 非顧客企業のとき、代わりに案内する会社の公式サイト。 */
+  irSiteUrl?: string;
+}> = ({ status, reason, contactStatus, onContactIR, canContactIR = true, irSiteUrl }) => {
   if (status === 'answered') return null;
   if (status === 'refused') {
     // 誹謗中傷の拒否は本文(answer_prose)で丁重に断っており、助言/未開示の注記は出さない。
@@ -254,6 +258,29 @@ const ScopeNotice: React.FC<{
           <p className="font-bold text-pop-deep">IR窓口へお取り次ぎしました</p>
           <p className="font-medium text-ink-soft">担当者が内容を確認します。</p>
         </div>
+      </div>
+    );
+  }
+
+  // 非顧客企業（IR室が未導入）は取り次ぎ先が無い。**押しても誰にも届かないボタンを出さない**
+  // ——「問い合わせた」と誤解させるのが一番悪い。会社自身の一次情報へ誘導する（#145）。
+  if (!canContactIR) {
+    return (
+      <div className="mt-1 rounded-2xl bg-paper p-4 shadow-e2">
+        <p className="text-xs font-medium leading-relaxed text-ink-soft">
+          この質問にお答えできる情報は、当方が保有する開示資料にありませんでした。
+          会社が公表している資料をご確認ください。
+        </p>
+        {irSiteUrl && (
+          <a
+            href={irSiteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2.5 inline-flex items-center gap-1.5 border-b-[1.5px] border-line pb-0.5 text-[11px] font-bold text-pop-deep transition hover:border-pop-deep"
+          >
+            会社の公式サイトを開く →
+          </a>
+        )}
       </div>
     );
   }
@@ -357,7 +384,17 @@ export const AgentAnswer: React.FC<{
   irContactStatus?: 'sending' | 'sent' | 'error';
   onContactIR?: () => void;
   onSuggestion?: (q: string) => void;
-}> = ({ response, irContactStatus, onContactIR, onSuggestion }) => {
+  /** IR室が導入済みか（#145）。false なら取り次ぎCTAの代わりに一次情報へ誘導する。 */
+  canContactIR?: boolean;
+  irSiteUrl?: string;
+}> = ({
+  response,
+  irContactStatus,
+  onContactIR,
+  onSuggestion,
+  canContactIR = true,
+  irSiteUrl,
+}) => {
   const { answer_prose, fact_cards, citations, scope_status, scope_reason, suggestions } = response;
   const { series, rest } = planCards(fact_cards ?? []);
 
@@ -414,6 +451,8 @@ export const AgentAnswer: React.FC<{
           reason={scope_reason}
           contactStatus={irContactStatus}
           onContactIR={onContactIR}
+          canContactIR={canContactIR}
+          irSiteUrl={irSiteUrl}
         />
       ),
     });

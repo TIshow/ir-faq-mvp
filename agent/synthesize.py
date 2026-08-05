@@ -677,9 +677,9 @@ def _write_stream(
             yield t
 
 
-def _escalate_stream(reason: str, topic: str | None = None):
+def _escalate_stream(reason: str, topic: str | None = None, *, can_contact_ir: bool = True):
     """エスカレ応答を stream プロトコルで返す（短文を1回 prose_delta → final）。"""
-    resp = _escalate(reason, topic)
+    resp = _escalate(reason, topic, can_contact_ir=can_contact_ir)
     yield {"type": "prose_delta", "text": resp["answer_prose"]}
     yield {"type": "final", "response": resp}
 
@@ -695,6 +695,9 @@ def synthesize_stream(
     history が無ければ書き換えをスキップ＝従来と同一挙動。suggestions は agent 側で付与。"""
     ticker = str(company.get("ticker") or "")
     name = company.get("name") or "対象企業"
+    # 層2を持つ＝IR室が導入済み＝取り次ぎ先がある（#145）。同じ事実で
+    # 「なぜを書けるか」と「IR窓口へ案内してよいか」の両方が決まる。
+    can_contact_ir = bool(company.get("datastore_id"))
 
     # A1: 進行段階をフロントへ実況（search→plan→write）。待ち時間を"作業が見える"体験にする。
     yield {"type": "status", "stage": "search"}
@@ -711,7 +714,9 @@ def synthesize_stream(
         data = _plan(name, query, facts_ctx, passages_ctx)
     except Exception as e:
         _log.warning("synthesize plan 失敗: %s", e)
-        yield from _escalate_stream("ただいま回答を生成できませんでした。")
+        yield from _escalate_stream(
+            "ただいま回答を生成できませんでした。", can_contact_ir=can_contact_ir
+        )
         return
 
     can_answer = bool(data.get("can_answer"))
@@ -729,13 +734,13 @@ def synthesize_stream(
     )
 
     if not can_answer:
-        yield from _escalate_stream(escalate_text, topic)
+        yield from _escalate_stream(escalate_text, topic, can_contact_ir=can_contact_ir)
         return
 
     # GROUND（決定論）。接地ゼロ＝実質未回答 → エスカレ
     fact_cards, citations = _ground(ticker, pa, pf, rel_metrics, used, passages)
     if not fact_cards and not citations:
-        yield from _escalate_stream(escalate_text, topic)
+        yield from _escalate_stream(escalate_text, topic, can_contact_ir=can_contact_ir)
         return
 
     # WRITE（本文をストリーミング）
@@ -768,8 +773,21 @@ def synthesize_stream(
     }
 
 
-def _escalate(reason: str, topic: str | None = None) -> dict[str, Any]:
-    msg = f"{_strip_refs(reason)} 恐れ入りますが、IR窓口へお問い合わせください。"
+def _escalate(
+    reason: str, topic: str | None = None, *, can_contact_ir: bool = True
+) -> dict[str, Any]:
+    """エスカレ応答。**取り次ぎ先が無い企業に「IR窓口へ」と書かない**（#145）。
+
+    UI側でCTAボタンを消しても本文が「IR窓口へお問い合わせください」のままだと、
+    どこに問い合わせればよいのか分からない案内になる（実機で確認）。
+    誘導先の有無は同じ事実なので、ボタンと本文で判断を分けない。
+    """
+    tail = (
+        " 恐れ入りますが、IR窓口へお問い合わせください。"
+        if can_contact_ir
+        else " 会社が公表している資料をご確認ください。"
+    )
+    msg = f"{_strip_refs(reason)}{tail}"
     return {
         "answer_prose": msg,
         "fact_cards": [],

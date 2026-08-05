@@ -467,6 +467,12 @@ def extract(
                 "source_url": source_url,
                 "source_page": None,
                 "source_quote": f"{label} {val}{unit}（XBRL {period_id}, end={end}）",
+                # **出所**（#145）。`verified` を立てないのは、これが「人が原本と
+                # 突き合わせた」という別の主張だから。XBRLはタグから読むだけで
+                # 値の読み違えが起こらないので、検証すべきは企業ではなく抽出器になる
+                # （docs/edinet-ingest.md §6-3）。両者は表示もコンプラ上の姿勢も
+                # 変わるので、片方に潰さず分けて持つ。
+                "source_kind": "xbrl",
                 "verified": False,
             }
         )
