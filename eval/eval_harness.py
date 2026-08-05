@@ -80,6 +80,8 @@ class CaseResult:
     citations_ok: bool
     compliance_violation: bool
     prose_violation: bool = False
+    # 数値・引用の検査対象か（複数許容でエスカレした場合だけ対象外）
+    numeric_applicable: bool = True
     notes: list[str] = field(default_factory=list)
 
 
@@ -248,7 +250,11 @@ def evaluate_case(case: GoldCase, response: dict[str, Any]) -> CaseResult:
     allowed = {s.strip() for s in case.expected_scope.split("|") if s.strip()}
     scope_ok = actual_scope in allowed
 
-    if actual_scope == "answered":
+    # 数値・引用を検証するのは「実際に答えたとき」と「答えることを**一意に**期待するとき」。
+    # 後者を外すと、`answered` 期待の問題がエスカレしても数値検査を素通りしてしまう。
+    # 複数許容（`answered|escalated`）でエスカレした場合だけ対象外にする。
+    numeric_applicable = actual_scope == "answered" or allowed == {"answered"}
+    if numeric_applicable:
         numbers_ok, notes = numbers_match(case.gold_numbers, response.get("fact_cards", []))
         citations_ok = citations_present(case.gold_citations, response)
     else:
@@ -283,6 +289,7 @@ def evaluate_case(case: GoldCase, response: dict[str, Any]) -> CaseResult:
         citations_ok=citations_ok,
         compliance_violation=compliance_violation,
         prose_violation=prose_violation,
+        numeric_applicable=numeric_applicable,
         notes=notes,
     )
 
@@ -291,7 +298,7 @@ def evaluate_case(case: GoldCase, response: dict[str, Any]) -> CaseResult:
 # 集計・関門
 # --------------------------------------------------------------------------- #
 def summarize(results: list[CaseResult]) -> dict[str, Any]:
-    answered = [r for r in results if r.actual_scope == "answered" and r.scope_ok]
+    answered = [r for r in results if r.numeric_applicable]
     numeric_pass = [r for r in answered if r.numbers_ok]
     numeric_rate = (len(numeric_pass) / len(answered)) if answered else 1.0
     compliance_violations = [r for r in results if r.compliance_violation]
