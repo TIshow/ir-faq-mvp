@@ -42,7 +42,7 @@ def _ln(tag: str) -> str:
 
 
 # money=円→百万円換算 / yen=そのまま
-_MONEY, _YEN = "money", "yen"
+_MONEY, _YEN, _RATIO = "money", "yen", "ratio"
 
 
 class Metric(NamedTuple):
@@ -50,7 +50,7 @@ class Metric(NamedTuple):
 
     key: str  # metric_key（revenue / operating_profit ...）
     label_ja: str  # 表示名
-    unit_kind: str  # _MONEY | _YEN
+    unit_kind: str  # _MONEY | _YEN | _RATIO
 
 
 HEADLINE_JP: dict[str, Metric] = {
@@ -100,10 +100,85 @@ SEG_METRICS_IFRS: dict[str, Metric] = {
 
 SEG_METRICS_BY_STANDARD = {"jp": SEG_METRICS_JP, "ifrs": SEG_METRICS_IFRS}
 
+# 「主要な経営指標等の推移」（有報の冒頭）の要素。**財務諸表本体とは別の要素名**で、
+# 本体が当期＋前期しか持たないのに対し**5期ぶん**載っている（#149）。
+#
+# つまり5年分の層1を作るのに、過去4年ぶんの有報を落とす必要は無い。
+# 実測（信越化学 4063・2026年3月期の1ファイル）:
+#   Current 2,573,969 / Prior1 2,561,249 / Prior2 2,414,937 / Prior3 2,808,824 / Prior4 2,074,428
+#
+# **本体と重なる期間（当期・前期）は本体を優先する。** 要約表は百万円単位に丸めて
+# 開示されるため生の円値の精度が落ちる（実測: 本体 3,451,913,000 / 要約 3,451,000,000。
+# 百万円換算後は同値だが、精度の高い方を正とするのが筋）。
+SUMMARY_JP: dict[str, Metric] = {
+    "NetSalesSummaryOfBusinessResults": Metric("revenue", "売上高", _MONEY),
+    "OrdinaryIncomeLossSummaryOfBusinessResults": Metric("ordinary_profit", "経常利益", _MONEY),
+    "NetIncomeLossSummaryOfBusinessResults": Metric("net_income", "当期純利益", _MONEY),
+    "BasicEarningsLossPerShareSummaryOfBusinessResults": Metric("eps", "1株当たり当期純利益", _YEN),
+    "RateOfReturnOnEquitySummaryOfBusinessResults": Metric("roe", "自己資本利益率", _RATIO),
+}
+
+# **貸借対照表の項目は「時点(Instant)」の文脈**を使う（損益は「期間(Duration)」）。
+# 同じ要約表の中で系統が分かれているので、混ぜると総資産が1件も取れない
+# （実測: Duration だけ見ていて total_assets が 0% だった）。
+SUMMARY_INSTANT_JP: dict[str, Metric] = {
+    "TotalAssetsSummaryOfBusinessResults": Metric("total_assets", "総資産", _MONEY),
+    "NetAssetsSummaryOfBusinessResults": Metric("net_assets", "純資産", _MONEY),
+    "NetAssetsPerShareSummaryOfBusinessResults": Metric("bps", "1株当たり純資産", _YEN),
+    "EquityToAssetRatioSummaryOfBusinessResults": Metric("equity_ratio", "自己資本比率", _RATIO),
+}
+
+SUMMARY_IFRS: dict[str, Metric] = {
+    "RevenueIFRSSummaryOfBusinessResults": Metric("revenue", "売上収益", _MONEY),
+    "ProfitLossBeforeTaxIFRSSummaryOfBusinessResults": Metric(
+        "ordinary_profit", "税引前利益", _MONEY
+    ),
+    "ProfitLossAttributableToOwnersOfParentIFRSSummaryOfBusinessResults": Metric(
+        "net_income", "親会社の所有者に帰属する当期利益", _MONEY
+    ),
+    "BasicEarningsLossPerShareIFRSSummaryOfBusinessResults": Metric(
+        "eps", "基本的1株当たり当期利益", _YEN
+    ),
+}
+
+SUMMARY_INSTANT_IFRS: dict[str, Metric] = {
+    "TotalAssetsIFRSSummaryOfBusinessResults": Metric("total_assets", "総資産", _MONEY),
+    "EquityAttributableToOwnersOfParentIFRSSummaryOfBusinessResults": Metric(
+        "net_assets", "親会社の所有者に帰属する持分", _MONEY
+    ),
+    "EquityToAssetRatioIFRSSummaryOfBusinessResults": Metric(
+        "equity_ratio", "親会社所有者帰属持分比率", _RATIO
+    ),
+}
+
+SUMMARY_BY_STANDARD = {"jp": SUMMARY_JP, "ifrs": SUMMARY_IFRS}
+SUMMARY_INSTANT_BY_STANDARD = {"jp": SUMMARY_INSTANT_JP, "ifrs": SUMMARY_INSTANT_IFRS}
+
+# 本体は当期＋前期しか持たない。要約表（SUMMARY_*）は Prior2〜4 も持つ。
 PERIOD_IDS = {"CurrentYearDuration": "current", "Prior1YearDuration": "prior1"}
+SUMMARY_PERIOD_IDS = {
+    **PERIOD_IDS,
+    "Prior2YearDuration": "prior2",
+    "Prior3YearDuration": "prior3",
+    "Prior4YearDuration": "prior4",
+}
+# 貸借対照表側（時点）。期末日は Duration と同じ日付になる。
+SUMMARY_INSTANT_IDS = {
+    "CurrentYearInstant": "current",
+    "Prior1YearInstant": "prior1",
+    "Prior2YearInstant": "prior2",
+    "Prior3YearInstant": "prior3",
+    "Prior4YearInstant": "prior4",
+}
 
 # 単体決算の文脈は無次元IDに `_NonConsolidatedMember` が付く。
 _NC_SUFFIX = "_NonConsolidatedMember"
+
+# XBRLの数値。**整数だけを見てはいけない。**
+# 1株当たり指標や比率は小数で入る（実測: ハークスレイのEPSは `80.24`、ROEは `0.104`）。
+# 以前は `str.isdigit()` で判定しており、**小数のファクトが1件も通っていなかった**
+# （#146 で「EPSがマップ未登録」と診断した件の真因はこれ）。
+_NUMERIC = re.compile(r"^-?\d+(\.\d+)?$")
 
 
 def _headline_hits(root: ET.Element) -> set[tuple[str, bool]]:
@@ -122,7 +197,7 @@ def _headline_hits(root: ET.Element) -> set[tuple[str, bool]]:
         if consolidated is None:
             continue
         text = (el.text or "").strip()
-        if not text.lstrip("-").isdigit():
+        if not _NUMERIC.match(text):
             continue
         name = _ln(el.tag)
         for standard, elements in by_standard.items():
@@ -333,22 +408,33 @@ def extract(
         return ParseResult(reason=FailReason.UNKNOWN_STANDARD)
     standard, headline, consolidated = basis
     seg_metrics = SEG_METRICS_BY_STANDARD[standard]
+    summary = SUMMARY_BY_STANDARD[standard]
+    summary_bs = SUMMARY_INSTANT_BY_STANDARD[standard]
 
     # 単体決算のみの企業は、値も文脈IDも `_NonConsolidatedMember` 側に入っている。
     # 期間の解決（enddates）は無次元IDで引くので、対応表を持って読み替える。
+    #
+    # 「主要な経営指標等の推移」は**連結と提出会社の2表**が同じ要素で出る
+    # （実測120社: 無次元 964件 / 単体文脈 1,047件）。連結企業に単体側を混ぜると
+    # 数字の意味が変わるので、ここでも同じ suffix で読み分ける。
     suffix = "" if consolidated else _NC_SUFFIX
     period_ctx = {pid + suffix: pid for pid in PERIOD_IDS}
+    summary_ctx = {pid + suffix: pid for pid in SUMMARY_PERIOD_IDS}
+    summary_bs_ctx = {pid + suffix: pid for pid in SUMMARY_INSTANT_IDS}
 
     labels = segment_labels(zip_path)
     facts: list[dict[str, Any]] = []
     segments: set[str] = set()
 
     def add(metric_key: str, label: str, period_id: str, raw: str, kind: str) -> None:
-        end = enddates.get(period_id)
+        # 単体決算のみの企業は、**無次元の文脈がそもそも定義されていない**ことがある
+        # （実測 9204: Prior2〜4 は `_NonConsolidatedMember` 側にしか無い）。
+        # 期末日が引けないと期が決まらず、5期あるのに2期しか出ないという落ち方をする。
+        end = enddates.get(period_id) or enddates.get(period_id + suffix)
         if end is None:
             return
         fy = int(end[:4])
-        value = int(raw)
+        value = float(raw)
         val: float
         if kind == _MONEY:
             # **切り捨て**。日本の開示は百万円単位を切り捨てで表示する慣行で、
@@ -358,8 +444,13 @@ def extract(
             # 「公式資料と一致する」ことが製品価値なので、丸め方は慣行に合わせる。
             # 負値も0方向へ切り捨てる（int() の挙動）＝絶対値を大きくしない。
             val, unit = int(value / 1_000_000), "百万円"
+        elif kind == _RATIO:
+            # 自己資本比率・ROE は XBRL では小数（0.412）で入る。表示は % に揃える
+            # （既存の派生指標カードが % なので、単位が混ざらないようにする）。
+            val, unit = round(value * 100, 1), "%"
         else:
-            val, unit = value, "円"
+            # 1株当たり指標は小数を保つ（EPS 80.24 を 80 にすると出典と食い違う）
+            val, unit = (int(value) if value == int(value) else round(value, 2)), "円"
         facts.append(
             {
                 "ticker": ticker,
@@ -386,13 +477,27 @@ def extract(
         if not cref or el.text is None:
             continue
         raw = el.text.strip()
-        if not raw.lstrip("-").isdigit():
+        if not _NUMERIC.match(raw):
             continue
 
         # 1) ヘッドライン（当期/前期。連結なら無次元、単体のみの企業なら単体文脈）
         if name in headline and cref in period_ctx:
             m = headline[name]
             add(m.key, m.label_ja, period_ctx[cref], raw, m.unit_kind)
+            continue
+
+        # 1') 「主要な経営指標等の推移」（#149）。本体が持たない**前々期〜4期前**を埋める。
+        #     本体と重なる期間もここに出るが、後段の重複排除で**先に入った本体が残る**
+        #     （要約表は百万円に丸めて開示されるので精度が落ちる）。
+        if name in summary and cref in summary_ctx:
+            m = summary[name]
+            add(m.key, m.label_ja, summary_ctx[cref], raw, m.unit_kind)
+            continue
+
+        # 1'') 同じ要約表の**貸借対照表側**。損益が期間(Duration)なのに対し時点(Instant)。
+        if name in summary_bs and cref in summary_bs_ctx:
+            m = summary_bs[name]
+            add(m.key, m.label_ja, summary_bs_ctx[cref], raw, m.unit_kind)
             continue
 
         # 2) セグメント（当期/前期 × 報告セグメント）。メンバーは自動検出。
