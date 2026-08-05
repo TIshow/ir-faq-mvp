@@ -19,7 +19,10 @@ steps:
       - 'us-central1'
       - '--platform'
       - 'managed'
-      - '--allow-unauthenticated'
+      # **公開しない**（#88）。invoker はフロントのSAだけで、フロントがIDトークンを
+      # 付けて呼ぶ（src/lib/agent-auth.ts）。ここが `--allow-unauthenticated` のままだと
+      # デプロイのたびに allUsers が足され、#88 のIAM切替が静かに巻き戻る。
+      - '--no-allow-unauthenticated'
       - '--memory'
       - '2Gi'
       - '--cpu'
@@ -27,7 +30,7 @@ steps:
       - '--timeout'
       - '300'
       - '--set-env-vars'
-      - 'GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,MODEL_NAME=gemini-2.5-flash,GCP_PROJECT_ID=$PROJECT_ID,GCP_LOCATION=global,VIS_DATASTORE_ID=vis-ir-data_1752223995110,FACTS_BACKEND=json,ANALYTICS_ENABLED=TRUE'
+      - 'GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,MODEL_NAME=gemini-2.5-flash,GCP_PROJECT_ID=$PROJECT_ID,GCP_LOCATION=global,VIS_DATASTORE_ID=vis-ir-data_1752223995110,FACTS_BACKEND=json,ANALYTICS_ENABLED=TRUE,FACTS_GCS_BUCKET=$PROJECT_ID-facts'
 timeout: '1800s'
 images:
   - 'gcr.io/$PROJECT_ID/ir-agent'
