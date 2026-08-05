@@ -28,6 +28,7 @@ import { BrandLogo } from '@/components/BrandLogo';
 import {
   getActiveCompanies,
   isPublishedCompany,
+  isCustomerCompany,
   companyShortName,
   type Company,
 } from '@/config/companies';
@@ -55,9 +56,17 @@ export async function generateMetadata({
   const company = findCompany(ticker);
   if (!company) return { title: 'Naruhodo IR' };
   const short = companyShortName(company.name);
+  // **「公式」を名乗るのは顧客企業だけ**（#145）。非顧客はEDINET提出書類の数値のみが
+  // 根拠なので、タイトル・説明文でもそう述べる。画面のバッジだけ直してタイトルが
+  // 「公式Q&A」のままだと、共有されたリンクやAIの引用で誤解がそのまま残る。
+  const official = isCustomerCompany(company);
   return {
-    title: `${short}（${ticker}）の公式Q&A｜Naruhodo IR`,
-    description: `${company.name}の開示済み情報にもとづく公式Q&A。出典つきで、さらに詳しくは対話で質問できます。`,
+    title: official
+      ? `${short}（${ticker}）の公式Q&A｜Naruhodo IR`
+      : `${short}（${ticker}）の決算数値｜Naruhodo IR`,
+    description: official
+      ? `${company.name}の開示済み情報にもとづく公式Q&A。出典つきで、さらに詳しくは対話で質問できます。`
+      : `${company.name}がEDINETに提出した有価証券報告書の数値にもとづく回答。出典つきで対話的に確認できます。`,
     // 公開を承認していない企業は noindex（ページ自体は開発・デモ用に動かしたまま）。
     // 「公式」は発行体の承認を含意するので、勝手にAI/検索へ載せない。
     robots: isPublishedCompany(company) ? undefined : { index: false, follow: false },
@@ -74,6 +83,8 @@ export default async function CompanyChatPage({
   if (!company) notFound();
 
   const short = companyShortName(company.name);
+  // 顧客企業（層2あり）だけが「公式」を名乗れる（#145）
+  const official = isCustomerCompany(company);
   // この企業ぶんだけをサーバーで用意する＝このURLのHTMLに答え全文が載る
   const qa = companyQa(company);
   const headline = companyHeadline(company);
@@ -120,7 +131,9 @@ export default async function CompanyChatPage({
       {/* このURLが何のページかを機械にも人（スクリーンリーダー）にも明示する。
           画面ではチャットの見出しが同じ役割を果たすので視覚的には出さない。 */}
       <h1 className="sr-only">
-        {`${company.name}（証券コード ${ticker}）の公式Q&A — ${short}の開示済み情報にもとづく、出典つきの回答`}
+        {official
+          ? `${company.name}（証券コード ${ticker}）の公式Q&A — ${short}の開示済み情報にもとづく、出典つきの回答`
+          : `${company.name}（証券コード ${ticker}）の決算数値 — EDINET提出の有価証券報告書にもとづく、出典つきの回答`}
       </h1>
 
       {/* Header。企業ピッカーのドロップダウンが本文の上に出るよう、

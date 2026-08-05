@@ -231,7 +231,9 @@ const ScopeNotice: React.FC<{
   reason?: string | null;
   contactStatus?: ContactStatus;
   onContactIR?: () => void;
-}> = ({ status, reason, contactStatus, onContactIR }) => {
+  /** IR室が導入済みか（#145）。false なら**取り次ぎ先が存在しない**のでCTAを出さない。 */
+  canContactIR?: boolean;
+}> = ({ status, reason, contactStatus, onContactIR, canContactIR = true }) => {
   if (status === 'answered') return null;
   if (status === 'refused') {
     // 誹謗中傷の拒否は本文(answer_prose)で丁重に断っており、助言/未開示の注記は出さない。
@@ -254,6 +256,25 @@ const ScopeNotice: React.FC<{
           <p className="font-bold text-pop-deep">IR窓口へお取り次ぎしました</p>
           <p className="font-medium text-ink-soft">担当者が内容を確認します。</p>
         </div>
+      </div>
+    );
+  }
+
+  // 非顧客企業（IR室が未導入）は取り次ぎ先が無い。**押しても誰にも届かないボタンを出さない**
+  // ——「問い合わせた」と誤解させるのが一番悪い（#145）。
+  //
+  // 会社の公式サイトへの誘導は**まだ実装しない**。誘導先URLの出どころが無いため。
+  // `companies.ts` の `websiteUrl` は人が手で入れた値で、3,815社ぶんは用意できず、
+  // 記憶から生成すれば**開示に無い情報の創作と同じ**になる（存在しないURLや
+  // 別会社へ飛ばしうる）。一次情報へ誘導するなら、層1のファクトが既に持っている
+  // EDINETの提出書類URL（docID由来・検証済み）を使うのが筋。
+  if (!canContactIR) {
+    return (
+      <div className="mt-1 rounded-2xl bg-paper p-4 shadow-e2">
+        <p className="text-xs font-medium leading-relaxed text-ink-soft">
+          この質問にお答えできる情報は、当方が保有する開示資料にありませんでした。
+          会社が公表している資料をご確認ください。
+        </p>
       </div>
     );
   }
@@ -357,7 +378,9 @@ export const AgentAnswer: React.FC<{
   irContactStatus?: 'sending' | 'sent' | 'error';
   onContactIR?: () => void;
   onSuggestion?: (q: string) => void;
-}> = ({ response, irContactStatus, onContactIR, onSuggestion }) => {
+  /** IR室が導入済みか（#145）。false なら取り次ぎCTAを出さない。 */
+  canContactIR?: boolean;
+}> = ({ response, irContactStatus, onContactIR, onSuggestion, canContactIR = true }) => {
   const { answer_prose, fact_cards, citations, scope_status, scope_reason, suggestions } = response;
   const { series, rest } = planCards(fact_cards ?? []);
 
@@ -414,6 +437,7 @@ export const AgentAnswer: React.FC<{
           reason={scope_reason}
           contactStatus={irContactStatus}
           onContactIR={onContactIR}
+          canContactIR={canContactIR}
         />
       ),
     });

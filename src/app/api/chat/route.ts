@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getCompanyById } from '@/config/companies';
+import { getCompanyById, isCustomerCompany } from '@/config/companies';
 import { agentAuthHeader } from '@/lib/agent-auth';
 import { allowRequest, clientIp } from '@/lib/rate-limit';
 
@@ -51,6 +51,10 @@ export async function POST(request: NextRequest) {
         companyTicker: company.ticker ?? company.id,
         companyName: company.name,
         datastoreId: company.datastoreId,
+        // **階層は明示的に送る**（#145）。エージェント側で datastoreId から再導出すると
+        // 判定が2箇所に分かれる。非顧客企業の定性情報も当方で収集するようになると
+        // 両者とも datastoreId を持つので、その導出は成立しなくなる。
+        isCustomer: isCustomerCompany(company),
         sessionId: sessionId || 's1',
         // 短期メモリ: 直近の会話履歴（フォロー質問の書き換え用）。サーバはステートレス。
         history: Array.isArray(history) ? history : [],

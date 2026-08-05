@@ -115,6 +115,9 @@ SUMMARY_JP: dict[str, Metric] = {
     "OrdinaryIncomeLossSummaryOfBusinessResults": Metric("ordinary_profit", "経常利益", _MONEY),
     "NetIncomeLossSummaryOfBusinessResults": Metric("net_income", "当期純利益", _MONEY),
     "BasicEarningsLossPerShareSummaryOfBusinessResults": Metric("eps", "1株当たり当期純利益", _YEN),
+    "DividendPaidPerShareSummaryOfBusinessResults": Metric(
+        "dividend_per_share", "1株当たり配当額", _YEN
+    ),
     "RateOfReturnOnEquitySummaryOfBusinessResults": Metric("roe", "自己資本利益率", _RATIO),
 }
 
@@ -150,6 +153,17 @@ SUMMARY_INSTANT_IFRS: dict[str, Metric] = {
         "equity_ratio", "親会社所有者帰属持分比率", _RATIO
     ),
 }
+
+# **提出会社（単体）文脈にしか存在しない指標。**
+#
+# 1株当たり配当額は法的に「提出会社が支払うもの」なので、連結という概念が無く
+# 連結企業でも `_NonConsolidatedMember` 側にしか出ない（実測: 4063 / 7561 / 6501 すべて）。
+#
+# **これらだけを単体文脈から拾う。** 要約表を丸ごと両文脈から拾うと、連結企業に
+# 単体の数字が混ざる（実測: ハークスレイの当期純利益が 1,483 → 647百万円 に化けた。
+# 親会社株主に帰属する当期純利益 vs 提出会社単体の当期純利益）。
+# #132 で武田薬品を誤ったのと同じ事故なので、対象を指標単位で絞る。
+_FILER_ONLY_METRICS = {"dividend_per_share"}
 
 SUMMARY_BY_STANDARD = {"jp": SUMMARY_JP, "ifrs": SUMMARY_IFRS}
 SUMMARY_INSTANT_BY_STANDARD = {"jp": SUMMARY_INSTANT_JP, "ifrs": SUMMARY_INSTANT_IFRS}
@@ -419,8 +433,21 @@ def extract(
     # 数字の意味が変わるので、ここでも同じ suffix で読み分ける。
     suffix = "" if consolidated else _NC_SUFFIX
     period_ctx = {pid + suffix: pid for pid in PERIOD_IDS}
-    summary_ctx = {pid + suffix: pid for pid in SUMMARY_PERIOD_IDS}
-    summary_bs_ctx = {pid + suffix: pid for pid in SUMMARY_INSTANT_IDS}
+
+    # 「主要な経営指標等の推移」。損益は期間(Duration)、貸借は時点(Instant)で系統が違う。
+    # 通常はその企業の主たる文脈（連結なら無次元）から、提出会社限定の指標だけは
+    # 連結企業でも単体文脈から拾う。
+    # 値は**無次元の文脈ID**にする（`add()` が期末日を `enddates` から引くため。
+    # ラベルを入れると期末日が引けず黙って全件落ちる）。
+    def _ctx(ids: dict[str, str], sfx: str) -> dict[str, str]:
+        return {pid + sfx: pid for pid in ids}
+
+    # (指標マップ, 通常の文脈, 提出会社限定の文脈) の組。**2系統を同じ形で扱う**——
+    # 片方だけ提出会社対応を書くと、貸借側に配当のような指標を足したとき静かに落ちる。
+    summary_tables = (
+        (summary, _ctx(SUMMARY_PERIOD_IDS, suffix), _ctx(SUMMARY_PERIOD_IDS, _NC_SUFFIX)),
+        (summary_bs, _ctx(SUMMARY_INSTANT_IDS, suffix), _ctx(SUMMARY_INSTANT_IDS, _NC_SUFFIX)),
+    )
 
     labels = segment_labels(zip_path)
     facts: list[dict[str, Any]] = []
@@ -467,6 +494,12 @@ def extract(
                 "source_url": source_url,
                 "source_page": None,
                 "source_quote": f"{label} {val}{unit}（XBRL {period_id}, end={end}）",
+                # **出所**（#145）。`verified` を立てないのは、これが「人が原本と
+                # 突き合わせた」という別の主張だから。XBRLはタグから読むだけで
+                # 値の読み違えが起こらないので、検証すべきは企業ではなく抽出器になる
+                # （docs/edinet-ingest.md §6-3）。両者は表示もコンプラ上の姿勢も
+                # 変わるので、片方に潰さず分けて持つ。
+                "source_kind": "xbrl",
                 "verified": False,
             }
         )
@@ -489,15 +522,17 @@ def extract(
         # 1') 「主要な経営指標等の推移」（#149）。本体が持たない**前々期〜4期前**を埋める。
         #     本体と重なる期間もここに出るが、後段の重複排除で**先に入った本体が残る**
         #     （要約表は百万円に丸めて開示されるので精度が落ちる）。
-        if name in summary and cref in summary_ctx:
-            m = summary[name]
-            add(m.key, m.label_ja, summary_ctx[cref], raw, m.unit_kind)
-            continue
-
-        # 1'') 同じ要約表の**貸借対照表側**。損益が期間(Duration)なのに対し時点(Instant)。
-        if name in summary_bs and cref in summary_bs_ctx:
-            m = summary_bs[name]
-            add(m.key, m.label_ja, summary_bs_ctx[cref], raw, m.unit_kind)
+        matched = False
+        for table, normal_ctx, filer_ctx in summary_tables:
+            m = table.get(name)
+            if m is None:
+                continue
+            ctx = filer_ctx if m.key in _FILER_ONLY_METRICS else normal_ctx
+            if cref in ctx:
+                add(m.key, m.label_ja, ctx[cref], raw, m.unit_kind)
+                matched = True
+            break
+        if matched:
             continue
 
         # 2) セグメント（当期/前期 × 報告セグメント）。メンバーは自動検出。
