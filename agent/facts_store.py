@@ -47,6 +47,14 @@ _cache: dict[str, list[dict[str, Any]]] = {}
 # ティッカー -> 実ファイル。層1ディレクトリを1回だけ列挙して作る。
 _index: dict[str, pathlib.Path] | None = None
 
+# storage.Bucket。認証とHTTPセッションを使い回す（作り直すと毎回2秒かかる）。
+_gcs_bucket = None
+
+# GCSは**ティッカーが許可文字だけのときにしか触らない**。同梱側は実在ファイルの索引を
+# 引くので脱出できないが、GCSはキーを組み立てる必要があるため（`facts/<ticker>.json`）、
+# ここで塞ぐ。証券コードは4桁（新形式の `135A` を含む）、EDINETの secCode は5桁。
+_TICKER_RE = re.compile(r"^[0-9A-Za-z]{1,10}$")
+
 
 def _facts_dir() -> pathlib.Path:
     return pathlib.Path(config.FACTS_DIR) if config.FACTS_DIR else _DEFAULT_FACTS_DIR
@@ -68,15 +76,6 @@ def _file_index() -> dict[str, pathlib.Path]:
     return _index
 
 
-# GCSは**ティッカーが許可文字だけのときにしか触らない**。同梱側は実在ファイルの索引を
-# 引くので脱出できないが、GCSはキーを組み立てる必要があるため（`facts/<ticker>.json`）、
-# ここで塞ぐ。証券コードは4桁（新形式の `135A` を含む）、EDINETの secCode は5桁。
-_TICKER_RE = re.compile(r"^[0-9A-Za-z]{1,10}$")
-
-
-_gcs_bucket = None  # storage.Bucket。認証とHTTPセッションを使い回す
-
-
 def _bucket():
     """GCSバケットのハンドル（プロセス内で1回だけ作る）。
 
@@ -89,6 +88,11 @@ def _bucket():
 
         _gcs_bucket = storage.Client().bucket(config.FACTS_GCS_BUCKET)
     return _gcs_bucket
+
+
+def _rows(data: Any) -> list[dict[str, Any]]:
+    """ファイルの中身をファクトの配列に均す（`[..facts..]` でも `{"facts":[..]}` でも可）。"""
+    return data["facts"] if isinstance(data, dict) else data
 
 
 def _load_from_gcs(ticker: str) -> list[dict[str, Any]] | None:
@@ -110,7 +114,7 @@ def _load_from_gcs(ticker: str) -> list[dict[str, Any]] | None:
         # 「まだ取り込まれていません」と正直に答える経路に落ちる（#154）。
         _log.warning("層1のGCS取得に失敗: ticker=%s", ticker)
         return None
-    return data["facts"] if isinstance(data, dict) else data
+    return _rows(data)
 
 
 def _load(ticker: str) -> list[dict[str, Any]]:
@@ -127,17 +131,13 @@ def _load(ticker: str) -> list[dict[str, Any]]:
     p = _file_index().get(key)
     if p is not None:
         # 同梱（人手検証済み）が優先。機械生成で上書きされないようにする。
-        data = json.loads(p.read_text(encoding="utf-8"))
-        # ファイルは [..facts..] でも {"facts":[..]} でも可
-        rows: list[dict[str, Any]] = data["facts"] if isinstance(data, dict) else data
-        _cache[key] = rows
-        return rows
-
-    rows = _load_from_gcs(key) or []
-    if not rows:
-        # **見つからないティッカーはキャッシュしない。** ティッカーは外から来るので、
-        # 空振りも覚えると任意の文字列でdictが際限なく育つ。
-        return []
+        rows = _rows(json.loads(p.read_text(encoding="utf-8")))
+    else:
+        rows = _load_from_gcs(key) or []
+        if not rows:
+            # **見つからないティッカーはキャッシュしない。** ティッカーは外から来るので、
+            # 空振りも覚えると任意の文字列でdictが際限なく育つ（索引側は件数が有界）。
+            return []
     _cache[key] = rows
     return rows
 
