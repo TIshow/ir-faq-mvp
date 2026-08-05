@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
-import { getCompanyById, isCustomerCompany } from '@/config/companies';
+import { isCustomerCompany } from '@/config/companies';
+import { findCompanyById } from '@/lib/listed-companies';
 import { agentAuthHeader } from '@/lib/agent-auth';
 import { allowRequest, clientIp } from '@/lib/rate-limit';
 
@@ -30,7 +31,8 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: '企業を選択してください' }, { status: 400 });
   }
 
-  const company = getCompanyById(companyId);
+  // 顧客企業（companies.ts）→ 上場企業レジストリ の順に引く（#154）
+  const company = findCompanyById(companyId);
   if (!company) {
     return Response.json({ error: `企業 ${companyId} が見つかりません` }, { status: 400 });
   }

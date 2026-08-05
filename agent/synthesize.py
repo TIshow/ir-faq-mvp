@@ -47,6 +47,11 @@ _NO_MATERIAL = (
     "数値そのものは開示資料から確認できます。"
 )
 
+# 層1すら無い企業（レジストリにはあるが数値を取り込んでいない）。
+# `_NO_MATERIAL` は「数値はあるが背景が無い」と言っており、**数値も無い企業には嘘になる**
+# （実測: トヨタ 7203 に売上高を聞いて「数値そのものは開示資料から確認できます」と返した）。
+_NO_FACTS = "この企業の決算数値は、まだ当方に取り込まれていません。"
+
 # 2角度検索を合算した後にプロンプトへ入れる抜粋の上限（肥大化とレイテンシの抑制）
 _MAX_PASSAGES = 12
 
@@ -731,9 +736,16 @@ def synthesize_stream(
     # 自由文には創作が混じる（実測: 答えられないと言いながら「要因（コスト削減、
     # 不採算店舗の閉鎖など）」と**答えの候補を創作して例示**していた）。
     # 数値と同じ切り分け＝判断はLLM、文言はコード。
-    escalate_text = (
-        (str(data.get("escalate_reason") or "").strip() or _NO_ANSWER) if passages else _NO_MATERIAL
-    )
+    # 材料に応じて文面を決める。**判断はLLM（can_answer）、文言はコード**（#151）。
+    #   抜粋あり  → LLMの理由文（資料を読んだうえでの判断なので具体的に書ける）
+    #   数値のみ  → 背景が無い旨（`_NO_MATERIAL`）
+    #   何も無い  → 取り込んでいない旨（`_NO_FACTS`）。数値があるかのように言わない
+    if passages:
+        escalate_text = str(data.get("escalate_reason") or "").strip() or _NO_ANSWER
+    elif pa or pf:
+        escalate_text = _NO_MATERIAL
+    else:
+        escalate_text = _NO_FACTS
 
     if not can_answer:
         yield from _escalate_stream(escalate_text, topic, can_contact_ir=can_contact_ir)

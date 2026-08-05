@@ -32,10 +32,19 @@ import {
   companyShortName,
   type Company,
 } from '@/config/companies';
+import { findCompanyByTicker } from '@/lib/listed-companies';
 import { companyHeadline, companyQa } from '@/lib/public-facts';
 
 /** 静的生成（Phase 1: デプロイ時のみ生成・実行時のクエリはゼロ） */
+/**
+ * **静的生成するのは `companies.ts` の企業だけ**（#154）。
+ *
+ * 非顧客3,825社は `dynamicParams` で実行時に描画する。全社を静的生成すると
+ * 実測 1ページ180KB × 3,825 = **約690MB** になりイメージに入らない。
+ * 顧客企業（＝AIに引用させたい実体・#113）だけをビルド時に固めれば目的は満たせる。
+ */
 export const dynamic = 'force-static';
+export const dynamicParams = true;
 
 export function generateStaticParams() {
   return getActiveCompanies()
@@ -43,8 +52,9 @@ export function generateStaticParams() {
     .map((c) => ({ ticker: c.ticker }));
 }
 
+/** 顧客企業（`companies.ts`）→ 上場企業レジストリ の順に引く。 */
 function findCompany(ticker: string): Company | undefined {
-  return getActiveCompanies().find((c) => c.ticker === ticker);
+  return findCompanyByTicker(ticker);
 }
 
 export async function generateMetadata({
