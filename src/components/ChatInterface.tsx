@@ -1,12 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import {
-  companyShortName,
-  companyTierLabel,
-  isCustomerCompany,
-  type Company,
-} from '@/config/companies';
+import { companyShortName, isCustomerCompany, type Company } from '@/config/companies';
 import { AgentResponse } from '@/lib/agent-types';
 import { AgentAnswer } from '@/components/FactCard';
 import { Markdown } from '@/components/Markdown';
@@ -41,7 +36,7 @@ function TierBadge({ company }: { company: Company }) {
       }`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${official ? 'bg-pop' : 'bg-mute'}`} />
-      {companyTierLabel(company)}
+      {official ? '公式IR' : '非公式IR'}
     </span>
   );
 }
@@ -431,7 +426,6 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
                         onContactIR={() => handleContactIR(m.id, m.question ?? '')}
                         onSuggestion={(q) => send(q)}
                         canContactIR={isCustomerCompany(company)}
-                        irSiteUrl={company.websiteUrl}
                       />
                     ) : (
                       m.content ? (

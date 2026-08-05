@@ -2,13 +2,11 @@
  * 企業マスター（フロントの唯一の正）。
  * id/name/ticker/sector/datastoreId をエージェントへ渡す（route.ts）。
  *
- * **2階層ある**（#145）:
- *  - **顧客企業**（`datastoreId` あり）= IR室が導入済み。EDINETの数値に加えて
- *    決算資料・想定問答（層2）を持ち、「なぜ」に会社自身の説明で答えられる。
- *    答えられないときは IR窓口へ取り次げる。UIは「公式IR」。
- *  - **非顧客企業**（`datastoreId` なし）= EDINETの数値だけ。数値には答えられるが
- *    「なぜ」は答えられない（材料が無いので創作もしない・#151）。
- *    取り次ぎ先が存在しないので IR窓口のCTAは出さない。UIは「非公式IR」。
+ * **2階層ある**（#145）。判定は `isCustomerCompany` を必ず通すこと:
+ *  - **顧客企業** = IR室が導入済み。決算資料・想定問答（層2）を持ち、「なぜ」に
+ *    会社自身の説明で答えられる。答えられないときは IR窓口へ取り次げる。UIは「公式IR」。
+ *  - **非顧客企業** = EDINETの数値だけ。数値には答えられるが「なぜ」は答えられない
+ *    （材料が無いので創作もしない・#151）。取り次ぎ先が無いので CTA は出さない。UIは「非公式IR」。
  */
 
 export interface Company {
@@ -20,12 +18,13 @@ export interface Company {
   description?: string;          // 企業説明
   websiteUrl?: string;           // 公式サイト
   /**
-   * Discovery Engine データストアID（層2の検索先）。
+   * Discovery Engine データストアID（**層2＝開示文書の検索先**）。
    *
-   * **未設定＝非顧客企業**（#145）。EDINETの数値だけで回答し、「なぜ」には答えない。
-   * 3,900社ぶんのデータストアは作れないので、ここが顧客と非顧客の境界になる。
-   * エンジンは未設定に耐える（`search_disclosures` が空を返し、
-   * WRITE は数値だけの指示に切り替わる）。
+   * 未設定なら層2が無い＝「なぜ」に答える材料が無い。エンジンは未設定に耐える
+   * （`search_disclosures` が空を返し、WRITE が数値だけの指示に切り替わる・#151）。
+   *
+   * **顧客かどうかはこれで判定しない**（→ `isCustomer` / `isCustomerCompany`）。
+   * 今は一致しているが、非顧客企業の定性情報を当方で収集すると両者とも持つ。
    */
   datastoreId?: string;
   /**
@@ -86,9 +85,9 @@ export const companies: Company[] = [
     name: '信越化学工業株式会社',
     nameEn: 'Shin-Etsu Chemical Co., Ltd.',
     ticker: '4063',
-    sector: '化学',
-    description: '塩化ビニル・半導体シリコン',
-    websiteUrl: 'https://www.shinetsu.co.jp/jp/ir/',
+    // sector / description / websiteUrl は入れない。EDINETから取れず、
+    // 記憶で書けば**開示に無い情報の創作**と同じになる（画面とllms.txtに出る）。
+    // 3,815社ぶんの調達方法が決まってから入れる。
     isActive: true,
     fiscalYearEndMonth: 3,
   },
@@ -154,18 +153,6 @@ export function getActiveCompanies(): Company[] {
  */
 export function isCustomerCompany(company: Company): boolean {
   return company.isCustomer ?? !!company.datastoreId;
-}
-
-/**
- * UIに出す階層ラベル（#145）。
- *
- * **隠さずに区別する。** 非顧客企業の回答は発行体の承認を経ていないので
- * 「公式」とは名乗れない（#124 の考え方）。一方で数値そのものは
- * その会社自身がEDINETに提出した正本なので、出せないわけではない。
- * ユーザーが違いを理解できるようにラベルで示す。
- */
-export function companyTierLabel(company: Company): '公式IR' | '非公式IR' {
-  return isCustomerCompany(company) ? '公式IR' : '非公式IR';
 }
 
 /**
