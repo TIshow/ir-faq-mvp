@@ -112,7 +112,11 @@ def _load_from_gcs(ticker: str) -> list[dict[str, Any]] | None:
     except Exception:
         # **数値が出ないだけで、誤った数値は出ない。** 取得できなければ
         # 「まだ取り込まれていません」と正直に答える経路に落ちる（#154）。
-        _log.warning("層1のGCS取得に失敗: ticker=%s", ticker)
+        #
+        # **ティッカーはログに載せない**（外から来る値をログ行に入れない）。
+        # どの企業かはリクエストのトレースから辿れるし、GCS障害の診断に効くのは
+        # 企業名より例外の型と発生箇所なので `exc_info` の方が実用的。
+        _log.warning("層1のGCS取得に失敗しました", exc_info=True)
         return None
     return _rows(data)
 
