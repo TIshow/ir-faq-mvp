@@ -88,6 +88,8 @@ scripts/
                           数値はタグから読むだけでLLMは通さない。詳細 docs/edinet-ingest.md）
   edinet/batch.py         一括取り込み＋カバレッジレポート（再開可能・重複は新しい提出が勝つ。
                           出力は data/facts-corpus/＝**配信用の agent/data/facts/ とは別**）
+  edinet/codelist.py      企業マスター（EDINETコード一覧＝鍵不要。英語名/業種/決算月/法人番号。
+                          3,831社。層1コーパスとの突合も。推測で埋めない）
 eval/
   eval_harness.py         評価ハーネス（数値=決定論比較・コンプラ=ゼロ許容CI関門・--company で企業別）
   golden_set.vis.jsonl / golden_set.7561.jsonl  ゴールデンセット（vis / ハークスレイ）
