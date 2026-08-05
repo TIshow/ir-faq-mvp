@@ -7,7 +7,7 @@
 //
 // 認証なし（投資家は非ログイン）。company は companies.ts で検証し、question は長さ制限。
 // BQ 書込は @google-cloud/* を使わずメタデータSAトークン＋REST（/api/doc・/api/ir/metrics と同方針）。
-import { getCompanyById } from '@/config/companies';
+import { findCompanyById } from '@/lib/listed-companies';
 import { GCP_PROJECT_ID as PROJECT } from '@/lib/gcp';
 
 export const runtime = 'nodejs';
@@ -35,7 +35,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   // 企業は companies.ts が唯一の正。未知の企業は受け付けない（詐称・ゴミ防止）。
-  const company = body.companyId ? getCompanyById(body.companyId) : undefined;
+  const company = body.companyId ? findCompanyById(body.companyId) : undefined;
   if (!company) return Response.json({ error: '企業が不正です' }, { status: 400 });
 
   const question = (body.question || '').trim().slice(0, MAX_QUESTION_LEN);
