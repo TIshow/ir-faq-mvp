@@ -1,10 +1,22 @@
 """
-層1（financial_facts）の JSON ファイル・バックエンド。**1社1ファイル**（`data/facts/<ticker>.json`）。
+層1（financial_facts）の JSON バックエンド。**1社1ファイル**（`<ticker>.json`）。
 
 必須なのは「検証済みの構造化ソースから決定論的に数値を引く」原則であって、DBそのものではない。
 層1の参照は「ティッカー1件 → 十数件」の完全なキー引きなので、常時起動DBを持つ理由が無い
 （#135 で計測のうえ Cloud SQL / BigQuery を採らないと決めた。経緯は docs/edinet-ingest.md §6-2）。
 `config.FACTS_BACKEND=cloudsql` にすれば db.py へ切替できる口は残してある。
+
+## 読み出しは2系統（#148）
+
+  1. **同梱**（`agent/data/facts/`）… 人が確認して入れた顧客企業。
+     イメージに焼き込まれ、読み出しは0ms。**こちらが優先**
+  2. **GCS**（`FACTS_GCS_BUCKET`）… EDINETから機械が作った3,825社。
+     144MBをイメージに入れず、初回だけ取得してプロセス内にキャッシュする
+
+同梱を優先するのは、顧客企業の**人手検証済みの値**が機械生成で上書きされないようにするため。
+同じティッカーが両方にある場合、正は常に同梱側。
+
+GCSが未設定なら同梱だけで動く（ローカル開発・テストはこの状態）。
 
 db.query_facts / resolve_company_id / insert_escalation と同じ契約を提供する。
 """
@@ -12,10 +24,16 @@ db.query_facts / resolve_company_id / insert_escalation と同じ契約を提供
 from __future__ import annotations
 
 import json
+import logging
 import pathlib
+import re
 from typing import Any
 
+from google.api_core.exceptions import NotFound
+
 from . import config
+
+_log = logging.getLogger(__name__)
 
 _DATA_DIR = pathlib.Path(__file__).with_name("data")
 _DEFAULT_FACTS_DIR = _DATA_DIR / "facts"
@@ -50,6 +68,51 @@ def _file_index() -> dict[str, pathlib.Path]:
     return _index
 
 
+# GCSは**ティッカーが許可文字だけのときにしか触らない**。同梱側は実在ファイルの索引を
+# 引くので脱出できないが、GCSはキーを組み立てる必要があるため（`facts/<ticker>.json`）、
+# ここで塞ぐ。証券コードは4桁（新形式の `135A` を含む）、EDINETの secCode は5桁。
+_TICKER_RE = re.compile(r"^[0-9A-Za-z]{1,10}$")
+
+
+_gcs_bucket = None  # storage.Bucket。認証とHTTPセッションを使い回す
+
+
+def _bucket():
+    """GCSバケットのハンドル（プロセス内で1回だけ作る）。
+
+    **毎回 `storage.Client()` を作らない。** 認証情報の解決とHTTPセッションの確立が
+    その都度走り、実測で初回2.4秒かかっていた。作り直さなければ以降は接続を使い回せる。
+    """
+    global _gcs_bucket
+    if _gcs_bucket is None:
+        from google.cloud import storage  # 遅延import: GCS未使用の環境で依存を要求しない
+
+        _gcs_bucket = storage.Client().bucket(config.FACTS_GCS_BUCKET)
+    return _gcs_bucket
+
+
+def _load_from_gcs(ticker: str) -> list[dict[str, Any]] | None:
+    """GCSから1社ぶん読む。バケット未設定・オブジェクト無し・失敗は None。
+
+    **1社=1オブジェクト**なので、読むのは実測8.3KB。初回だけで以降はキャッシュに乗る
+    （キャッシュ機構は #135 のものをそのまま使う）。
+    """
+    if not config.FACTS_GCS_BUCKET or not _TICKER_RE.match(ticker):
+        return None
+    try:
+        blob = _bucket().blob(f"{config.FACTS_GCS_PREFIX}{ticker}.json")
+        # `exists()` は往復が1回増える。**ダウンロードを試して404を捕まえる**方が速い。
+        data = json.loads(blob.download_as_bytes())
+    except NotFound:
+        return None
+    except Exception:
+        # **数値が出ないだけで、誤った数値は出ない。** 取得できなければ
+        # 「まだ取り込まれていません」と正直に答える経路に落ちる（#154）。
+        _log.warning("層1のGCS取得に失敗: ticker=%s", ticker)
+        return None
+    return data["facts"] if isinstance(data, dict) else data
+
+
 def _load(ticker: str) -> list[dict[str, Any]]:
     """その企業のファクトだけを読む（`data/facts/<ticker>.json`）。
 
@@ -60,15 +123,21 @@ def _load(ticker: str) -> list[dict[str, Any]]:
     key = str(ticker)
     if key in _cache:
         return _cache[key]
+
     p = _file_index().get(key)
-    if p is None:
-        # **索引に無いティッカーはキャッシュしない。** ティッカーは外から来るので、
-        # 空振りも覚えると任意の文字列でdictが際限なく育つ。索引引きはO(1)なので
-        # 覚える価値も無い。これで _cache の上限は「層1ディレクトリのファイル数」になる。
+    if p is not None:
+        # 同梱（人手検証済み）が優先。機械生成で上書きされないようにする。
+        data = json.loads(p.read_text(encoding="utf-8"))
+        # ファイルは [..facts..] でも {"facts":[..]} でも可
+        rows: list[dict[str, Any]] = data["facts"] if isinstance(data, dict) else data
+        _cache[key] = rows
+        return rows
+
+    rows = _load_from_gcs(key) or []
+    if not rows:
+        # **見つからないティッカーはキャッシュしない。** ティッカーは外から来るので、
+        # 空振りも覚えると任意の文字列でdictが際限なく育つ。
         return []
-    data = json.loads(p.read_text(encoding="utf-8"))
-    # ファイルは [..facts..] でも {"facts":[..]} でも可
-    rows: list[dict[str, Any]] = data["facts"] if isinstance(data, dict) else data
     _cache[key] = rows
     return rows
 

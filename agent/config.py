@@ -45,6 +45,10 @@ DB_PASSWORD = os.environ.get("DB_PASSWORD")
 FACTS_BACKEND = os.environ.get("FACTS_BACKEND", "json")
 # 層1の置き場（**ディレクトリ**。中身は 1社1ファイルの <ticker>.json）。空ならパッケージ同梱の既定。
 FACTS_DIR = os.environ.get("FACTS_DIR", "")
+# 層1のGCS配信（#148）。未設定ならイメージ同梱ぶんだけで動く（ローカル開発・テスト）。
+# 同梱＝人手検証済みの顧客企業 / GCS＝EDINETから機械が作った3,825社。同梱が優先。
+FACTS_GCS_BUCKET = os.environ.get("FACTS_GCS_BUCKET", "")
+FACTS_GCS_PREFIX = os.environ.get("FACTS_GCS_PREFIX", "facts/")
 
 # --- 取得パラメータ ----------------------------------------------------------
 MAX_DISCLOSURE_RESULTS = int(os.environ.get("MAX_DISCLOSURE_RESULTS", "8"))
