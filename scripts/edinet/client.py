@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -28,6 +29,10 @@ API_BASE = "https://api.edinet-fsa.go.jp/api/v2"
 
 # 有価証券報告書。半期(160)や訂正(130)は今回の対象外（まず1年分の本体で評価する）。
 DOC_TYPE_ANNUAL = "120"
+
+# 一時的な失敗をどれだけ粘るか。3,900件を1本で流すので、瞬断で全体を止めない。
+_MAX_RETRIES = 3
+_RETRY_BACKOFF_SEC = 2.0
 
 
 def load_api_key(env_file: str = ".env.local") -> str:
@@ -54,6 +59,7 @@ class DocRef:
     filer_name: str
     doc_description: str
     submit_date: str
+    period_end: str = ""  # 決算期末日 YYYY-MM-DD（一覧APIの periodEnd）
 
     @property
     def ticker(self) -> str:
@@ -62,6 +68,19 @@ class DocRef:
         新形式の英数字コード（例 135A）にも耐えるよう、末尾除去ではなく先頭4桁を取る。
         """
         return self.sec_code[:4]
+
+    @property
+    def doc_label(self) -> str:
+        """出典チップに出す資料名。**投資家が読む文字列**なので生のまま使わない。
+
+        一覧APIの docDescription は `有価証券報告書－第78期(2025/04/01－2026/03/31)` の形で、
+        正確ではあるが出典表示には冗長。期末日から `2026年3月期 有価証券報告書` に整える
+        （人手で入れた既存データの表記とも揃う）。期末が取れなければ元の文字列に落とす。
+        """
+        if len(self.period_end) >= 7:
+            y, m = self.period_end[:4], self.period_end[5:7]
+            return f"{y}年{int(m)}月期 有価証券報告書"
+        return self.doc_description or "有価証券報告書"
 
 
 class EdinetClient:
@@ -91,10 +110,32 @@ class EdinetClient:
         self._last_call = time.monotonic()
 
     def _get(self, url: str) -> bytes:
-        self._throttle()
-        req = urllib.request.Request(url, headers={"Ocp-Apim-Subscription-Key": self._key})
-        with urllib.request.urlopen(req, timeout=self._timeout) as res:  # noqa: S310
-            return res.read()
+        """1件取得。**一時的な失敗はここで吸収する。**
+
+        3,900件を1本の実行で流すので、瞬断1回で全体を止めるのは割に合わない
+        （実測: 2,000件付近で2回起きた）。ここで数回粘れば、呼び出し側が中断を
+        考えるのは「本当に繋がらないとき」だけになる。
+
+        **リトライしてよいものだけリトライする。** 404（その書類が無い）を粘っても
+        永遠に無駄で、しかも「取れないもの」を「通信障害」と誤って扱うことになる。
+        429（レート制限）と5xx（サーバ側）と、HTTP応答が返らない類だけ粘る。
+        """
+        last: Exception | None = None
+        for attempt in range(_MAX_RETRIES + 1):
+            self._throttle()
+            try:
+                req = urllib.request.Request(url, headers={"Ocp-Apim-Subscription-Key": self._key})
+                with urllib.request.urlopen(req, timeout=self._timeout) as res:  # noqa: S310
+                    return res.read()
+            except urllib.error.HTTPError as e:
+                if e.code != 429 and e.code < 500:
+                    raise  # 4xx は粘っても変わらない
+                last = e
+            except OSError as e:  # URLError も TimeoutError もこのサブクラス
+                last = e
+            if attempt < _MAX_RETRIES:
+                time.sleep(_RETRY_BACKOFF_SEC * (2**attempt))  # 2, 4, 8秒
+        raise last if last else RuntimeError(f"取得に失敗: {url}")
 
     # ------------------------------------------------------------------ 一覧
     def list_documents(self, day: date) -> list[dict[str, Any]]:
@@ -134,6 +175,7 @@ class EdinetClient:
                     filer_name=r.get("filerName") or "",
                     doc_description=r.get("docDescription") or "",
                     submit_date=(r.get("submitDateTime") or "")[:10],
+                    period_end=r.get("periodEnd") or "",
                 )
             day += timedelta(days=1)
 
