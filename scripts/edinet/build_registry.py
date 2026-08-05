@@ -35,7 +35,7 @@ import json
 import re
 from pathlib import Path
 
-from codelist import Filer, cross_check, fetch  # noqa: F401  (cross_check は将来の突合用)
+from codelist import Filer, fetch
 
 DEFAULT_OUT = Path("src/data/listed-companies.json")
 DEFAULT_CACHE = Path("data/edinet-cache")
