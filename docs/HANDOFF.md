@@ -66,8 +66,10 @@ GitHub: https://github.com/TIshow/ir-faq-mvp （main、PR #1〜#119 マージ済
 python3 eval/eval_harness.py --self-test            # → PASS
 
 # 実数値のゼロ許容ゲート（GCP認証要・デプロイ前に実行）。緑でなければデプロイしない
-uv run python3 eval/eval_harness.py --company harux # → 数値100%・コンプラ0 で PASS
+uv run python3 eval/eval_harness.py --company harux # → 数値100%・コンプラ0・本文違反0 で PASS
 uv run python3 eval/eval_harness.py --company vis
+# 層2を持たない状態（＝非顧客企業と同条件）。開示に無い因果を創作しないことを検証（#151）
+uv run python3 eval/eval_harness.py --company harux-no-layer2
 
 # ライブのフルスタック（定性質問）
 curl -s -N -X POST https://ir-frontend-255752121803.us-central1.run.app/api/chat/ \
