@@ -34,6 +34,19 @@ _client = None
 # 接地できないときの正直なフォールバック文（エスカレ理由が空の場合に使う）
 _NO_ANSWER = "開示資料では確認できませんでした。"
 
+# 開示抜粋が無いときにエスカレする場合の**定型文**（#151）。
+#
+# `escalate_reason` はLLMの自由文なので、プロンプトで禁じても創作が漏れる。
+# 実測では「要因（コスト削減、不採算店舗の閉鎖、商品構成の変化など）の記述がない」と、
+# **答えられないと言いながら答えの候補を創作して例示**していた。
+#
+# 数値と同じ切り分けにする: **判断はLLM（can_answer）、文言はコード。**
+# 何が無いかだけを述べ、答えの候補を並べない。
+_NO_MATERIAL = (
+    "ご質問の背景・要因については、当方が保有する開示資料では確認できませんでした。"
+    "数値そのものは開示資料から確認できます。"
+)
+
 # 2角度検索を合算した後にプロンプトへ入れる抜粋の上限（肥大化とレイテンシの抑制）
 _MAX_PASSAGES = 12
 
@@ -176,12 +189,14 @@ PLAN_PROMPT = """あなたは {company_name} の開示情報を案内するIRア
 }}
 
 注: 抜粋の番号 [0][1]… は内部参照用。escalate_reason には書かない（資料に触れるなら資料名で）。
+注: **escalate_reason に「答えの候補」を書かない。** 「要因（コスト削減、不採算店舗の閉鎖など）の
+記述がない」のように例示すると、答えられないと言いながら**開示に無い原因を創作して提示する**
+ことになる（#151）。「〜についての会社の説明は開示資料に見当たりません」と、**何が無いかだけ**を述べる。
 """
 
 
-WRITE_PROMPT = """あなたは {company_name} の開示情報をもとに、個人投資家へ深い洞察を届ける**IRアナリスト**です。
-この質問は開示済みの事実で**答えられる**と判定済みです。下記データだけを根拠に、**生成IRの本文**を書いてください。
-価値は数値の列挙やFAQの引き写しではなく、'なぜか・何を意味するか・どこが注目点か'まで踏み込んだ分析です。
+WRITE_PROMPT = """{role}
+この質問は開示済みの事実で**答えられる**と判定済みです。下記データだけを根拠に、**本文**を書いてください。
 
 # 鉄則（必ず守る）
 - 開示済みの事実のみ。下記「財務数値」と「開示資料の抜粋」に無い数字・事実は作らない・推測しない。
@@ -192,14 +207,10 @@ WRITE_PROMPT = """あなたは {company_name} の開示情報をもとに、個�
 - FAQや抜粋を**そのまま引き写さない**。複数の情報源を統合し、自分の言葉で分析・説明する。
 
 # 書き方（生成IR）
-- 質問に直接答えたうえで、背景・ドライバー（牽引したセグメント等）・前年比較・含意まで踏み込む。
+{causal_rule}
 - 傾向だけでなく**具体的な数値・変化率を交えて**説得力を持たせてよい（数値はカードと出典が裏取りする）。
-- **開示抜粋の中に、質問対象の根拠・背景・会社自身の説明（過去の説明資料・IR想定問答）があれば、
-  数値とセットで本文へ織り込む**（例:「会社は◯◯が要因と説明しています」）。数値の列挙で終わらせない。
 - 質問に応じ Markdown の**表や箇条書き**で構造化してよい。表の数字も上の「財務数値」の範囲のみ。
-- 本文の最後に「#### 💡 注目ポイント」の見出しで、開示事実の範囲で投資家が見落としやすい観点
-  （数値どうしの対比・構造変化・会社説明と数値の対応関係）を1〜3点の箇条書きで添える。
-  **意見・評価・推奨・将来予測は書かない**（事実の対比と開示済み説明の指摘に徹する）。材料が無ければこの節は省略。
+{insight_rule}
 - 長さは質問に応じて調整（定型の事実確認は簡潔に、分析・比較質問は厚く）。免責の繰り返しや冗長な前置きはしない。
 - 特に次の指標に言及するとよい（カードと対応）: {focus_metrics}
 
@@ -219,6 +230,69 @@ WRITE_PROMPT = """あなたは {company_name} の開示情報をもとに、個�
 本文のみをプレーンテキスト（Markdown可）で書く。JSON や「本文:」等の前置き・見出しは付けない。
 抜粋の番号 [0][1]… は内部参照用。本文には書かない（資料に触れるなら資料名で述べる）。
 """
+
+
+# WRITE の「役割」と「因果の書き方」は**手元の材料で決まる**（#151）。
+#
+# 開示抜粋が空のとき、材料は数値の表だけになる。それでも従来は
+# 「深い洞察を届けるIRアナリスト」「'なぜか'まで踏み込んだ分析」と要求していたため、
+# LLMは書ける唯一の方法——**事前学習知識による穴埋め**——で埋めた。
+#
+# 実測（ハークスレイ・抜粋なし・「なぜ営業利益が伸びたのですか？」）:
+#   「不採算店舗の整理やオペレーションの効率化…が利益を押し上げたことを示唆しています」
+#   「原材料価格や物流コストの影響を受けやすい事業特性もあり」
+# これらの語は**入力に1語も存在しない**。出典0件のまま因果として書かれていた。
+#
+# 禁止事項（「推測しない」）は元から書いてあった。**禁止と要求が矛盾すると要求が勝つ。**
+# だから禁止を強めるのではなく、**材料が無いときは要求しない**。
+_ROLE_WITH_PASSAGES = (
+    "あなたは {company_name} の開示情報をもとに、個人投資家へ深い洞察を届ける**IRアナリスト**です。\n"
+    "価値は数値の列挙やFAQの引き写しではなく、'なぜか・何を意味するか・どこが注目点か'まで"
+    "踏み込んだ分析です。"
+)
+_ROLE_FACTS_ONLY = (
+    "あなたは {company_name} の**開示済みの財務数値だけ**を案内する担当です。\n"
+    "手元にあるのは下記の数値の表だけで、会社の説明資料はありません。"
+    "**数値から読み取れることだけを、正確に、分かりやすく伝えてください。**"
+)
+
+_CAUSAL_WITH_PASSAGES = (
+    "- 質問に直接答えたうえで、背景・ドライバー（牽引したセグメント等）・前年比較・含意まで踏み込む。\n"
+    "- **開示抜粋の中に、質問対象の根拠・背景・会社自身の説明（過去の説明資料・IR想定問答）があれば、\n"
+    "  数値とセットで本文へ織り込む**（例:「会社は◯◯が要因と説明しています」）。数値の列挙で終わらせない。"
+)
+_CAUSAL_FACTS_ONLY = (
+    "- 質問に直接答えたうえで、**数値どうしの対比**（期間比較・セグメント間の差・構成比の変化）を示す。\n"
+    "- **原因・理由・要因・背景を書かない。** 手元に会社の説明資料が無いため、\n"
+    "  何がその数値をもたらしたかを**知る手段がない**。もっともらしい説明を推測で補わない。\n"
+    "  禁止例（いずれも実際に混入した）: 「不採算店舗の整理により」「効率化が奏功し」\n"
+    "  「原材料価格の影響を受けやすい事業特性もあり」「〜と推察されます」「〜を示唆しています」。\n"
+    "- 「なぜ」を問われたら、**数値上の事実**（どのセグメントがどれだけ動いたか）を示したうえで、\n"
+    "  『要因についての会社の説明は、当方が保有する開示資料では確認できませんでした』と述べて終える。\n"
+    "- 評価語（好調・堅調・力強い・劇的な等）も使わない。事実の記述に徹する。"
+)
+
+
+_INSIGHT_WITH_PASSAGES = (
+    "- 本文の最後に「#### 💡 注目ポイント」の見出しで、開示事実の範囲で投資家が見落としやすい観点\n"
+    "  （数値どうしの対比・構造変化・会社説明と数値の対応関係）を1〜3点の箇条書きで添える。\n"
+    "  **意見・評価・推奨・将来予測は書かない**（事実の対比と開示済み説明の指摘に徹する）。"
+    "材料が無ければこの節は省略。"
+)
+# 抜粋が無いときの「注目ポイント」は、書けることが**数値の対比だけ**になる。
+# 「見落としやすい観点」を求めると、そこが推測の逃げ道になるので範囲を明示して狭める。
+_INSIGHT_FACTS_ONLY = (
+    "- 本文の最後に「#### 💡 注目ポイント」の見出しで、**数値どうしの対比のみ**を1〜2点添えてよい\n"
+    "  （例:「売上構成比は物流が45.3%で最大」「増収率が最も高いのは物流の+31.3%」）。\n"
+    "  **原因・評価・含意・将来には触れない。** 対比として述べることが無ければこの節は省略。"
+)
+
+
+def _write_style(has_passages: bool) -> dict[str, str]:
+    """WRITE に渡す役割・因果の指示を材料の有無で決める（#151）。"""
+    if has_passages:
+        return {"role": _ROLE_WITH_PASSAGES, "causal_rule": _CAUSAL_WITH_PASSAGES}
+    return {"role": _ROLE_FACTS_ONLY, "causal_rule": _CAUSAL_FACTS_ONLY}
 
 
 # 読者レベル別の"翻訳"指示（WRITE のみ・内容の専門性は共通）。
@@ -572,10 +646,17 @@ def _ground(ticker, pa, pf, rel_metrics, used, passages):
     return fact_cards, citations
 
 
-def _write_stream(name, query, facts_ctx, passages_ctx, focus_metrics, audience: str):
-    """WRITE: 生成IRの本文をプレーンテキストでストリーミング生成。チャンクの text を yield。
-    audience は説明の"翻訳度"のみ調整（内容の専門性は共通）。"""
+def _write_stream(
+    name, query, facts_ctx, passages_ctx, focus_metrics, audience: str, has_passages: bool
+):
+    """WRITE: 本文をプレーンテキストでストリーミング生成。チャンクの text を yield。
+    audience は説明の"翻訳度"のみ調整（内容の専門性は共通）。
+    has_passages は**書いてよいことの範囲**を決める（#151）＝材料が無ければ因果を書かせない。"""
+    style = _write_style(has_passages)
     prompt = WRITE_PROMPT.format(
+        role=style["role"].format(company_name=name),
+        causal_rule=style["causal_rule"],
+        insight_rule=_INSIGHT_WITH_PASSAGES if has_passages else _INSIGHT_FACTS_ONLY,
         company_name=name,
         query=query,
         facts_context=facts_ctx,
@@ -634,20 +715,25 @@ def synthesize_stream(
     topic = normalize_topic(str(data.get("topic") or ""))
 
     if not can_answer:
-        yield from _escalate_stream(escalate_reason or _NO_ANSWER, topic)
+        # 抜粋が無いときはLLMの理由文を採らない（創作が混じるため・#151）
+        reason = escalate_reason if passages else _NO_MATERIAL
+        yield from _escalate_stream(reason or _NO_ANSWER, topic)
         return
 
     # GROUND（決定論）。接地ゼロ＝実質未回答 → エスカレ
     fact_cards, citations = _ground(ticker, pa, pf, rel_metrics, used, passages)
     if not fact_cards and not citations:
-        yield from _escalate_stream(escalate_reason or _NO_ANSWER, topic)
+        reason = escalate_reason if passages else _NO_MATERIAL
+        yield from _escalate_stream(reason or _NO_ANSWER, topic)
         return
 
     # WRITE（本文をストリーミング）
     yield {"type": "status", "stage": "write"}
     parts: list[str] = []
     try:
-        for t in _write_stream(name, query, facts_ctx, passages_ctx, rel_metrics, audience):
+        for t in _write_stream(
+            name, query, facts_ctx, passages_ctx, rel_metrics, audience, bool(passages)
+        ):
             parts.append(t)
             yield {"type": "prose_delta", "text": t}
     except Exception as e:

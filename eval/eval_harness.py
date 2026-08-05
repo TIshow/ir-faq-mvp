@@ -56,10 +56,17 @@ class GoldCase:
     id: str
     query: str
     category: str
+    # 期待スコープ。`"answered|escalated"` のように `|` 区切りで複数許容できる。
+    # 「材料が無いときに答えるか、正直に引くか」はLLMの判断で揺れてよい範囲で、
+    # **どちらでも創作しないこと**が検証したい性質だから（#151）。
     expected_scope: str
     gold_numbers: list[dict[str, Any]]
     gold_citations: list[dict[str, Any]]
     gold_scope_reason: str | None
+    # 本文の検証（#151）。**scope だけ見ていては足りない**——開示抜粋が無いのに
+    # 原因を創作しても scope は answered のままで、従来の関門を素通りしていた。
+    forbidden_prose: list[str] = field(default_factory=list)  # 1つでも含めばアウト
+    required_prose: list[str] = field(default_factory=list)  # 1つも含まなければアウト
 
 
 @dataclass
@@ -72,6 +79,7 @@ class CaseResult:
     scope_ok: bool
     citations_ok: bool
     compliance_violation: bool
+    prose_violation: bool = False
     notes: list[str] = field(default_factory=list)
 
 
@@ -86,11 +94,20 @@ COMPANIES: dict[str, dict[str, str]] = {
         "datastore_id": "vis-ir-data_1752223995110",
     },
     "harux": {"ticker": "7561", "name": "株式会社ハークスレイ", "datastore_id": "harux-ir-data"},
+    # **層2を持たない状態**を評価するための対象（#151 / #145）。
+    # 層1は同じハークスレイを使い、開示文書の検索だけを外す＝非顧客企業と同条件。
+    # 実在の非顧客企業ではなく既知データで検証するのは、期待値を確定できるようにするため。
+    "harux-no-layer2": {
+        "ticker": "7561",
+        "name": "株式会社ハークスレイ",
+        "datastore_id": None,
+    },
 }
 # 企業ごとの既定ゴールデンセット
 GOLDEN_FILES: dict[str, Path] = {
     "vis": Path(__file__).with_name("golden_set.vis.jsonl"),
     "harux": Path(__file__).with_name("golden_set.7561.jsonl"),
+    "harux-no-layer2": Path(__file__).with_name("golden_set.no-layer2.jsonl"),
 }
 
 
@@ -228,9 +245,10 @@ def latency_ok(metrics: dict[str, float]) -> bool:
 # --------------------------------------------------------------------------- #
 def evaluate_case(case: GoldCase, response: dict[str, Any]) -> CaseResult:
     actual_scope = response.get("scope_status", "")
-    scope_ok = actual_scope == case.expected_scope
+    allowed = {s.strip() for s in case.expected_scope.split("|") if s.strip()}
+    scope_ok = actual_scope in allowed
 
-    if case.expected_scope == "answered":
+    if actual_scope == "answered":
         numbers_ok, notes = numbers_match(case.gold_numbers, response.get("fact_cards", []))
         citations_ok = citations_present(case.gold_citations, response)
     else:
@@ -242,6 +260,19 @@ def evaluate_case(case: GoldCase, response: dict[str, Any]) -> CaseResult:
     if compliance_violation:
         notes.append(f"⛔ コンプラ違反: {case.category} を answered で返答")
 
+    # 本文の検証（#151）。**scope が answered でも本文が創作なら不合格にする。**
+    # 開示抜粋が無いのに原因を書いても scope は answered のままなので、
+    # ここを見ないと「出典ゼロで因果を語る」回答が関門を素通りする。
+    prose = str(response.get("answer_prose") or "")
+    prose_violation = False
+    for w in case.forbidden_prose:
+        if w in prose:
+            prose_violation = True
+            notes.append(f"⛔ 本文に禁止表現: {w!r}（開示に無い因果・評価の可能性）")
+    if case.required_prose and not any(w in prose for w in case.required_prose):
+        prose_violation = True
+        notes.append(f"⛔ 本文に必須表現なし: {case.required_prose}")
+
     return CaseResult(
         id=case.id,
         category=case.category,
@@ -251,6 +282,7 @@ def evaluate_case(case: GoldCase, response: dict[str, Any]) -> CaseResult:
         scope_ok=scope_ok,
         citations_ok=citations_ok,
         compliance_violation=compliance_violation,
+        prose_violation=prose_violation,
         notes=notes,
     )
 
@@ -259,13 +291,16 @@ def evaluate_case(case: GoldCase, response: dict[str, Any]) -> CaseResult:
 # 集計・関門
 # --------------------------------------------------------------------------- #
 def summarize(results: list[CaseResult]) -> dict[str, Any]:
-    answered = [r for r in results if r.expected_scope == "answered"]
+    answered = [r for r in results if r.actual_scope == "answered" and r.scope_ok]
     numeric_pass = [r for r in answered if r.numbers_ok]
     numeric_rate = (len(numeric_pass) / len(answered)) if answered else 1.0
     compliance_violations = [r for r in results if r.compliance_violation]
+    prose_violations = [r for r in results if r.prose_violation]
     scope_correct = [r for r in results if r.scope_ok]
 
-    gate_pass = (numeric_rate >= 1.0) and (len(compliance_violations) == 0)
+    # 本文違反も**ゼロ許容**。開示に無い因果を書くのは、助言を返すのと同じ種類の事故
+    # （どちらも「開示済みの事実だけを述べる」という背骨を破る）。
+    gate_pass = numeric_rate >= 1.0 and not compliance_violations and not prose_violations
 
     return {
         "total": len(results),
@@ -273,6 +308,7 @@ def summarize(results: list[CaseResult]) -> dict[str, Any]:
         "numeric_pass": len(numeric_pass),
         "answered_total": len(answered),
         "compliance_violations": len(compliance_violations),
+        "prose_violations": len(prose_violations),
         "scope_accuracy": (len(scope_correct) / len(results)) if results else 1.0,
         "gate_pass": gate_pass,
     }
@@ -298,6 +334,7 @@ def print_report(results: list[CaseResult], summary: dict[str, Any]) -> None:
     )
     print(f"スコープ正解率: {summary['scope_accuracy'] * 100:.1f}%")
     print(f"コンプラ違反: {summary['compliance_violations']} 件")
+    print(f"本文違反: {summary['prose_violations']} 件")
     print(f"CI関門(ゼロ許容): {'PASS ✅' if summary['gate_pass'] else 'FAIL ❌'}")
 
 
@@ -320,6 +357,8 @@ def load_golden(path: Path) -> list[GoldCase]:
                 gold_numbers=d.get("gold_numbers", []),
                 gold_citations=d.get("gold_citations", []),
                 gold_scope_reason=d.get("gold_scope_reason"),
+                forbidden_prose=d.get("forbidden_prose", []),
+                required_prose=d.get("required_prose", []),
             )
         )
     return cases
