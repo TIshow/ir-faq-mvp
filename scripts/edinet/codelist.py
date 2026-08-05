@@ -30,6 +30,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+import urllib.request
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,16 +46,14 @@ _COL = {
     "edinet_code": "ＥＤＩＮＥＴコード",
     "listed": "上場区分",
     "consolidated": "連結の有無",
-    "capital": "資本金",
     "fiscal_end": "決算日",
     "name": "提出者名",
     "name_en": "提出者名（英字）",
-    "name_kana": "提出者名（ヨミ）",
-    "address": "所在地",
     "sector": "提出者業種",
     "sec_code": "証券コード",
     "corporate_number": "提出者法人番号",
 }
+# 参考: CSVには資本金・所在地・ヨミもある。必要になったらここに足す。
 
 # 「3月31日」「12月20日」など。**日は使わない**（月だけ要る）。
 _FISCAL_END = re.compile(r"^(\d{1,2})月")
@@ -93,10 +92,17 @@ def _fiscal_month(text: str) -> int | None:
 
 
 def parse(zip_bytes: bytes) -> list[Filer]:
-    """コード一覧のzipから**上場企業だけ**を返す（証券コードを持つもの）。
+    """コード一覧のzipから**上場企業だけ**を返す。
 
-    非上場の提出者（投信・組合・有報提出義務のある非上場会社）は約7,500件あるが、
-    銘柄URLを持たないので対象外。
+    絞り込みは**証券コードと上場区分の両方**を見る。片方では足りない（実測）:
+
+        証券コードなし × 上場区分なし      6,272   投信・組合など
+        証券コードあり × 上場区分「上場」   3,829   ← 対象
+        証券コードなし × 上場区分「非上場」 1,271   有報提出義務のある非上場会社
+        証券コードあり × 上場区分「非上場」     2   ← **上場廃止直後など。除く**
+
+    最後の2社は証券コードを持つので、コードだけで絞ると混ざる。
+    銘柄URL（`/c/<ticker>`）を持てるのは現に上場している会社だけ。
     """
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         text = zf.read(_MEMBER).decode(_ENCODING)
@@ -111,7 +117,7 @@ def parse(zip_bytes: bytes) -> list[Filer]:
         if len(r) <= max(idx.values()):
             continue
         sec = r[idx["sec_code"]].strip()
-        if not sec:  # 証券コードなし＝非上場。銘柄URLを持てない
+        if not sec or r[idx["listed"]].strip() != "上場":
             continue
         out.append(
             Filer(
@@ -133,8 +139,6 @@ def fetch(cache_dir: Path, *, refresh: bool = False) -> list[Filer]:
 
     日次で更新される類のものではないので、既定ではキャッシュを使い回す。
     """
-    import urllib.request
-
     cache_dir.mkdir(parents=True, exist_ok=True)
     path = cache_dir / "Edinetcode.zip"
     if refresh or not path.exists() or path.stat().st_size == 0:
