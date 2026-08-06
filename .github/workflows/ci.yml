@@ -68,5 +68,14 @@ jobs:
         run: uv run ruff format --check agent eval scripts
 
       # GCP不要でハーネス自体のロジックを検証（数値/コンプラ関門のリグレッション検出）
+      # **実eval（LLMを呼ぶ）はここでは回さない。** PR毎に課金され、Dependabot の
+      # 依存更新でも走ってしまう。実evalは人が回す責任（CLAUDE.md §6）。
       - name: Eval harness self-test
         run: uv run python eval/eval_harness.py --self-test
+
+      # docs/ROADMAP.md は GitHub Issue からの生成物。手で書き換えられていたり、
+      # Issueを動かしたのに再生成し忘れていると落ちる（CLAUDE.md §7）。
+      - name: ROADMAP.md is in sync with issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run python scripts/sync_roadmap.py --check

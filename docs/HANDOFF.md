@@ -1,10 +1,10 @@
 # HANDOFF — 引き継ぎ（現状・実リソース・再開手順）
 
-最終更新: 2026-07-31 / 別のエンジニア・AIがそのまま続けられるための実状ドキュメント。
+最終更新: 2026-08-06 / 別のエンジニア・AIがそのまま続けられるための実状ドキュメント。
 設計は `ARCHITECTURE.md`、ブランド/デザインは `DESIGN.md`、方針は `../CLAUDE.md`。
 
 ## 1. 一言でいうと今どこ
-**全GCPで実稼働するマルチテナントIR Agent**。回答生成は **生成IR（既定 `ANSWER_MODE=synthesis`、`agent/synthesize.py`）** に刷新済み＝層1（数値）＋層2（定性）を統合し「業績を分析して」で**表＋セグメント分析＋会社予想の洞察**まで生成する金融コパイロット型。数値は**コード計算済みデータシート由来でLLM非経由＝決定論**（カード＋出典でクロスチェック）。**層2は2角度並列検索**（質問＋「背景・要因・会社の説明」）で過去資料/想定問答の根拠も補足に取り込み、本文末尾に**💡注目ポイント**（開示事実の気づき・意見/予測禁止）。**読者レベル**（カジュアル=投資1年目向け翻訳/スタンダード=既定）で説明の翻訳度のみ調整（専門性は共通・localStorage永続・旧3段階は後方互換）。本文は**トークン逐次ストリーミング**表示（gemini-3の**thinking最小化で先頭トークン≒半減**。PLAN JSONの揺らぎは `_parse_plan_json` で恒久対処）。UIXは **Naruhodo IR ブランド（クリーム×インク×ポップ・`DESIGN.md`）**＝評決カード＋決定論チャート・蔦の成長演出・芽吹くカーソル・「！の芽」ロゴ/favicon。**短期メモリ（会話履歴）**でフォロー質問（「なんで？」「前期は？」）にも対応（履歴はブラウザ保持・サーバはステートレス）。**層1は ハークスレイ(7561) を旗艦に深掘り点灯**＝FY25/26実績＋3セグメント＋FY27会社予想（EDINET有報XBRLから決定論抽出、31件、`scripts/edinet/`）。ヴィス(5071)も10件。フィル/ピアズは層2のみ。**痛み②の堀＝escalation→FAQ複利ループ（冪等upsert）＋IR向けダッシュボード（BigQuery集計）＋Firebase認証（マルチテナント・owner全社）** も実装済み。ダッシュボードは**話題トレンド**（話題×件数。会話の**本文はどこにも保存しない**＝メタデータのみ）と **IR要対応**（CTA同意分のみ・×Nグループ化・削除可）。**誹謗中傷・暴言は入口ガードで丁寧拒否**（CTA非表示＝IRに転送されない）。派生指標（全社/セグメント利益率・売上構成比・利益寄与度）もコード計算でカード化。LLMは **gemini-3-flash-preview（global）**（eval関門通過で切替済み・ロールバックはenv一発）。**CI/CD（GitHub Actions＋ブランチ保護＋Dependabot＋CodeQL＋gitleaks）**。ハークスレイは本番デプロイ済みでデモ可能。**#113（PR #117）で「AIに引用させる」導線を追加**＝`/c/<ticker>` が**その銘柄に固定したチャットUI＋公式Q&Aパネル**（パネルは常時DOMにあり閉じていても答え全文がHTMLに載る＝JSを実行しないAIクローラーが読める）。Q&Aは層1から**コードが**組み立て**LLM非経由**。JSON-LD(FAQPage)＋robots/sitemap/llms.txt。**トップは「銘柄を選ぶ入口」に役割分離**（対話は引用できるURL上だけで起きる）。
+**全GCPで実稼働するマルチテナントIR Agent**。回答生成は **生成IR（既定 `ANSWER_MODE=synthesis`、`agent/synthesize.py`）** に刷新済み＝層1（数値）＋層2（定性）を統合し「業績を分析して」で**表＋セグメント分析＋会社予想の洞察**まで生成する金融コパイロット型。数値は**コード計算済みデータシート由来でLLM非経由＝決定論**（カード＋出典でクロスチェック）。**層2は2角度並列検索**（質問＋「背景・要因・会社の説明」）で過去資料/想定問答の根拠も補足に取り込み、本文末尾に**💡注目ポイント**（開示事実の気づき・意見/予測禁止）。**読者レベル**（カジュアル=投資1年目向け翻訳/スタンダード=既定）で説明の翻訳度のみ調整（専門性は共通・localStorage永続・旧3段階は後方互換）。本文は**トークン逐次ストリーミング**表示（gemini-3の**thinking最小化で先頭トークン≒半減**。PLAN JSONの揺らぎは `_parse_plan_json` で恒久対処）。UIXは **Naruhodo IR ブランド（クリーム×インク×ポップ・`DESIGN.md`）**＝評決カード＋決定論チャート・蔦の成長演出・芽吹くカーソル・「！の芽」ロゴ/favicon。**短期メモリ（会話履歴）**でフォロー質問（「なんで？」「前期は？」）にも対応（履歴はブラウザ保持・サーバはステートレス）。**層1は上場3,815社に拡大**（#130）＝有報XBRLから決定論抽出した **200,767ファクト / 5期ぶん（2021FY〜2026FY）** を **GCS配信**（#148）。同梱（人手検証済みの顧客）を優先し、無いときだけGCSを引く。ハークスレイ(7561)は旗艦として深掘り（3セグメント＋会社予想）。**非顧客企業も層1だけで回答する**（#145）＝「公式IR / 非公式IR」バッジで出所を区別し、層2が無いとき原因を創作しない（#151）。到達経路は**検索**（#154/PR #158・上場3,829社）。**痛み②の堀＝escalation→FAQ複利ループ（冪等upsert）＋IR向けダッシュボード（BigQuery集計）＋Firebase認証（マルチテナント・owner全社）** も実装済み。ダッシュボードは**話題トレンド**（話題×件数。会話の**本文はどこにも保存しない**＝メタデータのみ）と **IR要対応**（CTA同意分のみ・×Nグループ化・削除可）。**誹謗中傷・暴言は入口ガードで丁寧拒否**（CTA非表示＝IRに転送されない）。派生指標（全社/セグメント利益率・売上構成比・利益寄与度）もコード計算でカード化。LLMは **本番 gemini-2.5-flash**（gemini-3 への移行は #91。`MODEL_NAME` で切替）。**CI/CD（GitHub Actions＋ブランチ保護＋Dependabot＋CodeQL＋gitleaks）**。ハークスレイは本番デプロイ済みでデモ可能。**#113（PR #117）で「AIに引用させる」導線を追加**＝`/c/<ticker>` が**その銘柄に固定したチャットUI＋公式Q&Aパネル**（パネルは常時DOMにあり閉じていても答え全文がHTMLに載る＝JSを実行しないAIクローラーが読める）。Q&Aは層1から**コードが**組み立て**LLM非経由**。JSON-LD(FAQPage)＋robots/sitemap/llms.txt。**トップは「銘柄を選ぶ入口」に役割分離**（対話は引用できるURL上だけで起きる）。
 
 > **データ調達方針（確定）**: 発行体オリジン×自動取込×EDINET検証。**TDnet有料フィードは不要**（顧客の分は発行体本人が原本保有）。速報数値は短信XBRL/発行体提供、公式裏取りは無料のEDINET XBRL、定性はPDF＋想定問答。詳細は戦略プラン。
 
@@ -13,11 +13,14 @@
 |---|---|---|
 | フロント | Cloud Run **ir-frontend** | https://ir-frontend-255752121803.us-central1.run.app （公開） |
 | エージェント | Cloud Run **ir-agent** | https://ir-agent-eyqs2m6yva-uc.a.run.app （**非公開=#88完了**: invoker=フロントSAのみ。フロントが `src/lib/agent-auth.ts` のIDトークンで呼ぶ。直叩きは403） |
-| LLM | Vertex AI **gemini-3-flash-preview**（`GCP_VERTEX_AI_LOCATION=global`） | 素の `gemini-3-flash` は存在せず404。us-central1 にも無い。ロールバック=`MODEL_NAME=gemini-2.5-flash`（globalで動作可）。thinking最小化で先頭トークン〜12s。json_modeでもJSON後に余分テキストを吐く揺らぎあり→`_parse_plan_json` で恒久対処済み(#105) |
+| LLM | Vertex AI **gemini-2.5-flash**（本番の実値・2026-08-06 確認） | `gemini-3-flash-preview` は **global 提供**（素の `gemini-3-flash` は404、us-central1 にも無い）。移行は #91。json_modeでもJSON後に余分テキストを吐く揺らぎあり→`_parse_plan_json` で恒久対処済み(#105) |
 | 検索アプリ | Discovery Engine engine **ir-bot-mvp-app_1750418304373** | vis/phil/peers の3データストアを束ねる |
 | データストア | **vis-ir-data_1752223995110** / **philcompany-ir-data_1752224320775** / **peers-ir-data_1752651535271** / **harux-ir-data**（旗艦・engine外で自前 default_search で検索） | GENERIC・CONTENT_REQUIRED。コンソールは「AI Applications」 |
 | GCS | gs://vis-ir-data, gs://philcompany-ir-data, gs://peers_ir_data, **gs://harux-ir-data**（`/pdf/2026-fy-material.pdf`） | 各 `/pdf/`（決算PDF）＋ `/qa/faq.csv`（定性Q&A。haruxはFAQ未投入） |
-| 層1（数値） | `agent/data/facts/<ticker>.json`（`FACTS_BACKEND=json`・**1社1ファイル**） | 5071=10件 / **7561=31件**。本番DBは Cloud SQL **未作成**（`database/financial_facts.sql`） |
+| 層1（数値・同梱） | `agent/data/facts/<ticker>.json`（**1社1ファイル**・イメージ同梱） | 人が確認した顧客企業。**GCSより優先**（機械生成で上書きされない） |
+| 層1（数値・GCS） | **gs://hallowed-trail-462613-v1-facts**/facts/`<ticker>`.json（`FACTS_GCS_BUCKET`） | **3,815社 / 143MB**（#148）。プロセス内キャッシュ。ランタイムSAに `roles/storage.objectViewer` 付与済み |
+| 層1コーパス（生成元） | `data/facts-corpus/`（ローカル・gitignore） | `scripts/edinet/batch.py` の出力。**配信用の `agent/data/facts/` とは別** |
+| 上場企業レジストリ | `src/data/listed-companies.json`（562KB・**server-only**） | 非顧客3,825社。EDINETコード一覧から `scripts/edinet/build_registry.py` が生成 |
 | 回答生成 | `ANSWER_MODE=synthesis`（既定・生成IR）/ `legacy`（ロールバック） | Cloud Run env で切替可。`agent/synthesize.py` |
 | 分析ログ（痛み②） | BigQuery `ir_analytics.interactions` | `ANALYTICS_ENABLED=1` で記録。**本文レス＝メタデータのみ**（ts/企業/scope/カード・引用数/話題）。話題はPLAN相乗りで分類（タクソノミー14分類・agent/analytics.py） |
 | IR要対応ワークリスト | BigQuery `ir_analytics.ir_requests`（ts/company_ticker/question） | **ユーザーがCTA「IR窓口へ問い合わせる」を押した質問のみ**。`/api/ir/contact`(未認証)が記録。自動エスカレは入れない |
@@ -28,7 +31,7 @@
 | CI/CD | GitHub Actions（`.github/workflows/ci.yml`・`security.yml`）＋ **main ブランチ保護**＋ Dependabot | frontend(型/lint/build)＋agent(ruff/format/eval)＋gitleaks＋CodeQL。緑必須・PR経由 |
 | Firestore / 旧フロント / Vercel | (default) / ir-bot-mvp / — | 未使用 / **削除済み** / **削除済み**（全GCP集約） |
 
-GitHub: https://github.com/TIshow/ir-faq-mvp （main、PR #1〜#119 マージ済）。Issue: #3 経緯と残課題 / #42 FAQサジェスト(A本実装) / #46 IRインテリジェンス epic / #67 派生指標Phase2(CAGR・ROE/ROIC=B1データ投入待ち) / **#77 戦略（足りないもの・moat・残タスクTier）** / #86-87 尖らせ方(話題フォロー・フェデレーション) / **#88-92 インフラ（#88 ir-agent非公開化=✅完了、#89 BQ東京=データ空の今が好機、#90 SA分離、#91 モデル世代管理、#92 小規模ハードニング）** / **#97 Tier A（ハークスレイ実トラフィックで複利ループ1周）** / **#98 B1（層1縦深化: 多年度+BS/CF→ROE/ROIC解禁）** / **#107 層2精度（評価セット50〜100問＋取り込み方式比較: raw/digital/layout/手動MD/XBRL併用）**。
+GitHub: https://github.com/TIshow/ir-faq-mvp （main、PR #1〜#159 マージ済）。**タスク管理は `../CLAUDE.md` §7**（状態の正はGitHub Issue・ラベル3軸・`docs/ROADMAP.md` は生成物）。Issue: #3 経緯と残課題 / #42 FAQサジェスト(A本実装) / #46 IRインテリジェンス epic / #67 派生指標Phase2(CAGR・ROE/ROIC=B1データ投入待ち) / **#77 戦略（足りないもの・moat・残タスクTier）** / #86-87 尖らせ方(話題フォロー・フェデレーション) / **#88-92 インフラ（#88 ir-agent非公開化=✅完了、#89 BQ東京=データ空の今が好機、#90 SA分離、#91 モデル世代管理、#92 小規模ハードニング）** / **#97 Tier A（ハークスレイ実トラフィックで複利ループ1周）** / **#98 B1（層1縦深化: 多年度+BS/CF→ROE/ROIC解禁）** / **#107 層2精度（評価セット50〜100問＋取り込み方式比較: raw/digital/layout/手動MD/XBRL併用）**。
 **配信3経路（下記 Tier 1.2）**: **#113 AI引用可能な公開IRページ＝✅第1弾デプロイ済（PR #117・段階Cが残）** / **#85 MCP/APIエンドポイント（中核へ格上げ・未着手）** / **#114 埋め込みウィジェット（未着手）**。
 
 ## 3. 今の挙動（ブラウザで確認可能）
@@ -124,15 +127,19 @@ curl -s -N -X POST https://ir-frontend-255752121803.us-central1.run.app/api/chat
 ### Tier 3 — 運用・セキュリティ・スケール
 - ~~3-1 ir-agent 非公開化~~＝**#88 ✅完了**（IDトークン認証＋invoker=フロントSAのみ＋レート制限10回/分。直叩き403を本番確認済み）。残り: #89 BQ東京（データ空の今が好機）・#90 SA分離・#91 モデル世代管理・#92 小規模ハードニング。
 - **3-2 429クォータ対策**（リトライ/バックオフ）。 **3-3 CI自動デプロイ**（main→Cloud Run）。
-- **3-4 層1取り込み自動化**（provisioningスクリプト／XBRL自動更新）＝発行体増加時のみ。今は手動でOK。
-- **3-5 フィル/ピアズの層1投入**（`scripts/edinet/` で各社XBRLから）＝旗艦が固まった後。
+- ~~3-4 層1取り込み自動化~~＝**#130 で3,815社ぶん実施済み**（有報XBRL→GCS配信）。残りは**日次の増分取り込み**（Cloud Run Job＋Scheduler）と EDINET APIキーの Secret Manager 化。
+- ~~3-5 フィル/ピアズの層1投入~~＝**全社コーパスに含まれる**（ただし層2＝開示文書の検索は顧客4社ぶんだけ）。
 
 ### Tier 4 — 非技術（事業成功の本丸）
 - **4-1 提案を「工数削減」でなく「企業価値・投資家エンゲージメント」で**（内向き象限＝解約予備軍の回避）。売り込みの主役は**チャットではなくIR室の業務＋公式回答の配信**（デモはダッシュボードから）。
 - **4-2 ハークスレイをケーススタディ化**（反応・before/after）。 **4-3 課金/契約モデル**（発行体課金・データ分離を売りに）。
 - **4-4 方向性の検証基準**（#97 実施時に観察）: IR担当者が**ダッシュボードに食いつく**→重心移動は正解／**チャットの見た目だけ褒めてダッシュボードを開かない**→業務価値が不足・作り直し／**どちらも反応が薄い**→事業として要再検討。
 
-> 推奨スタート: 配信は **#113 の効果測定（1.2-4）**＝第1弾を本番に出した以上、AIが実際に引くかを測らないと次の投資判断ができない（sitemap の Search Console 登録＋公開前後で同じ質問をAIに投げて比較）。事業は **#97（Tier A: FAQ投入→ハークスレイで複利ループを1周）**＝堀は実利用でしか育たない（#77）。機能は **#98（B1: 層1の多年度＋BS/CF投入→CAGR/ROE/ROIC解禁。#67が下流）**。品質は **#107（層2の評価セット＋取り込み方式比較＝定性版eval関門の土台）**。インフラは #89（BQ東京・データが空の今だけ移行ゼロ）。gemini-3 は thinking 最小化で先頭〜12s（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` に即戻す）。
+> **次に何をやるかは [`ROADMAP.md`](ROADMAP.md) と GitHub Issue のラベル（`P0-now`）を見ること。**
+> この節は「なぜそう並べているか」の理由を残す場所で、状態そのものは持たない（`../CLAUDE.md` §7）。
+>
+> 2026-08-06 時点の P0 は3つ。**#146**（業種別の売上要素＝トヨタが「売上高は？」に答えられない。時価総額上位が引っかかるので優先度が高い）／**#130**（残りは日次の増分取り込みとAPIキーの Secret Manager 化）／**#97**（Tier A: ハークスレイ実トラフィックで複利ループを1周＝堀は実利用でしか育たない・#77）。
+> 続く P1 は #98（層1の多年度＋BS/CF→ROE/ROIC。#67が下流）・#107（層2の評価セット＝定性版eval関門の土台）・#89（BQ東京・データが空の今だけ移行ゼロ）・#144（同業比較）。
 
 ## 6. よく使う調査コマンド
 ```bash
