@@ -21,14 +21,14 @@
   └→ Cloud Run "ir-frontend"（Next.js 15 / TypeScript・UI）
         └ /api/chat/ が SSE プロキシ → AGENT_URL
              └→ Cloud Run "ir-agent"（Python / Google ADK・FastAPI・頭脳）
-                  ├ 層1: get_financial_facts → 構造化ファクト（PoC=JSON / 本番=Cloud SQL）※YoY・利益率はコード計算
+                  ├ 層1: get_financial_facts → 構造化ファクト（同梱JSON＋GCS 3,815社・#148）※YoY・利益率はコード計算
                   ├ 層2: search_disclosures → Discovery Engine（PDF＋FAQ）※2角度並列検索で背景/根拠も収集
                   ├ escalate_to_ir → 質問ログ（痛み②: IRインテリジェンス）
-                  └ LLM: Vertex AI Gemini（現 gemini-3-flash-preview @ global）
+                  └ LLM: Vertex AI Gemini（本番 = gemini-2.5-flash。gemini-3 への移行は #91）
 ```
 - フロントとエージェントが**別言語・別責務なので2サービス**（Next.js=画面、Python ADK=頭脳）。
 - 回答契約 `AgentResponse = { answer_prose, fact_cards[], citations[], scope_status, scope_reason, suggestions[] }`（`src/lib/agent-types.ts` と Python 側で一致）。
-- **回答生成＝Grounded Synthesis / 生成IR（既定 `ANSWER_MODE=synthesis`、`agent/synthesize.py`）**: ツール選択をLLMに委ねず retrieve（層1の全実値＋層2検索）を**決定論で常時実行**。2フェーズで生成し本文をトークン逐次ストリーミング: **CONTEXTUALIZE**（短期メモリ：会話履歴があればフォロー質問を自己完結クエリに書き換え）→ retrieve → **PLAN**（answerability判定＋カード指標選択・JSON）→ GROUND（数値カードはコードが接地）→ **WRITE**（生成IR本文を逐次）。LLMには「実数＋前年比・利益率・構成比（コード計算済み）」のデータシートを渡す。会話履歴はフロントが同梱しサーバはステートレス。WRITE は**読者レベル**（カジュアル=投資1年目でも読める翻訳/スタンダード=既定）で説明の翻訳度のみ調整し（専門性・数値は共通）、末尾に**💡注目ポイント**を添える。gemini-3 は**thinking最小化**で先頭トークンを短縮。旧来のADKツールループは `ANSWER_MODE=legacy` で残置（ロールバック用）。
+- **回答生成＝Grounded Synthesis / 生成IR（既定 `ANSWER_MODE=synthesis`、`agent/synthesize.py`）**: ツール選択をLLMに委ねず retrieve（層1の全実値＋層2検索）を**決定論で常時実行**。2フェーズで生成し本文をトークン逐次ストリーミング: **CONTEXTUALIZE**（短期メモリ：会話履歴があればフォロー質問を自己完結クエリに書き換え）→ retrieve → **PLAN**（answerability判定＋カード指標選択・JSON）→ GROUND（数値カードはコードが接地）→ **WRITE**（生成IR本文を逐次）。LLMには「実数＋前年比・利益率・構成比（コード計算済み）」のデータシートを渡す。会話履歴はフロントが同梱しサーバはステートレス。WRITE は**読者レベル**（カジュアル=投資1年目でも読める翻訳/スタンダード=既定）で説明の翻訳度のみ調整し（専門性・数値は共通）、末尾に**💡注目ポイント**を添える。gemini-3 に移す際は**thinking最小化**で先頭トークンを短縮できる（#91）。旧来のADKツールループは `ANSWER_MODE=legacy` で残置（ロールバック用）。
 
 ## 3. リポジトリ構成
 ```
@@ -53,10 +53,15 @@ src/                      フロント（Next.js）
   components/CompanyEntry.tsx   トップの「続きから」＋旧 `?c=` を銘柄URLへ転送
   components/RememberCompany.tsx 銘柄URLを開いたことを記憶（描画なし）
   components/FactCard.tsx       評決カード/TrendCard（決定論チャート）/出典チップ/scope分岐/蔦レイアウト
-  components/CompanyPicker.tsx  企業選択ピッカー（モノグラム＋ティッカー）
+  components/CompanyPicker.tsx  企業選択ピッカー（モノグラム＋ティッカー＋全社検索）
+  components/CompanySearch.tsx  銘柄検索（トップ/ピッカー共用。上場3,829社・サーバー経由）
+  components/TierBadge.tsx      「公式IR / 非公式IR」バッジ＝**見た目の唯一の正**（#145）
+  app/api/companies/search/route.ts  企業検索API（レジストリ562KBをクライアントに配らない）
   components/Markdown.tsx       回答散文のMarkdown描画（マーカー強調・💡注目ポイント・CJK太字救済）
   components/BrandLogo.tsx      Naruhodo IR ロゴ（「！の芽」マーク＋ワードマーク）
-  config/companies.ts     企業マスター（id/name/ticker/datastoreId/fiscalYearEndMonth/publishOfficialQa）＝唯一の正
+  config/companies.ts     **顧客企業の契約情報**（datastoreId/isCustomer/publishOfficialQa/guidedQuestions）＝唯一の正
+  data/listed-companies.json    非顧客3,825社のレジストリ（EDINETコード一覧から生成・562KB）
+  lib/listed-companies.ts       レジストリのデータ層（**server-only**。検索・ticker/id 解決）
   lib/public-facts.ts     **公式Q&Aのデータ層**: 層1(data/facts/)から質問＋答え＋出典を決定論で組み立てる（LLM不使用）
   lib/last-company.ts     「前回みていた銘柄」の記憶（企業IDのみ。会話本文は保存しない）
   lib/site.ts             公開URL（sitemap/llms.txt/JSON-LD 用）
@@ -77,8 +82,9 @@ agent/                    エージェント（Python / ADK）
   store.py / facts_store.py / db.py  層1ストア（json=PoC / cloudsql=本番 を FACTS_BACKEND で切替）
   server.py               FastAPI（/chat の SSE, /health）
   config.py               環境設定（.env 読込）
-  data/facts/<ticker>.json  層1の実データ（**1社1ファイル**。ハークスレイ(7561)旗艦＋ヴィス(5071)。
-                          検証済み実値のみ＝`verified:true` だけが採用される。捏造禁止）
+  data/facts/<ticker>.json  層1の**同梱**データ（**1社1ファイル**。人が確認した顧客企業。こちらが優先）。
+                          非顧客3,815社は **GCS** から読む（`FACTS_GCS_BUCKET`・#148）。
+                          同梱は検証済み実値のみ＝`verified:true`。GCSは `source_kind:"xbrl"`。捏造禁止
   .env.example            ローカル設定例
 scripts/
   extract_facts.py        層1取り込み（GeminiでPDF→構造化ファクト草案。人手検証後 data/facts/<ticker>.json へ）
@@ -90,12 +96,16 @@ scripts/
                           出力は data/facts-corpus/＝**配信用の agent/data/facts/ とは別**）
   edinet/codelist.py      企業マスター（EDINETコード一覧＝鍵不要。英語名/業種/決算月/法人番号。
                           上場3,829社。層1コーパスとの突合も。推測で埋めない）
+  edinet/build_registry.py  非顧客レジストリ生成（src/data/listed-companies.json）
+  sync_roadmap.py         **GitHub Issue → docs/ROADMAP.md** を生成（状態の正はIssue・§7）
 eval/
   eval_harness.py         評価ハーネス（数値=決定論比較・コンプラ=ゼロ許容CI関門）
                           既定=1社(harux 24問) / `--all`=全3対象44問。**実LLMを呼ぶので課金される**
-  golden_set.vis.jsonl / golden_set.7561.jsonl  ゴールデンセット（vis / ハークスレイ）
+  golden_set.7561.jsonl(24問) / golden_set.vis.jsonl(12問) / golden_set.no-layer2.jsonl(8問)
+                          ゴールデンセット。no-layer2 は**非顧客と同条件**（層2を外す・#151）
 database/                 層1本番用 Cloud SQL スキーマ（financial_facts.sql 等。未接続=将来）
-docs/                     ARCHITECTURE.md / DESIGN.md / HANDOFF.md / phase1-gcp-setup.md / investor-experience-quality.md
+docs/                     ROADMAP.md（**生成物**）/ ARCHITECTURE.md / DESIGN.md / HANDOFF.md /
+                          edinet-ingest.md / phase1-gcp-setup.md / investor-experience-quality.md
 Dockerfile                フロント用 / Dockerfile.agent  エージェント用
 cloudbuild.yaml           フロント用 / cloudbuild.agent.yaml  エージェント用
 ```
@@ -137,7 +147,10 @@ gcloud run services update ir-frontend --region us-central1 \
 ## 6. 規約・注意
 - **数値を捏造しない**。層1に実データが無ければ数値は返さず層2/エスカレーションへ。
 - **企業をハードコードしない**。新企業は `companies.ts` に追加し、対応する Discovery Engine データストアを用意。
-- **モデルは交換可能に保つ**。`MODEL_NAME`（env / config）で切替。現状 `gemini-3-flash-preview`（**global 提供**＝`GCP_VERTEX_AI_LOCATION=global`。us-central1 には無い。素の `gemini-3-flash` は404）。切替は必ず eval関門（数値100%/コンプラ0）で検証。ロールバックは `MODEL_NAME=gemini-2.5-flash`。
+- **モデルは交換可能に保つ**。`MODEL_NAME`（env / config）で切替。
+  **本番で動いているのは `gemini-2.5-flash`**（`cloudbuild.agent.yaml` と Cloud Run の実値で確認済み・2026-08-06）。
+  `gemini-3-flash-preview` は **global 提供**（`GCP_VERTEX_AI_LOCATION=global`。us-central1 には無く、素の `gemini-3-flash` は404）で、
+  移行は #91 で扱う。切替は必ず eval関門（数値100%/コンプラ0）で検証すること。
 - コミットは小さくPRで。main 直 push しない（PR→squash merge 運用）。
 - **PR作成後はマージせず一旦停止し、ユーザーのレビュー/承認を待ってからマージする**（merge の手前で必ず確認を取る）。
 - **eval は反復中1社・PR前に1回だけ全社**。`eval_harness.py` は `run_agent` を直接呼ぶので
@@ -148,18 +161,69 @@ gcloud run services update ir-frontend --region us-central1 \
   CI が回すのは `--self-test`（LLM不使用）だけなので、**実evalは人が回す責任**。
 - 秘密情報はコミットしない（`.env*` は gitignore、`agent/.env.example` のみ追跡）。
 
-## 7. 現状サマリ（2026-07-31）
-- ✅ 全GCPで実稼働（Vercel廃止）。マルチテナント切替・ガードレール・**層2の実FAQ/PDF回答（出典付き）**。
-- ✅ **層1（数値）はハークスレイ(7561)を旗艦に深掘り点灯**＝FY25/26実績＋3セグメント＋FY27会社予想（EDINET有報XBRLから決定論抽出、31件）。ヴィス(5071)も10件。**派生指標**（全社/セグメント利益率・売上構成比・利益寄与度）もコード計算でカード化。
-- ✅ **生成IR（既定 `ANSWER_MODE=synthesis`）**: 表＋セグメント分析＋会社予想の洞察まで生成。**層2は2角度並列検索**（質問＋「背景・要因・会社の説明」）で過去資料/想定問答の根拠も補足材料に。本文末尾に**💡注目ポイント**（開示事実の気づき・意見/予測は禁止）。**読者レベル**（カジュアル/スタンダード）で説明の翻訳度のみ調整（専門性は共通）。本文ストリーミング＋短期メモリ、カード過多は上限8枚に自動抑制。数値はコード計算済みデータシート由来でLLM非経由＝決定論。eval関門（数値100%/コンプラ0）維持。LLMは **gemini-3-flash-preview（global）**＝thinking最小化で先頭トークン≒半減。
-- ✅ **痛み②の堀**: escalation→FAQ複利ループ（冪等upsert）＋IRダッシュボード＝**KPI4枚（総質問数＋前期間比/自動回答率/IR要対応/回答対象外）**＋**話題トレンド**（話題×件数・原文非表示・タクソノミー別アイコン）＋**IR要対応**（CTA同意分のみ・×Nグループ化・削除可）＋**週次チャート**＋FAQ管理（新規追加/修正/削除）＋Firebase認証（owner全社）。**/ir もポップエディトリアルへ刷新済み（#111）**。
-- ✅ **信頼・プライバシー**: 誹謗中傷の入口ガード（拒否・CTA非表示・記録マスク）。会話の**本文はどこにも保存しない**（メタデータのみ。チャットUIに明示）。
-- ✅ **#113 銘柄URL＝AIに引用させる実体（第1弾・PR #117）**: `/c/<ticker>` を**その銘柄に固定したチャットUI**にし、公式Q&Aは**サイドパネル**（デスクトップ=右に二画面／スマホ=右から全面）。**別UIの「銘柄ページ」は作らない**（数値一覧は四季報/IR Bankで足り、我々の価値は対話での深掘り）。独立URLが要るのはAI向けの理由だけ＝トップは企業をクライアント側で決めるためクローラーには空のシェルに見える。パネルは**常時DOMに描画し開閉はCSSのみ**＝閉じていても質問＋**答え全文**がHTMLに載る（JSを実行しないクローラーが読める。クリックで開ける正当なUIなので隠しテキストではない）。Q&Aは層1から**コードが**組み立て**LLM非経由**。JSON-LD(FAQPage)＋`robots.ts`（GPTBot/OAI-SearchBot/PerplexityBot/ClaudeBot/Google-Extended/CCBot等を明示許可、`/ir` `/api` は拒否）＋`sitemap.ts`＋`llms.txt`。**トップは「銘柄を選ぶ入口」に役割分離**（対話は引用できるURL上だけで起きる。`/` で話すとURLを共有した相手には別の銘柄が開いてしまうため）。**公開ゲート `publishOfficialQa`（既定false）**＝「公式」は発行体の承認を含意するので、**現場で使われている企業だけ**を sitemap/llms.txt/JSON-LD に載せindexさせる。他社はページ自体は動く（開発・デモ用）が noindex。現在の公開はハークスレイ(7561)のみ。
-- ✅ **UIX/ブランド（Naruhodo IR）**: クリーム×インク×ポップの全面リブランド（`docs/DESIGN.md`）＝評決カード＋**決定論チャート**（同一指標×複数期のカードを自動で棒グラフ化・予想は点線）・マーカー強調のエディトリアル散文・**蔦の成長演出**（茎＋枝＋芽でカードを接続・末端は双葉）・**芽吹くカーソル**・「！の芽」ロゴ/favicon。読者レベルはlocalStorage永続・reduced-motionで全演出静止。gemini-3のPLAN JSON揺らぎは堅牢パース（_parse_plan_json）で恒久対処。初期画面は**吹き出しガーデン**（順位で大きさ・色が決まる決定論。回転はかけず幅と縦位置の段差で散らす。**件数は出さない**＝会話本文を保存しない設計上、質問単位の集計が存在せず書けば捏造になる）。
-- ✅ **セキュリティ #88 完了**: ir-agent は非公開（invoker=フロントSAのみ）。フロントがIDトークンで呼ぶ（`src/lib/agent-auth.ts`・localhostはスキップ）＋ `/api/chat` にIP単位レート制限（既定10回/分・`CHAT_RATE_LIMIT_PER_MIN`）。投資家UXは無変化（ログイン不要のまま）。
-- ⚠️ 未了: **#113 の続き**（実績データ＝`interactions.topic` による人気順の並べ替え／層2のFAQをQ&Aパネルに載せる）・フィル/ピアズの層1・ヴィスのYoY/セグメント・層2本文数値の実在照合・BQ東京(#89)。gemini-3 は thinking 最小化で先頭〜12s に短縮（要観察・重ければ `MODEL_NAME=gemini-2.5-flash` へ即戻し）。
-- 詳細・残課題は **`docs/HANDOFF.md`**、戦略は **Issue #77**（尖らせ方=#85-87／インフラ=#88-92）。
+## 7. タスク管理（2026-08-06 導入）
+
+**状態の正は GitHub Issue。** Markdownに状態を書き写すと必ず腐る——実際 epic #130 の
+手書きチェックボックスは #131〜#136 が完了しても未チェックのまま放置されていた。
+
+| 置き場 | 役割 |
+|---|---|
+| **GitHub Issue** | 唯一の正。open/closed が状態そのもの |
+| **サブIssue** | epic の進捗。GitHubが自動集計する（手書きチェックボックスは使わない） |
+| **ラベル3軸** | `type:` 何をするか / `area:` どこを触るか / `P0-now` `P1-next` `P2-later` いつやるか |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | **生成物**。リポジトリを読むだけで全体像が掴めるようにするためのビュー |
+
+```bash
+uv run python scripts/sync_roadmap.py           # Issueの変更後に再生成
+uv run python scripts/sync_roadmap.py --check   # 食い違っていれば exit 1
 ```
-GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#117 マージ済）
+
+運用の約束:
+
+- **タスクは必ず Issue を立ててから着手する。** PR本文に `Closes #N` を書けば自動で閉じる
+  （`Refs #N` だと閉じない。#145 がこれで完了後も open のまま残っていた）
+- 着手したら `P0-now` を付ける。終わったら Issue を閉じる（ROADMAPは触らない・生成物なので）
+- epic は**サブIssue**で子を持つ。本文にチェックボックスを書かない
+- 優先度ラベルが無い Issue は ROADMAP に「ラベルが無い」として名指しで出る（黙って消さない）
+
+## 8. 現状サマリ（2026-08-06）
+
+**本番**: `ir-frontend-00045` / `ir-agent-00034`（us-central1）
+
+- ✅ **全上場3,829社が検索から到達でき、EDINETの数値に出典つきで答える**（#130 epic の主要部分が完了）。
+  層1コーパス＝**3,815社 / 200,767ファクト / 5期ぶん**（2021FY〜2026FY）を有報XBRLから決定論抽出。
+  ハークスレイの人手検証データと突合して**一致23 / 不一致0**（ユーザーが四季報でも照合済み）。
+  配信は**GCS**（`gs://hallowed-trail-462613-v1-facts/facts/<ticker>.json`・#148）＝イメージに焼かず、
+  同梱（人手検証済みの顧客）を優先し、無いときだけGCSを引く。
+- ✅ **顧客 / 非顧客の階層**（#145）: 顧客＝層1＋層2＋IR窓口への取り次ぎ＝「公式IR」。
+  非顧客＝層1のみ＝「非公式IR」。UIのバッジで区別し、**層2が無いとき原因を創作しない**（#151・専用ゴールデン8問で担保）。
+  階層はフロントから**明示的に送る**（`datastoreId` から再導出しない＝判定を1箇所に保つ）。
+- ✅ **到達経路**（#154 / PR #158）: トップと銘柄ピッカーの検索で上場3,829社を引ける。
+  レジストリ562KBはサーバー専用（`server-only`）で、検索は `/api/companies/search` 経由。
+- ✅ **生成IR（既定 `ANSWER_MODE=synthesis`）**: 層1（コード計算済みデータシート）＋層2（2角度並列検索）を統合。
+  数値はLLM非経由＝決定論。読者レベル2段階、本文ストリーミング、💡注目ポイント、カード上限8枚。
+- ✅ **痛み②の堀**: escalation→FAQ複利ループ＋IRダッシュボード（KPI4枚/話題トレンド/IR要対応/週次/FAQ管理・Firebase認証）。
+- ✅ **#113 銘柄URL＝AIに引用させる実体**: `/c/<ticker>` は銘柄固定のチャットUI＋公式Q&Aパネル
+  （**常時DOM・開閉はCSSのみ**＝JS非実行のクローラーが答え全文を読める）。JSON-LD/robots/sitemap/llms.txt。
+  **公開ゲート `publishOfficialQa`（既定false）**＝現在の公開はハークスレイ(7561)のみ。
+- ✅ **セキュリティ #88**: ir-agent は非公開（invoker=フロントSAのみ・IDトークン・レート制限10回/分）。
+  `cloudbuild.agent.yaml` の `--allow-unauthenticated` を `--no-allow-unauthenticated` に修正済み
+  （**デプロイのたびに allUsers が戻る**状態だった）。
+- ✅ **信頼・プライバシー**: 誹謗中傷の入口ガード。会話の**本文はどこにも保存しない**（メタデータのみ）。
+- ✅ **UIX/ブランド（Naruhodo IR）**: クリーム×インク×ポップの「ポップエディトリアル」（`docs/DESIGN.md` が正）。
+  評決カード＋決定論チャート・マーカー強調散文・蔦の成長演出・芽吹くカーソル・「！の芽」ロゴ。
+
+⚠️ **既知の穴**
+
+- **業種別の売上要素が未対応**（#146・P0）。銀行=経常収益、航空=営業収益など `NetSales` 以外を使う業種で
+  `revenue` が取れない（実例: **トヨタが「売上高は？」に答えられない**。営業利益・当期利益には答える）。
+  カバレッジ: ordinary_profit 100% / net_income 99.9% / eps 99.9% / **revenue 93.6%** / roe 90.2% / dividend 78.3%
+- 層2（開示文書の検索）は**顧客4社ぶんだけ**。非顧客3,825社は数値のみ。
+- モデルは `gemini-2.5-flash`。gemini-3 への移行は #91。
+- 残りは [`docs/ROADMAP.md`](docs/ROADMAP.md) と GitHub Issue を見ること。戦略は **#77**。
+
+```
+GitHub: https://github.com/TIshow/ir-faq-mvp （PR #1〜#159 マージ済）
 GCP project: hallowed-trail-462613-v1 / region us-central1（Vertexはglobal）
+請求: eval はローカル実行でも Vertex AI に課金される（§6）。本番の利用者は1日3〜6件。
 ```
