@@ -29,6 +29,10 @@ _log = logging.getLogger("ir-agent.server")
 class Turn(BaseModel):
     role: str  # 'user' | 'assistant'
     content: str
+    # そのターンの結果（#161）。`answered` / `escalated` / `refused` / 未指定。
+    # **答えられなかったやり取りをフォロー質問の書き換えに使わない**ために要る
+    # （残すと答えられなかった話題を引きずる）。旧クライアントは送らない＝成功扱い。
+    scope: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -68,7 +72,10 @@ async def chat(req: ChatRequest) -> StreamingResponse:
         "is_customer": req.isCustomer,
     }
 
-    history = [{"role": t.role, "content": t.content} for t in req.history]
+    history = [
+        {"role": t.role, "content": t.content, **({"scope": t.scope} if t.scope else {})}
+        for t in req.history
+    ]
     audience = normalize_audience(req.audience)  # 有効値の正は synthesize.AUDIENCE_STYLES
 
     async def gen():

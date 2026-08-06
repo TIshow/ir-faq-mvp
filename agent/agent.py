@@ -315,10 +315,16 @@ async def run_agent_stream(
     yield {"type": "final", "response": final}
 
 
-async def run_agent(query: str, company: dict[str, Any]) -> dict[str, Any]:
-    """非ストリーミング（評価ハーネス等）。company={ticker,name,datastore_id}。"""
+async def run_agent(
+    query: str, company: dict[str, Any], history: list[dict[str, str]] | None = None
+) -> dict[str, Any]:
+    """非ストリーミング（評価ハーネス等）。company={ticker,name,datastore_id}。
+
+    `history` は評価で**複数ターンの壊れ方**を再現するために受ける（#161）。
+    既定は空＝従来と同一挙動。
+    """
     final: dict[str, Any] = {}
-    async for chunk in run_agent_stream(query, company):
+    async for chunk in run_agent_stream(query, company, history=history or []):
         if chunk["type"] == "final":
             final = chunk["response"]
     return final

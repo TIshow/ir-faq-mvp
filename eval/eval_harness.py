@@ -67,6 +67,11 @@ class GoldCase:
     # 原因を創作しても scope は answered のままで、従来の関門を素通りしていた。
     forbidden_prose: list[str] = field(default_factory=list)  # 1つでも含めばアウト
     required_prose: list[str] = field(default_factory=list)  # 1つも含まなければアウト
+    # 会話履歴（#161）。**複数ターンでしか出ないバグがある**——実測では、答えられなかった
+    # 直前のやり取りが次の質問を汚染し、単体なら答えられる質問がエスカレしていた。
+    # 単発の質問しか書けないゴールデンセットでは、この壊れ方を一度も検出できない。
+    # 形式は本番と同じ [{"role","content","scope"}]。
+    history: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -121,7 +126,9 @@ GOLDEN_FILES: dict[str, Path] = {
 }
 
 
-def call_agent(query: str, company_id: str = "vis") -> dict[str, Any]:
+def call_agent(
+    query: str, company_id: str = "vis", history: list[dict[str, str]] | None = None
+) -> dict[str, Any]:
     """
     実エージェント（ADK）を company_id にスコープして呼び出し AgentResponse(dict) を返す。
     import は遅延（--self-test を google-adk 無しで動かすため）。
@@ -132,7 +139,7 @@ def call_agent(query: str, company_id: str = "vis") -> dict[str, Any]:
     from agent.agent import run_agent  # 遅延 import
 
     company = COMPANIES.get(company_id) or COMPANIES["vis"]
-    return asyncio.run(run_agent(query, company))
+    return asyncio.run(run_agent(query, company, history=history or []))
 
 
 # --------------------------------------------------------------------------- #
@@ -374,6 +381,7 @@ def load_golden(path: Path) -> list[GoldCase]:
                 gold_scope_reason=d.get("gold_scope_reason"),
                 forbidden_prose=d.get("forbidden_prose", []),
                 required_prose=d.get("required_prose", []),
+                history=d.get("history", []),
             )
         )
     return cases
@@ -382,11 +390,11 @@ def load_golden(path: Path) -> list[GoldCase]:
 def run(
     golden_path: Path,
     company_id: str = "vis",
-    agent: Callable[[str, str], dict[str, Any]] = call_agent,
+    agent: Callable[..., dict[str, Any]] = call_agent,
 ) -> int:
     cases = load_golden(golden_path)
     print(f"対象企業: {company_id} / ゴールデン: {golden_path.name} / {len(cases)}問")
-    results = [evaluate_case(c, agent(c.query, company_id)) for c in cases]
+    results = [evaluate_case(c, agent(c.query, company_id, c.history)) for c in cases]
     summary = summarize(results)
     print_report(results, summary)
     return 0 if summary["gate_pass"] else 1
@@ -494,6 +502,34 @@ def _self_test() -> int:
     # レイテンシ予算
     ok &= latency_ok({"first_token_s": 1.2, "complete_s": 5.0}) is True
     ok &= latency_ok({"first_token_s": 2.5, "complete_s": 5.0}) is False
+
+    # 短期メモリの汚染除去（#161）。**LLMを呼ばずに守れる部分はここで守る。**
+    # end-to-end のゴールデンは実LLMを呼ぶので毎回は回せないが、この判定は純粋なロジック。
+    from agent.synthesize import _usable_history
+
+    fail_pair = [
+        {"role": "user", "content": "海外事業の売上高は？"},
+        {"role": "assistant", "content": "確認できませんでした。", "scope": "escalated"},
+    ]
+    ok_pair = [
+        {"role": "user", "content": "売上高は？"},
+        {"role": "assistant", "content": "52,427百万円です。", "scope": "answered"},
+    ]
+    # 失敗したやり取りは質問ごと落ちる（＝話題を確立しない）
+    ok &= _usable_history(fail_pair) == []
+    # 成功したやり取りは残る
+    ok &= _usable_history(ok_pair) == ok_pair
+    # 混在しても落ちるのは失敗ぶんだけ
+    ok &= _usable_history(ok_pair + fail_pair) == ok_pair
+    # 拒否（refused）も同じ扱い
+    ok &= _usable_history([*fail_pair[:1], {**fail_pair[1], "scope": "refused"}]) == []
+    # **scope が無い履歴は成功扱い**（旧クライアント・既存の eval が壊れない）
+    ok &= _usable_history(
+        [{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"}]
+    ) == [
+        {"role": "user", "content": "x"},
+        {"role": "assistant", "content": "y"},
+    ]
 
     print("セルフテスト:", "PASS ✅" if ok else "FAIL ❌")
     return 0 if ok else 1
