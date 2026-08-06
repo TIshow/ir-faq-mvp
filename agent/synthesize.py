@@ -42,10 +42,53 @@ _NO_ANSWER = "開示資料では確認できませんでした。"
 #
 # 数値と同じ切り分けにする: **判断はLLM（can_answer）、文言はコード。**
 # 何が無いかだけを述べ、答えの候補を並べない。
-_NO_MATERIAL = (
-    "ご質問の背景・要因については、当方が保有する開示資料では確認できませんでした。"
-    "数値そのものは開示資料から確認できます。"
-)
+#
+# **何を聞かれたかを推測しない**（#162）。旧文は「ご質問の背景・要因については〜」と
+# 決め打ちしていたが、この文は層2の抜粋が無いとき常に使われるので、数値を聞かれた場合にも
+# 「背景・要因が無い」と答えていた（実測: ゲオ 2681 に「セグメント別の業績」を聞いた例）。
+# しかも「数値そのものは確認できます」と言いながら、その数値を出していなかった。
+_NO_MATERIAL = "ご質問にお答えできる記述は、当方が保有する開示資料では確認できませんでした。"
+
+# 答えられる指標を実データから並べる（#162）。**何が無いかだけ言われても次の一手が分からない。**
+# 出典は層1（XBRLのタグ）なので、ラベルも実データ由来＝LLMを通さない。
+_AVAILABLE_MAX = 6
+
+# 並べる順。**辞書順に頼らない。** `metrics` のキー順で先頭6件を切ると
+# bps / dividend_per_share / eps … が先に来て、**売上高と営業利益が枠から漏れる**
+# （実測: ゲオ 2681）。投資家がまず聞くものから並べる。ここに無いキーは後ろへ。
+_METRIC_ORDER = [
+    "revenue",
+    "operating_profit",
+    "ordinary_profit",
+    "net_income",
+    "gross_profit",
+    "eps",
+    "dividend_per_share",
+    "roe",
+    "equity_ratio",
+    "total_assets",
+    "net_assets",
+    "bps",
+]
+
+
+def _available_metrics_line(ticker: str) -> str:
+    """「これなら答えられる」を層1から組み立てる。数値が無ければ空文字。"""
+    s = store.summary(ticker) if hasattr(store, "summary") else {}
+    metrics: dict[str, str] = s.get("metrics") or {}
+    # セグメント別（`segment.<事業>.<指標>`）は名前が長く列挙に向かないので全社指標だけ
+    keys = [k for k in metrics if "." not in k and metrics[k]]
+    keys.sort(
+        key=lambda k: (_METRIC_ORDER.index(k) if k in _METRIC_ORDER else len(_METRIC_ORDER), k)
+    )
+    if not keys:
+        return ""
+    shown = "・".join(metrics[k] for k in keys[:_AVAILABLE_MAX])
+    more = "など" if len(keys) > _AVAILABLE_MAX else ""
+    periods = s.get("periods_actual") or []
+    span = f"（{periods[0]}〜{periods[-1]}）" if len(periods) >= 2 else ""
+    return f"この企業については、有価証券報告書の{shown}{more}{span}をお答えできます。"
+
 
 # 層1すら無い企業（レジストリにはあるが数値を取り込んでいない）。
 # `_NO_MATERIAL` は「数値はあるが背景が無い」と言っており、**数値も無い企業には嘘になる**
@@ -577,9 +620,43 @@ def _retrieve(query: str, company: dict[str, Any], ticker: str):
     return facts_ctx, pa, pf, passages, passages_ctx
 
 
+# 答えられなかったやり取り。**話題を確立させない**（#161）。
+_FAILED_SCOPES = {"escalated", "refused"}
+
+
+def _usable_history(history: list[dict[str, str]]) -> list[dict[str, str]]:
+    """書き換えに使ってよい履歴だけを残す（#161）。
+
+    **答えられなかったやり取りは落とす。** 残すと、答えられなかった話題を次の質問に
+    引きずる。実測（ゲオ 2681）: 「セグメント別の業績」がエスカレした直後に
+    「前年と比べて業績はどうですか？」と聞くと、
+
+        書き換え後: ゲオホールディングスの【セグメント別の】業績は、前年と比べてどうですか？
+
+    となり、単体なら答えられる質問まで答えられなくなっていた。ユーザーは失敗したからこそ
+    聞き方を変えているのに、システムが元の話題へ引き戻す。会話が長いほど抜け出せない。
+
+    プロンプトに「前のターンが失敗したときは話題を引き継がない」と教える手もあるが採らない。
+    この工程は機械的であるべきで、判断をLLMに増やすと同じ形で再発する
+    （現に「話題を変えず」という指示が原因になっている）。
+
+    落とすのは失敗した assistant ターンと、**その直前の user ターン**（＝答えられなかった
+    質問そのもの）。`scope` を持たない履歴は成功扱い＝旧クライアントと eval は挙動不変。
+    """
+    out: list[dict[str, str]] = []
+    for turn in history:
+        if turn.get("role") == "assistant" and str(turn.get("scope") or "") in _FAILED_SCOPES:
+            if out and out[-1].get("role") == "user":
+                out.pop()
+            continue
+        out.append(turn)
+    return out
+
+
 def _contextualize(name: str, history: list[dict[str, str]], query: str) -> str:
     """短期メモリ: 会話履歴でフォロー質問を自己完結クエリに書き換える（condense question）。
     履歴が無ければ LLM を呼ばずそのまま返す（eval は履歴なし＝従来と完全に同一挙動）。"""
+    history = _usable_history(history or [])
     if not history:
         return query
     lines = []
@@ -743,7 +820,8 @@ def synthesize_stream(
     if passages:
         escalate_text = str(data.get("escalate_reason") or "").strip() or _NO_ANSWER
     elif pa or pf:
-        escalate_text = _NO_MATERIAL
+        # 「無い」だけで終わらせず、**代わりに何が聞けるか**を層1から添える（#162）
+        escalate_text = " ".join(filter(None, [_NO_MATERIAL, _available_metrics_line(ticker)]))
     else:
         escalate_text = _NO_FACTS
 

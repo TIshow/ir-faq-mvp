@@ -268,16 +268,12 @@ const ScopeNotice: React.FC<{
   // 記憶から生成すれば**開示に無い情報の創作と同じ**になる（存在しないURLや
   // 別会社へ飛ばしうる）。一次情報へ誘導するなら、層1のファクトが既に持っている
   // EDINETの提出書類URL（docID由来・検証済み）を使うのが筋。
-  if (!canContactIR) {
-    return (
-      <div className="mt-1 rounded-2xl bg-paper p-4 shadow-e2">
-        <p className="text-xs font-medium leading-relaxed text-ink-soft">
-          この質問にお答えできる情報は、当方が保有する開示資料にありませんでした。
-          会社が公表している資料をご確認ください。
-        </p>
-      </div>
-    );
-  }
+  // **何も出さない**（#162）。ここは本来「IR窓口へ問い合わせる」ボタンを載せる場所で、
+  // ボタンが無い非顧客では文章だけが残る。その文章は本文とほぼ同じことを言っており、
+  // 投資家には同じ断り文句が2回続いて見えていた。
+  // 本文は状況別に3種類を出し分けていて（抜粋あり/数値のみ/何も無い）、
+  // 答えられる指標も添える（#162）。汎用文を重ねる意味がない。
+  if (!canContactIR) return null;
 
   return (
     <div className="mt-1 rounded-2xl bg-paper p-4 shadow-e2">

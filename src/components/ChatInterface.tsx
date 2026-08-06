@@ -188,12 +188,19 @@ export default function ChatInterface({ company, sessionId, headline, qa = [] }:
 
     // 短期メモリ: 直近の会話履歴を同梱（サーバはステートレス＝毎回受け取って使い捨て）。
     // フォロー質問（「なんで？」等）をエージェント側で自己完結クエリに書き換えるのに使う。
+    //
+    // **`scope` も送る**（#161）。答えられなかったやり取りをエージェント側で落とすため。
+    // 残すと、答えられなかった話題を次の質問に引きずって、単体なら答えられる質問まで
+    // 答えられなくなる（実測: ゲオ 2681）。
     const history = messages
       .filter((m) => (m.type === 'user' && m.content) || (m.type === 'assistant' && m.response?.answer_prose))
       .slice(-6) // 直近3往復程度に制限（プロンプト肥大・レイテンシ対策）
       .map((m) => ({
         role: m.type,
         content: m.type === 'assistant' ? (m.response?.answer_prose ?? '').slice(0, 600) : m.content,
+        ...(m.type === 'assistant' && m.response?.scope_status
+          ? { scope: m.response.scope_status }
+          : {}),
       }));
 
     const userMessage: Message = { id: Date.now().toString(), type: 'user', content: q, timestamp: new Date() };
