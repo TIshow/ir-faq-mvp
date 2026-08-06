@@ -499,9 +499,36 @@ def _self_test() -> int:
     return 0 if ok else 1
 
 
+def run_all() -> int:
+    """全対象を通しで評価する（**PRを出す前の1回だけ**）。
+
+    1つでも落ちたら全体を落とす。「vis は通ったが harux が落ちた」を
+    見逃さないため、最後にまとめて結果を出す。
+    """
+    codes = {cid: run(GOLDEN_FILES[cid], cid) for cid in sorted(COMPANIES)}
+    print("\n" + "=" * 56)
+    print("全社まとめ")
+    for cid, code in codes.items():
+        print(f"  {cid:<18} {'PASS ✅' if code == 0 else 'FAIL ❌'}")
+    failed = [c for c, code in codes.items() if code != 0]
+    print(f"CI関門: {'PASS ✅' if not failed else 'FAIL ❌ ' + ', '.join(failed)}")
+    return 0 if not failed else 1
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="IR Agent 評価ハーネス")
-    ap.add_argument("--company", default="vis", choices=sorted(COMPANIES), help="評価対象の企業ID")
+    ap = argparse.ArgumentParser(
+        description="IR Agent 評価ハーネス",
+        epilog=(
+            "運用: 反復中は既定（1社）で回し、PRを出す前に一度だけ --all。"
+            "実LLMを呼ぶので1社=約24問、全社=44問ぶんの生成コストがかかる。"
+        ),
+    )
+    # 既定は**旗艦のハークスレイ**（層1が最も深く24問と対象が広い）。
+    # 反復のたびに全社を回すと生成コストがかさむだけで、拾える壊れ方はほぼ同じ。
+    ap.add_argument(
+        "--company", default="harux", choices=sorted(COMPANIES), help="評価対象の企業ID"
+    )
+    ap.add_argument("--all", action="store_true", help="全対象を通しで評価（PR前の最終確認）")
     ap.add_argument(
         "--golden", type=Path, default=None, help="ゴールデンセット(.jsonl)。未指定なら企業既定"
     )
@@ -512,8 +539,12 @@ def main() -> int:
 
     if args.self_test:
         return _self_test()
+    if args.all:
+        return run_all()
     golden = args.golden or GOLDEN_FILES.get(args.company, GOLDEN_DEFAULT)
-    return run(golden, args.company)
+    code = run(golden, args.company)
+    print(f"\n※ {args.company} のみ。PRを出す前に `--all` で全{len(COMPANIES)}対象を確認すること。")
+    return code
 
 
 if __name__ == "__main__":
