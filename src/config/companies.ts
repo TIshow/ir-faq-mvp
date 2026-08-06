@@ -55,8 +55,21 @@ export interface Company {
   publishOfficialQa?: boolean;
 }
 
+/**
+ * **「公式IR」を名乗れるのはハークスレイ(7561)だけ**（2026-08-06 時点）。
+ *
+ * 「公式」は発行体の承認を含意する（#124）ので、契約していない企業に付けない。
+ * ヴィス/フィル/ピアズは以前 `datastoreId` を持っていたため公式IR表示になっていたが、
+ * 実際には顧客ではないので**層2ごと外した**。バッジだけ非公式にして層2を残すと、
+ * 「EDINETの数値のみを根拠にしています」という説明が嘘になる。
+ *
+ * ここに載っているのは「トップの一覧カードに出す企業」であって、顧客の一覧ではない。
+ * 顧客かどうかは `isCustomerCompany()` が決める（＝いまは `datastoreId` の有無）。
+ */
 export const companies: Company[] = [
   {
+    // 非顧客。Discovery Engine のデータストアは残っているが**繋がない**
+    // （契約が決まったら `datastoreId` を戻せば公式IRに戻る）。
     id: 'vis',
     name: '株式会社ヴィス',
     nameEn: 'Vis Inc.',
@@ -64,10 +77,10 @@ export const companies: Company[] = [
     sector: '建設業',
     description: 'オフィス空間のプロデュース',
     websiteUrl: 'https://vis-produce.com/',
-    datastoreId: 'vis-ir-data_1752223995110',
     isActive: true,
   },
   {
+    // 非顧客（`datastoreId` を外した。詳細は上のコメント）
     id: 'philcompany',
     name: '株式会社フィル・カンパニー',
     nameEn: 'Phil Company Inc.',
@@ -75,7 +88,6 @@ export const companies: Company[] = [
     sector: '不動産・建設',
     description: '不動産開発・マンション販売',
     websiteUrl: 'https://www.phil-company.com/',
-    datastoreId: 'philcompany-ir-data_1752224320775',
     isActive: true,
   },
   {
@@ -92,6 +104,7 @@ export const companies: Company[] = [
     fiscalYearEndMonth: 3,
   },
   {
+    // 非顧客（`datastoreId` を外した。詳細は上のコメント）
     id: 'peers',
     name: '株式会社ピアズ',
     nameEn: 'Peers Inc.',
@@ -99,12 +112,12 @@ export const companies: Company[] = [
     sector: '人材・開発',
     description: '人材派遣・営業コンサル',
     websiteUrl: 'https://peers.jp/',
-    datastoreId: 'peers-ir-data_1752651535271',
     isActive: true,
   },
   {
-    // 旗艦（深掘り対象）。層1はEDINET XBRLから点灯済み（FY25/FY26実績＋セグメント＋FY27予想）。
-    // 層2は Discovery Engine データストア harux-ir-data（決算補足説明資料PDF）。
+    // **唯一の顧客＝「公式IR」**（2026-08-06 時点）。層1はEDINET XBRLから点灯済み
+    // （FY25/FY26実績＋セグメント＋FY27予想）。層2は Discovery Engine データストア
+    // harux-ir-data（決算補足説明資料PDF）。IR窓口への取り次ぎもここだけ。
     id: 'harux',
     name: '株式会社ハークスレイ',
     nameEn: 'HURXLEY CORPORATION',
