@@ -4,7 +4,7 @@
 > タスクの状態の正は GitHub Issue です。ここはリポジトリを読むだけで全体像を掴むためのビュー。
 > 再生成: `uv run python scripts/sync_roadmap.py`
 
-生成: 2026-08-06 / open 24件
+生成: 2026-08-06 / open 22件
 
 分類は3軸のラベルで付けています（`type:` 何をするか / `area:` どこを触るか / `P0〜P2` いつやるか）。
 
@@ -14,8 +14,6 @@
 
 | Issue | 種類 | 領域 | 内容 |
 |---|---|---|---|
-| [#162](https://github.com/TIshow/ir-faq-mvp/issues/162) | fix | UI/UX | fix(ui): 答えられないときの伝え方（同じ文が2回出る／聞かれていない「背景・要因」の話をする） |
-| [#161](https://github.com/TIshow/ir-faq-mvp/issues/161) | fix | エージェント | fix(agent): 答えられなかった直前の質問が、次の質問を答えられなくする（短期メモリの汚染） |
 | [#146](https://github.com/TIshow/ir-faq-mvp/issues/146) | fix | 層1（数値） | 層1の指標マップを広げる（revenue 93.6% / gross_profit 未対応 / 業種別の売上要素） |
 | [#130](https://github.com/TIshow/ir-faq-mvp/issues/130) | epic | 層1（数値） | epic: EDINET APIで層1（数値）を全上場企業ぶん取り込む |
 | [#97](https://github.com/TIshow/ir-faq-mvp/issues/97) | strategy | 事業 | [事業] ハークスレイで実トラフィックを回し FAQ複利ループを1周させる（Tier A・堀の起動） |
@@ -57,6 +55,8 @@
 
 | Issue | 完了日 | 内容 |
 |---|---|---|
+| [#162](https://github.com/TIshow/ir-faq-mvp/issues/162) | 2026-08-06 | fix(ui): 答えられないときの伝え方（同じ文が2回出る／聞かれていない「背景・要因」の話をする） |
+| [#161](https://github.com/TIshow/ir-faq-mvp/issues/161) | 2026-08-06 | fix(agent): 答えられなかった直前の質問が、次の質問を答えられなくする（短期メモリの汚染） |
 | [#154](https://github.com/TIshow/ir-faq-mvp/issues/154) | 2026-08-05 | feat(edinet): 企業マスターをEDINETコード一覧から作る（3,815社ぶんの nameEn/業種/決算月） |
 | [#151](https://github.com/TIshow/ir-faq-mvp/issues/151) | 2026-08-05 | fix(agent): 開示抜粋が無いとき、LLMが原因を創作する（出典ゼロで因果を書く） |
 | [#149](https://github.com/TIshow/ir-faq-mvp/issues/149) | 2026-08-05 | feat(edinet): 有報1件から5期ぶん抽出する（「主要な経営指標等の推移」） |
@@ -70,5 +70,3 @@
 | [#131](https://github.com/TIshow/ir-faq-mvp/issues/131) | 2026-08-04 | fix(edinet): 抽出失敗社を分類する（「0件」で片付けない） |
 | [#126](https://github.com/TIshow/ir-faq-mvp/issues/126) | 2026-08-03 | refactor(uix): 「インク縁の白ピル」を共有定数に括り出す（3箇所で実装が分岐している） |
 | [#118](https://github.com/TIshow/ir-faq-mvp/issues/118) | 2026-08-03 | fix(security): SSE のエラー応答から例外メッセージを外す（py/stack-trace-exposure） |
-| [#113](https://github.com/TIshow/ir-faq-mvp/issues/113) | 2026-07-30 | [配信/GEO] 発行体の「公式Q&Aページ」を作る（AIが引用できるHTML＋その場で深掘りできるチャット） |
-| [#88](https://github.com/TIshow/ir-faq-mvp/issues/88) | 2026-07-10 | [インフラ/セキュリティ] ir-agent の全世界公開を解消（フロント限定の認証＋レート制限） |
