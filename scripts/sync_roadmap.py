@@ -162,15 +162,25 @@ def render(open_issues: list[dict], closed: list[dict], now: str) -> str:
 
 
 _STAMP_PREFIX = "生成: "
+_CLOSED_HEADING = "## 最近終わったもの"
 
 
-def without_stamp(text: str) -> str:
-    """生成時刻の行を落とす。
+def checkable(text: str) -> str:
+    """`--check` で比べる部分だけを取り出す。
 
-    **`--check` で時刻まで比べない。** Issueが1件も動いていなくても日付が変われば
-    落ちるので、CIが毎日「食い違っています」と言い出す。中身が同じかだけを見る。
+    落とすもの:
+
+    1. **生成日**。Issueが1件も動いていなくても日付が変われば落ちるので、
+       CIが毎日「食い違っています」と言い出す。
+    2. **「最近終わったもの」**。ここは直近15件のcloseで毎回変わるため、
+       `Closes #N` 付きのPRをマージするたび**次のPRが無関係に落ちる**。
+       実際にこのPRで踏んだ（#161/#162 が閉じてズレた）。
+
+    残すのは open Issue の表＝**次に何をやるか**の部分。ここがズレていたら
+    本当に直す必要がある（ラベルを変えたのに再生成し忘れた、手で書き換えた等）。
     """
-    return "\n".join(ln for ln in text.splitlines() if not ln.startswith(_STAMP_PREFIX))
+    body = text.split(_CLOSED_HEADING)[0]
+    return "\n".join(ln for ln in body.splitlines() if not ln.startswith(_STAMP_PREFIX))
 
 
 def main() -> int:
@@ -185,7 +195,7 @@ def main() -> int:
 
     if args.check:
         current = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
-        if without_stamp(current) == without_stamp(body):
+        if checkable(current) == checkable(body):
             print("ROADMAP.md は最新です ✅")
             return 0
         print("ROADMAP.md が GitHub と食い違っています ❌")

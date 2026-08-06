@@ -53,6 +53,9 @@ _NO_MATERIAL = "ご質問にお答えできる記述は、当方が保有する�
 # 出典は層1（XBRLのタグ）なので、ラベルも実データ由来＝LLMを通さない。
 _AVAILABLE_MAX = 6
 
+# 年度ラベル（`2026FY`）。四半期（`2025Q4`）を期間の両端に使わないための判別。
+_FY_LABEL = re.compile(r"^\d{4}FY$")
+
 # 並べる順。**辞書順に頼らない。** `metrics` のキー順で先頭6件を切ると
 # bps / dividend_per_share / eps … が先に来て、**売上高と営業利益が枠から漏れる**
 # （実測: ゲオ 2681）。投資家がまず聞くものから並べる。ここに無いキーは後ろへ。
@@ -85,8 +88,11 @@ def _available_metrics_line(ticker: str) -> str:
         return ""
     shown = "・".join(metrics[k] for k in keys[:_AVAILABLE_MAX])
     more = "など" if len(keys) > _AVAILABLE_MAX else ""
-    periods = s.get("periods_actual") or []
-    span = f"（{periods[0]}〜{periods[-1]}）" if len(periods) >= 2 else ""
+    # **年度ラベルだけで期間を出す。** 実績期には四半期が混じることがあり
+    # （実測: ヴィス 5071 は `['2025FY', '2025Q4']`）、そのまま両端を取ると
+    # 「2025FY〜2025Q4」という範囲になっていない文字列が出る。
+    years = sorted({p for p in (s.get("periods_actual") or []) if _FY_LABEL.match(p)})
+    span = f"（{years[0]}〜{years[-1]}）" if len(years) >= 2 else ""
     return f"この企業については、有価証券報告書の{shown}{more}{span}をお答えできます。"
 
 
