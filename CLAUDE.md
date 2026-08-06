@@ -91,7 +91,8 @@ scripts/
   edinet/codelist.py      企業マスター（EDINETコード一覧＝鍵不要。英語名/業種/決算月/法人番号。
                           上場3,829社。層1コーパスとの突合も。推測で埋めない）
 eval/
-  eval_harness.py         評価ハーネス（数値=決定論比較・コンプラ=ゼロ許容CI関門・--company で企業別）
+  eval_harness.py         評価ハーネス（数値=決定論比較・コンプラ=ゼロ許容CI関門）
+                          既定=1社(harux 24問) / `--all`=全3対象44問。**実LLMを呼ぶので課金される**
   golden_set.vis.jsonl / golden_set.7561.jsonl  ゴールデンセット（vis / ハークスレイ）
 database/                 層1本番用 Cloud SQL スキーマ（financial_facts.sql 等。未接続=将来）
 docs/                     ARCHITECTURE.md / DESIGN.md / HANDOFF.md / phase1-gcp-setup.md / investor-experience-quality.md
@@ -113,8 +114,12 @@ npm install
 AGENT_URL=http://localhost:8080 npm run dev
 # → http://localhost:3000
 
-# 評価ハーネスのロジック確認（GCP不要）
+# 評価ハーネスのロジック確認（GCP不要・無料）
 python3 eval/eval_harness.py --self-test
+
+# eval（実LLMを呼ぶ＝課金される）
+uv run python3 eval/eval_harness.py            # 反復中はこれ。旗艦ハークスレイ24問
+uv run python3 eval/eval_harness.py --all      # **PRを出す前に1回だけ**。全3対象44問
 ```
 
 ## 5. デプロイ（全て GCP / Cloud Run）
@@ -135,6 +140,12 @@ gcloud run services update ir-frontend --region us-central1 \
 - **モデルは交換可能に保つ**。`MODEL_NAME`（env / config）で切替。現状 `gemini-3-flash-preview`（**global 提供**＝`GCP_VERTEX_AI_LOCATION=global`。us-central1 には無い。素の `gemini-3-flash` は404）。切替は必ず eval関門（数値100%/コンプラ0）で検証。ロールバックは `MODEL_NAME=gemini-2.5-flash`。
 - コミットは小さくPRで。main 直 push しない（PR→squash merge 運用）。
 - **PR作成後はマージせず一旦停止し、ユーザーのレビュー/承認を待ってからマージする**（merge の手前で必ず確認を取る）。
+- **eval は反復中1社・PR前に1回だけ全社**。`eval_harness.py` は `run_agent` を直接呼ぶので
+  Cloud Run を通らず**ローカル実行でも Vertex AI に課金される**（1問=LLM3回）。
+  実測: 本番の利用者は1日3〜6件なのに、開発中のevalで1日517回叩いていた日がある
+  （8/3・¥276＝44問×3回の全社周回を4周ぶん）。既定を1社にしてあるのはこのため。
+  **関門そのものは緩めない**——数値100%/コンプラ0は維持し、頻度だけ落とす。
+  CI が回すのは `--self-test`（LLM不使用）だけなので、**実evalは人が回す責任**。
 - 秘密情報はコミットしない（`.env*` は gitignore、`agent/.env.example` のみ追跡）。
 
 ## 7. 現状サマリ（2026-07-31）
