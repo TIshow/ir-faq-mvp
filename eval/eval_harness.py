@@ -531,6 +531,27 @@ def _self_test() -> int:
         {"role": "assistant", "content": "y"},
     ]
 
+    # 業種別の売上要素（#146）。**LLMを呼ばずに守れる。**
+    # 銀行に「売上高」は無く経常収益、建設は完成工事高。マップから消えると
+    # その業種の企業が丸ごと「売上が分かりません」に戻る（実測200社）。
+    # EDINETのデータではなく**こちらのマップ**を検査するので、ネットワークも要らない。
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    from edinet.parse import HEADLINE_JP, SUMMARY_JP
+
+    industry_revenue = {
+        "OrdinaryIncomeBNK": "経常収益",  # 銀行
+        "OperatingIncomeINS": "経常収益",  # 保険
+        "OperatingRevenueSEC": "営業収益",  # 証券
+        "NetSalesOfCompletedConstructionContractsCNS": "完成工事高",  # 建設
+        "OperatingRevenue1": "営業収益",  # 鉄道・不動産・サービス
+    }
+    for el, label in industry_revenue.items():
+        m = HEADLINE_JP.get(el)
+        ok &= m is not None and m.key == "revenue" and m.label_ja == label
+    # **経常収益と経常利益を取り違えない**（1語違いで意味が逆）
+    ok &= SUMMARY_JP["OrdinaryIncomeSummaryOfBusinessResults"].key == "revenue"
+    ok &= SUMMARY_JP["OrdinaryIncomeLossSummaryOfBusinessResults"].key == "ordinary_profit"
+
     print("セルフテスト:", "PASS ✅" if ok else "FAIL ❌")
     return 0 if ok else 1
 

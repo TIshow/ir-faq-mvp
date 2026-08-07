@@ -53,8 +53,32 @@ class Metric(NamedTuple):
     unit_kind: str  # _MONEY | _YEN | _RATIO
 
 
+# **「売上高」は業種ごとに別の要素名を持つ**（#146）。銀行に売上高は無く経常収益、
+# 建設は完成工事高、鉄道・不動産・サービスは営業収益。EDINETの不備ではなく、
+# 概念が実際に違うから要素が分かれている。
+#
+# 同じ `revenue` に寄せつつ **label_ja は要素ごとに持つ**ので、銀行のカードには
+# 「経常収益」と出る。`revenue` だから「売上高」と書く実装にしてはいけない。
+#
+# **金額の大小で売上を当てにいかないこと。** 実測: 銀行(5830)の連結で最大の数値は
+# `ProceedsFromSalesOfSecuritiesInvCFBNK`（有価証券売却額）で、経常収益より大きい。
 HEADLINE_JP: dict[str, Metric] = {
     "NetSales": Metric("revenue", "売上高", _MONEY),
+    # 営業収益（鉄道・不動産・サービス等）。実測84社
+    "OperatingRevenue1": Metric("revenue", "営業収益", _MONEY),
+    "OperatingRevenue2": Metric("revenue", "営業収益", _MONEY),
+    # 経常収益（銀行）。**`OrdinaryIncome`（経常利益）とは別要素・別の値**——
+    # 実測(5830): OrdinaryIncome 992億（利益） / OrdinaryIncomeBNK 2,661億（収益）
+    "OrdinaryIncomeBNK": Metric("revenue", "経常収益", _MONEY),
+    # 経常収益（保険）／営業収益（証券）
+    "OperatingIncomeINS": Metric("revenue", "経常収益", _MONEY),
+    "OperatingRevenueSEC": Metric("revenue", "営業収益", _MONEY),
+    # 完成工事高（建設）。実測: 関電工(1950) 2,292億円
+    "NetSalesOfCompletedConstructionContractsCNS": Metric("revenue", "完成工事高", _MONEY),
+    # 素の `Revenue`（収益）
+    "Revenue": Metric("revenue", "収益", _MONEY),
+    # 売上総利益。業種差ではなく単純な未登録だった（XBRLには存在する）
+    "GrossProfit": Metric("gross_profit", "売上総利益", _MONEY),
     "OperatingIncome": Metric("operating_profit", "営業利益", _MONEY),
     "OrdinaryIncome": Metric("ordinary_profit", "経常利益", _MONEY),
     "ProfitLossAttributableToOwnersOfParent": Metric(
@@ -66,6 +90,7 @@ HEADLINE_JP: dict[str, Metric] = {
 # IFRS採用企業（国内で250社超）。日本基準と要素名が異なる。
 HEADLINE_IFRS: dict[str, Metric] = {
     "RevenueIFRS": Metric("revenue", "売上収益", _MONEY),
+    "Revenue2IFRS": Metric("revenue", "売上収益", _MONEY),
     # IFRSでも売上の要素名は一つではない（実測: KDDI は NetSalesIFRS = 6,071,915百万円）。
     # 同義なので同じ metric_key に寄せる。重複排除は metric_key×period で効く。
     "NetSalesIFRS": Metric("revenue", "売上高", _MONEY),
@@ -112,6 +137,12 @@ SEG_METRICS_BY_STANDARD = {"jp": SEG_METRICS_JP, "ifrs": SEG_METRICS_IFRS}
 # 百万円換算後は同値だが、精度の高い方を正とするのが筋）。
 SUMMARY_JP: dict[str, Metric] = {
     "NetSalesSummaryOfBusinessResults": Metric("revenue", "売上高", _MONEY),
+    # 業種別の売上（#146）。**`OrdinaryIncomeSummaryOfBusinessResults`（経常収益）と
+    # 下の `OrdinaryIncomeLossSummaryOfBusinessResults`（経常利益）は別物。**
+    # 1語違うだけで意味が変わるので、隣に並べて取り違えを防ぐ。
+    "OperatingRevenue1SummaryOfBusinessResults": Metric("revenue", "営業収益", _MONEY),
+    "OperatingRevenue2SummaryOfBusinessResults": Metric("revenue", "営業収益", _MONEY),
+    "OrdinaryIncomeSummaryOfBusinessResults": Metric("revenue", "経常収益", _MONEY),
     "OrdinaryIncomeLossSummaryOfBusinessResults": Metric("ordinary_profit", "経常利益", _MONEY),
     "NetIncomeLossSummaryOfBusinessResults": Metric("net_income", "当期純利益", _MONEY),
     "BasicEarningsLossPerShareSummaryOfBusinessResults": Metric("eps", "1株当たり当期純利益", _YEN),
@@ -133,6 +164,7 @@ SUMMARY_INSTANT_JP: dict[str, Metric] = {
 
 SUMMARY_IFRS: dict[str, Metric] = {
     "RevenueIFRSSummaryOfBusinessResults": Metric("revenue", "売上収益", _MONEY),
+    "Revenue2IFRSSummaryOfBusinessResults": Metric("revenue", "売上収益", _MONEY),
     "ProfitLossBeforeTaxIFRSSummaryOfBusinessResults": Metric(
         "ordinary_profit", "税引前利益", _MONEY
     ),
