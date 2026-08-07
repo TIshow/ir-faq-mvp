@@ -14,7 +14,7 @@
 
 | Issue | 種類 | 領域 | 内容 |
 |---|---|---|---|
-| [#165](https://github.com/TIshow/ir-faq-mvp/issues/165) | chore | インフラ | docs: README にアーキテクチャ図を入れ、古い記述を直す |
+| [#167](https://github.com/TIshow/ir-faq-mvp/issues/167) | fix | インフラ | fix(ci): ROADMAP の同期チェックを外す（Issueを閉じるたびに必ず落ちる） |
 | [#146](https://github.com/TIshow/ir-faq-mvp/issues/146) | fix | 層1（数値） | 層1の指標マップを広げる（revenue 93.6% / gross_profit 未対応 / 業種別の売上要素） |
 | [#130](https://github.com/TIshow/ir-faq-mvp/issues/130) | epic | 層1（数値） | epic: EDINET APIで層1（数値）を全上場企業ぶん取り込む |
 | [#97](https://github.com/TIshow/ir-faq-mvp/issues/97) | strategy | 事業 | [事業] ハークスレイで実トラフィックを回し FAQ複利ループを1周させる（Tier A・堀の起動） |
@@ -56,6 +56,7 @@
 
 | Issue | 完了日 | 内容 |
 |---|---|---|
+| [#165](https://github.com/TIshow/ir-faq-mvp/issues/165) | 2026-08-07 | docs: README にアーキテクチャ図を入れ、古い記述を直す |
 | [#162](https://github.com/TIshow/ir-faq-mvp/issues/162) | 2026-08-06 | fix(ui): 答えられないときの伝え方（同じ文が2回出る／聞かれていない「背景・要因」の話をする） |
 | [#161](https://github.com/TIshow/ir-faq-mvp/issues/161) | 2026-08-06 | fix(agent): 答えられなかった直前の質問が、次の質問を答えられなくする（短期メモリの汚染） |
 | [#154](https://github.com/TIshow/ir-faq-mvp/issues/154) | 2026-08-05 | feat(edinet): 企業マスターをEDINETコード一覧から作る（3,815社ぶんの nameEn/業種/決算月） |
@@ -70,4 +71,3 @@
 | [#132](https://github.com/TIshow/ir-faq-mvp/issues/132) | 2026-08-04 | fix(edinet): IFRS採用企業を実物で検証する（要素名が未検証の当て推量） |
 | [#131](https://github.com/TIshow/ir-faq-mvp/issues/131) | 2026-08-04 | fix(edinet): 抽出失敗社を分類する（「0件」で片付けない） |
 | [#126](https://github.com/TIshow/ir-faq-mvp/issues/126) | 2026-08-03 | refactor(uix): 「インク縁の白ピル」を共有定数に括り出す（3箇所で実装が分岐している） |
-| [#118](https://github.com/TIshow/ir-faq-mvp/issues/118) | 2026-08-03 | fix(security): SSE のエラー応答から例外メッセージを外す（py/stack-trace-exposure） |

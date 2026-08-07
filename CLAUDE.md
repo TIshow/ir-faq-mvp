@@ -175,8 +175,12 @@ gcloud run services update ir-frontend --region us-central1 \
 
 ```bash
 uv run python scripts/sync_roadmap.py           # Issueの変更後に再生成
-uv run python scripts/sync_roadmap.py --check   # 食い違っていれば exit 1
+uv run python scripts/sync_roadmap.py --check   # ズレているか見るだけ
 ```
+
+**CIでは検査しない**（#167）。Issueを閉じると open の表から行が消えるので、
+`Closes #N` 付きのPRをマージするたび次のPRが無関係に落ちてしまう。
+生成日を本文に持たせてあるので、古さは見れば分かる。
 
 運用の約束:
 
