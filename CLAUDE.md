@@ -219,9 +219,11 @@ uv run python scripts/sync_roadmap.py --check   # ズレているか見るだけ
 
 ⚠️ **既知の穴**
 
-- **業種別の売上要素が未対応**（#146・P0）。銀行=経常収益、航空=営業収益など `NetSales` 以外を使う業種で
-  `revenue` が取れない（実例: **トヨタが「売上高は？」に答えられない**。営業利益・当期利益には答える）。
-  カバレッジ: ordinary_profit 100% / net_income 99.9% / eps 99.9% / **revenue 93.6%** / roe 90.2% / dividend 78.3%
+- **一部の企業は連結売上をXBRLにタグ付けしていない**（#146 の残り・43社）。**無いものは出せない**。
+  実例: **トヨタ**は「Revenue」を含む要素が0件（営業費用・売上原価・営業利益はあるのに売上収益だけ無い）。
+  `NetSales` は5期あるが全て単体なので採らない。#162 の「答えられる指標の案内」でカバーする。
+  カバレッジ: ordinary_profit 100% / net_income 99.9% / eps 99.9% / **revenue 99.3%** /
+  operating_profit 97.0% / roe 90.2% / **gross_profit 84.8%** / dividend 78.3%
 - 層2（開示文書の検索）は**顧客4社ぶんだけ**。非顧客3,825社は数値のみ。
 - モデルは `gemini-2.5-flash`。gemini-3 への移行は #91。
 - 残りは [`docs/ROADMAP.md`](docs/ROADMAP.md) と GitHub Issue を見ること。戦略は **#77**。
