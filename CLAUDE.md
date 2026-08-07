@@ -223,7 +223,7 @@ uv run python scripts/sync_roadmap.py --check   # ズレているか見るだけ
   実例: **トヨタ**は「Revenue」を含む要素が0件（営業費用・売上原価・営業利益はあるのに売上収益だけ無い）。
   `NetSales` は5期あるが全て単体なので採らない。#162 の「答えられる指標の案内」でカバーする。
   カバレッジ: ordinary_profit 100% / net_income 99.9% / eps 99.9% / **revenue 99.3%** /
-  operating_profit 97.0% / roe 90.2% / **gross_profit 84.8%** / dividend 78.3%
+  operating_profit 97.0% / **gross_profit 91.7%** / roe 90.2% / dividend 78.3%
 - 層2（開示文書の検索）は**顧客4社ぶんだけ**。非顧客3,825社は数値のみ。
 - モデルは `gemini-2.5-flash`。gemini-3 への移行は #91。
 - 残りは [`docs/ROADMAP.md`](docs/ROADMAP.md) と GitHub Issue を見ること。戦略は **#77**。
