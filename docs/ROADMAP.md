@@ -4,7 +4,7 @@
 > タスクの状態の正は GitHub Issue です。ここはリポジトリを読むだけで全体像を掴むためのビュー。
 > 再生成: `uv run python scripts/sync_roadmap.py`
 
-生成: 2026-08-06 / open 22件
+生成: 2026-08-07 / open 23件
 
 分類は3軸のラベルで付けています（`type:` 何をするか / `area:` どこを触るか / `P0〜P2` いつやるか）。
 
@@ -14,6 +14,7 @@
 
 | Issue | 種類 | 領域 | 内容 |
 |---|---|---|---|
+| [#165](https://github.com/TIshow/ir-faq-mvp/issues/165) | chore | インフラ | docs: README にアーキテクチャ図を入れ、古い記述を直す |
 | [#146](https://github.com/TIshow/ir-faq-mvp/issues/146) | fix | 層1（数値） | 層1の指標マップを広げる（revenue 93.6% / gross_profit 未対応 / 業種別の売上要素） |
 | [#130](https://github.com/TIshow/ir-faq-mvp/issues/130) | epic | 層1（数値） | epic: EDINET APIで層1（数値）を全上場企業ぶん取り込む |
 | [#97](https://github.com/TIshow/ir-faq-mvp/issues/97) | strategy | 事業 | [事業] ハークスレイで実トラフィックを回し FAQ複利ループを1周させる（Tier A・堀の起動） |
