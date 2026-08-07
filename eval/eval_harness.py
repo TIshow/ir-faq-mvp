@@ -552,6 +552,15 @@ def _self_test() -> int:
     ok &= SUMMARY_JP["OrdinaryIncomeSummaryOfBusinessResults"].key == "revenue"
     ok &= SUMMARY_JP["OrdinaryIncomeLossSummaryOfBusinessResults"].key == "ordinary_profit"
 
+    # **日本基準とIFRSは別のマップなので、片方だけに足す漏れが起きる。**
+    # 実際に `GrossProfit`（日本基準）だけ足して `GrossProfitIFRS` を忘れ、
+    # IFRS採用の261社が売上総利益を出せていなかった。両方に居ることを検査する。
+    from edinet.parse import HEADLINE_IFRS
+
+    for key in ("revenue", "gross_profit", "operating_profit", "net_income", "eps"):
+        ok &= any(m.key == key for m in HEADLINE_JP.values())
+        ok &= any(m.key == key for m in HEADLINE_IFRS.values())
+
     print("セルフテスト:", "PASS ✅" if ok else "FAIL ❌")
     return 0 if ok else 1
 

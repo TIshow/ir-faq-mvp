@@ -91,6 +91,10 @@ HEADLINE_JP: dict[str, Metric] = {
 HEADLINE_IFRS: dict[str, Metric] = {
     "RevenueIFRS": Metric("revenue", "売上収益", _MONEY),
     "Revenue2IFRS": Metric("revenue", "売上収益", _MONEY),
+    # **IFRS版を忘れない。** #146 で日本基準の `GrossProfit` だけ足して
+    # こちらを漏らし、IFRS採用の261社が売上総利益を出せていなかった。
+    # 日本基準とIFRSはマップが分かれているので、片方に足したらもう片方も見る。
+    "GrossProfitIFRS": Metric("gross_profit", "売上総利益", _MONEY),
     # IFRSでも売上の要素名は一つではない（実測: KDDI は NetSalesIFRS = 6,071,915百万円）。
     # 同義なので同じ metric_key に寄せる。重複排除は metric_key×period で効く。
     "NetSalesIFRS": Metric("revenue", "売上高", _MONEY),
