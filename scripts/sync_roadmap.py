@@ -16,9 +16,18 @@ GitHubを叩かないと何が残っているか分からない状態は、引�
 ## 使い方
 
     uv run python scripts/sync_roadmap.py            # docs/ROADMAP.md を更新
-    uv run python scripts/sync_roadmap.py --check    # 差分があれば exit 1（CI用）
+    uv run python scripts/sync_roadmap.py --check    # ズレているか見るだけ（exit 1）
 
 `gh` CLI の認証が要る（`gh auth status` で確認）。
+
+## CIでは検査しない（#167）
+
+一度 `--check` をCIに入れたが外した。**この生成物が古くなる契機が通常の運用そのもの**
+だから——`Closes #N` 付きのPRをマージするとIssueが閉じ、open の表からその行が消えて、
+その瞬間 main の ROADMAP.md が古くなる。次のPRが無関係に落ちる。
+`Closes` を書くのは推奨している運用なので、**正しく運用するほどCIが落ちる**状態になっていた。
+
+生成日を本文に持たせてあるので、古さは見れば分かる。更新は上のコマンド1つ。
 """
 
 from __future__ import annotations
@@ -168,16 +177,12 @@ _CLOSED_HEADING = "## 最近終わったもの"
 def checkable(text: str) -> str:
     """`--check` で比べる部分だけを取り出す。
 
-    落とすもの:
+    落とすのは **生成日**（日が変わるだけで差分になる）と **「最近終わったもの」**
+    （直近15件のcloseで毎回変わる）。残すのは open Issue の表＝次に何をやるかの部分。
 
-    1. **生成日**。Issueが1件も動いていなくても日付が変われば落ちるので、
-       CIが毎日「食い違っています」と言い出す。
-    2. **「最近終わったもの」**。ここは直近15件のcloseで毎回変わるため、
-       `Closes #N` 付きのPRをマージするたび**次のPRが無関係に落ちる**。
-       実際にこのPRで踏んだ（#161/#162 が閉じてズレた）。
-
-    残すのは open Issue の表＝**次に何をやるか**の部分。ここがズレていたら
-    本当に直す必要がある（ラベルを変えたのに再生成し忘れた、手で書き換えた等）。
+    なお `--check` は**手元で確認するためのもの**で、CIには入れない（#167）。
+    Issueを閉じると open の表からも行が消えるので、どこまで比較対象を絞っても
+    「Issueを閉じた瞬間に古くなる」性質は消せなかった。
     """
     body = text.split(_CLOSED_HEADING)[0]
     return "\n".join(ln for ln in body.splitlines() if not ln.startswith(_STAMP_PREFIX))
@@ -185,7 +190,7 @@ def checkable(text: str) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="GitHub Issue から docs/ROADMAP.md を生成")
-    ap.add_argument("--check", action="store_true", help="差分があれば exit 1（生成せず検査だけ）")
+    ap.add_argument("--check", action="store_true", help="ズレているか見るだけ（生成しない）")
     args = ap.parse_args()
 
     open_issues = fetch_open()
