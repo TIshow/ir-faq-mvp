@@ -21,21 +21,22 @@ function remarkCjkStrong() {
     node.children = node.children.flatMap((child: any) => {
       transform(child);
       if (child.type !== "text" || !child.value?.includes("**")) return [child];
+      // `matchAll` は内部で正規表現を複製するので、共有している `CJK_STRONG_RE` の
+      // `lastIndex` を汚さない（`exec` ループだと手動リセットが要り、忘れると
+      // 2回目以降の呼び出しが途中から走る）。
       const parts: any[] = [];
       let last = 0;
-      CJK_STRONG_RE.lastIndex = 0;
-      for (
-        let m = CJK_STRONG_RE.exec(child.value);
-        m;
-        m = CJK_STRONG_RE.exec(child.value)
-      ) {
-        if (m.index > last)
-          parts.push({ type: "text", value: child.value.slice(last, m.index) });
+      for (const m of child.value.matchAll(
+        CJK_STRONG_RE,
+      ) as Iterable<RegExpMatchArray>) {
+        const index = m.index ?? 0;
+        if (index > last)
+          parts.push({ type: "text", value: child.value.slice(last, index) });
         parts.push({
           type: "strong",
           children: [{ type: "text", value: m[1] }],
         });
-        last = m.index + m[0].length;
+        last = index + m[0].length;
       }
       if (parts.length === 0) return [child];
       if (last < child.value.length)
@@ -46,6 +47,18 @@ function remarkCjkStrong() {
   return transform;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
+
+/** 本文中の見出し（h1/h2 の描画先）。差はサイズだけなのでここに集約する。 */
+const Heading: React.FC<{ size: string; children?: React.ReactNode }> = ({
+  size,
+  children,
+}) => (
+  <h3
+    className={`font-round mb-1.5 mt-4 ${size} font-black text-ink first:mt-0`}
+  >
+    {children}
+  </h3>
+);
 
 /**
  * LLMの散文（Markdown）をポップエディトリアル調で描画する。
@@ -91,16 +104,11 @@ export const Markdown: React.FC<{ children: string }> = ({ children }) => (
             {children}
           </code>
         ),
-        h1: ({ children }) => (
-          <h3 className="font-round mb-1.5 mt-4 text-[15px] font-black text-ink first:mt-0">
-            {children}
-          </h3>
-        ),
-        h2: ({ children }) => (
-          <h3 className="font-round mb-1.5 mt-4 text-[14px] font-black text-ink first:mt-0">
-            {children}
-          </h3>
-        ),
+        // **見出しは段下げして描画する**（h1/h2 → h3、h3/h4 → h4）。
+        // 回答本文はページの中の一要素なので、ページ側の見出し階層と competing しないようにする。
+        // 見た目のサイズだけが違い、クラスの残りは共通なので `Heading` に寄せる。
+        h1: ({ children }) => <Heading size="text-[15px]">{children}</Heading>,
+        h2: ({ children }) => <Heading size="text-[14px]">{children}</Heading>,
         h3: ({ children }) => (
           <h4 className="font-round mb-1 mt-3 text-[13px] font-black text-ink">
             {children}
