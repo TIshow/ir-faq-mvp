@@ -72,11 +72,14 @@ sequenceDiagram
 
     B->>F: 質問
     F->>A: 中継（IDトークン付き）
-    A->>G: CONTEXTUALIZE：質問を自己完結の文に書き換える
-    par 層1と層2は並列
-        A->>S: RETRIEVE：数値を読む
+    opt 会話の続きのときだけ（履歴あり）
+        A->>G: CONTEXTUALIZE：質問を自己完結の文に書き換える
+    end
+    A->>S: RETRIEVE：数値を読む（先に順次）
+    par 層2の2角度だけ並列（顧客のみ）
+        A->>D: 質問そのもので検索
     and
-        A->>D: RETRIEVE：開示文書を2角度で引く（顧客のみ）
+        A->>D: 「背景・要因・会社の説明」の角度で検索
     end
     A->>G: PLAN：答えられるか判定し、出すカードを選ぶ
     Note over A: GROUND：数値カードを接地する（LLMを通さない）
@@ -88,10 +91,10 @@ sequenceDiagram
 
 読みどころは3つ。
 
-- **Gemini は1問につき3回**（①②④）。eval 44問で132回になるのはこれが理由
-- **層1と層2は並列**なので待ち時間は増えない。層2を持たない企業ではそもそも走らない
-- **③だけ LLM を通さない。** 数値カードはコードが層1から直接組み立てる。
-  ②で Gemini が選ぶのは「どの指標を出すか」であって、値そのものではない
+- **Gemini は1問につき2回**（PLAN・WRITE）。会話の続き（履歴あり）のときだけ CONTEXTUALIZE が加わり3回
+- **並列なのは層2の2角度検索だけ**。層1は先に順次読む（GCS読み出しで数十ms）。層2を持たない企業では検索自体が走らない
+- **GROUND だけ LLM を通さない。** 数値カードはコードが層1から直接組み立てる。
+  PLAN で Gemini が選ぶのは「どの指標を出すか」であって、値そのものではない
 
 ### 設計の背骨（崩さない）
 
@@ -155,11 +158,11 @@ gcloud run deploy ir-frontend --source . --region us-central1 --allow-unauthenti
 
 - ラベル3軸: `type:` 何をするか / `area:` どこを触るか / `P0-now` `P1-next` `P2-later` いつやるか
 - epic の進捗は**サブIssue**（GitHubが自動集計。手書きチェックボックスは使わない）
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) は**生成物**。CIが同期を検査する
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) は**生成物**。生成日が本文に載る（CIでは検査しない・#167）
 
 ```bash
 uv run python scripts/sync_roadmap.py           # Issue変更後に再生成
-uv run python scripts/sync_roadmap.py --check   # 食い違えば exit 1
+uv run python scripts/sync_roadmap.py --check   # ズレているか見るだけ
 ```
 
 ## 技術スタック
