@@ -154,7 +154,7 @@ gcloud run services update ir-frontend --region us-central1 \
 - コミットは小さくPRで。main 直 push しない（PR→squash merge 運用）。
 - **PR作成後はマージせず一旦停止し、ユーザーのレビュー/承認を待ってからマージする**（merge の手前で必ず確認を取る）。
 - **eval は反復中1社・PR前に1回だけ全社**。`eval_harness.py` は `run_agent` を直接呼ぶので
-  Cloud Run を通らず**ローカル実行でも Vertex AI に課金される**（1問=LLM3回）。
+  Cloud Run を通らず**ローカル実行でも Vertex AI に課金される**（1問=LLM2回。履歴ありなら3回）。
   実測: 本番の利用者は1日3〜6件なのに、開発中のevalで1日517回叩いていた日がある
   （8/3・¥276＝44問×3回の全社周回を4周ぶん）。既定を1社にしてあるのはこのため。
   **関門そのものは緩めない**——数値100%/コンプラ0は維持し、頻度だけ落とす。
