@@ -16,6 +16,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { isCustomerCompany, type Company } from '@/config/companies';
 
 /** 層1の1レコード（検証済みファクト） */
 interface Fact {
@@ -265,12 +266,17 @@ export function companyHeadline(company: CompanyRef): CompanyHeadline | undefine
 }
 
 /**
- * その企業の公式Q&A。層1が無ければ空配列。
+ * その企業の公式Q&A。**顧客でなければ空配列**、層1が無ければ空配列。
  * サーバー側で解決してチャットに渡すことで、パネルが閉じていてもそのURLのHTMLに
  * 質問＋答え全文が載る＝JSを実行しないAIクローラーが読める。
+ *
+ * **「層1があるか」だけで出してはいけない**（#182）。非顧客にした企業でも同梱データが
+ * 残っていると、「非公式IR」バッジの隣に「公式Q&A」が出ていた（ヴィス 5071）。
+ * 「公式」を名乗れるかは `isCustomerCompany` が唯一の判定点。
  */
-export function companyQa(company: CompanyRef): PublicQa[] {
-  return company.ticker ? buildNumericQa(company.ticker, company.fiscalYearEndMonth) : [];
+export function companyQa(company: Company): PublicQa[] {
+  if (!isCustomerCompany(company) || !company.ticker) return [];
+  return buildNumericQa(company.ticker, company.fiscalYearEndMonth);
 }
 
 /** 「参考：直近期の主要数値」に出す実績（最新期のみ・脇役として少数） */
