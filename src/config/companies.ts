@@ -175,7 +175,12 @@ export function isCustomerCompany(company: Company): boolean {
  * （片方だけ直し忘れて意図せず公開される。実際にトップの「公式Q&A N件」で起きた）。
  */
 export function isPublishedCompany(company: Company): boolean {
-  return !!company.publishOfficialQa && !!company.ticker && company.isActive;
+  // **公開は顧客の部分集合。** 「公式」は発行体の承認を含意するので、非顧客に
+  // `publishOfficialQa` を立てても公開しない（#182: ここが顧客を見ておらず、
+  // 非顧客でもフラグ1つで「公式Q&A」として AI に配られる状態だった）。
+  return (
+    isCustomerCompany(company) && !!company.publishOfficialQa && !!company.ticker && company.isActive
+  );
 }
 
 /** 公開してよい企業の一覧。 */
